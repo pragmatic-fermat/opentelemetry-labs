@@ -1,13 +1,16 @@
 import os
 
 import requests
+from opentelemetry import trace
 from opentelemetry.propagate import inject
 from opentelemetry.trace import SpanKind
 
 INVENTORY_URL = os.environ.get("INVENTORY_URL", "http://inventory:8081")
 
+tracer = trace.get_tracer("shop.inventory_client")
 
-def get_stock(tracer, sku):
+
+def get_stock(sku):
     url = f"{INVENTORY_URL}/stock/{sku}"
     with tracer.start_as_current_span("GET inventory", kind=SpanKind.CLIENT) as span:
         span.set_attribute("http.request.method", "GET")

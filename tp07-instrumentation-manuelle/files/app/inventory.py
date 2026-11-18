@@ -1,12 +1,12 @@
 """Service inventory : renvoie le stock d'un article (GET /stock/<sku>)."""
 from flask import Flask, jsonify, request
 
+import inventory_handler
 import logs
-import stock
 import telemetry
 
 SERVICE = "inventory"
-tracer = telemetry.setup(SERVICE)
+telemetry.setup(SERVICE)
 logs.setup(SERVICE)
 
 app = Flask(__name__)
@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 @app.get("/stock/<sku>")
 def get_stock(sku):
-    body, status = stock.lookup(tracer, sku, request.headers)
+    body, status = inventory_handler.lookup(sku, request.headers)
     return jsonify(body), status
 
 

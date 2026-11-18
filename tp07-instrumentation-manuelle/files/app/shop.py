@@ -2,11 +2,11 @@
 from flask import Flask, jsonify, request
 
 import logs
-import orders
+import shop_handler
 import telemetry
 
 SERVICE = "shop"
-tracer = telemetry.setup(SERVICE)
+telemetry.setup(SERVICE)
 logs.setup(SERVICE)
 
 app = Flask(__name__)
@@ -14,7 +14,7 @@ app = Flask(__name__)
 
 @app.post("/orders")
 def post_orders():
-    body, status = orders.create_order(tracer, request.get_json(silent=True) or {}, request.headers)
+    body, status = shop_handler.create_order(request.get_json(silent=True) or {}, request.headers)
     return jsonify(body), status
 
 

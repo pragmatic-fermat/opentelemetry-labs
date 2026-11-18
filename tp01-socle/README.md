@@ -70,24 +70,39 @@ Les sorties attendues sont `200`, `Prometheus Server is Ready.`, `ok`, puis les 
 
 ## Partie 2 : un premier Collector (30 min)
 
-Un Collector se décrit dans un fichier YAML. Les receivers reçoivent les données, les exporters les envoient ailleurs, et la section `service.pipelines` relie les deux pour chaque type de signal. Un composant déclaré mais absent d'un pipeline n'est pas utilisé.
+Un Collector se décrit en YAML. Les receivers reçoivent les données, les exporters les envoient ailleurs, et la section `service.pipelines` relie les deux pour chaque type de signal. Un composant déclaré mais absent d'un pipeline n'est pas utilisé.
 
-Éditez `otelcol/config.yaml`, qui est pour l'instant vide, pour obtenir la configuration suivante :
+Ici, la configuration est répartie en quatre fichiers du dossier `otelcol/`, un par section : `receivers.yaml`, `processors.yaml`, `exporters.yaml` et `service.yaml`. Le fichier `compose.yaml` les passe au Collector avec quatre options `--config`, et le Collector les fusionne en une seule configuration. Ce découpage permet d'ajouter des éléments au fil du TP sans réécrire un fichier entier. Les quatre fichiers sont vides pour l'instant.
 
-- un receiver `otlp` qui accepte le gRPC (port 4317) et le HTTP (port 4318) sur toutes les interfaces du conteneur ;
-- un exporter `debug` avec le niveau de détail `detailed`, qui écrit les données reçues dans les logs du Collector ;
-- un exporter `otlp` nommé `otlp/jaeger`, qui envoie vers le service `jaeger` du compose, port 4317, sans TLS ;
-- un pipeline `traces` qui relie le receiver aux deux exporters.
+Vous les écrivez depuis le terminal, sans éditeur, avec `cat` et un here-document : après la commande, le shell lit ce que vous tapez ou collez jusqu'à une ligne qui contient seulement `EOF`, et l'écrit dans le fichier. Le YAML s'indente avec des espaces, jamais avec des tabulations.
 
-Pour retrouver les options de chaque composant, consultez le README du composant dans le dépôt `opentelemetry-collector-contrib` (les exporters `debug` et `otlp` sont dans le dépôt `opentelemetry-collector`). Gardez à l'esprit que le Collector tourne dans un conteneur : `localhost` désigne le conteneur lui-même, pas Jaeger.
+Pour retrouver les options de chaque composant, consultez son README dans le dépôt `opentelemetry-collector-contrib` (les exporters `debug` et `otlp` sont dans le dépôt `opentelemetry-collector`). Gardez à l'esprit que le Collector tourne dans un conteneur : `localhost` désigne le conteneur lui-même, pas Jaeger.
 
-Validez le fichier avant de démarrer :
+**Les receivers.** Lancez la commande suivante, puis saisissez un receiver `otlp` qui accepte le gRPC (port 4317) et le HTTP (port 4318) sur toutes les interfaces du conteneur. Terminez par `EOF` seul sur une ligne.
 
 ```bash
-docker compose run --rm otelcol validate --config=/etc/otelcol/config.yaml
+cat > otelcol/receivers.yaml <<'EOF'
 ```
 
-La commande n'affiche rien et se termine sans erreur si la configuration est correcte. Démarrez ensuite le Collector et lisez ses logs :
+**Les exporters.** Même principe pour deux exporters : `debug` avec le niveau de détail `detailed`, qui écrit les données reçues dans les logs du Collector, et un exporter `otlp` nommé `otlp/jaeger`, qui envoie vers le service `jaeger` du compose, port 4317, sans TLS.
+
+```bash
+cat > otelcol/exporters.yaml <<'EOF'
+```
+
+**Le service.** Définissez enfin un pipeline `traces` qui relie le receiver aux deux exporters.
+
+```bash
+cat > otelcol/service.yaml <<'EOF'
+```
+
+Validez la configuration avant de démarrer. Le script `check.sh` lance la commande `validate` du Collector sur les quatre fichiers :
+
+```bash
+./check.sh
+```
+
+La commande n'affiche rien et se termine sans erreur si la configuration est correcte. En cas d'erreur, le message cite le fichier et la clé en cause. Démarrez ensuite le Collector et lisez ses logs :
 
 ```bash
 docker compose up -d otelcol
@@ -124,17 +139,22 @@ La commande affiche `5`. Dans l'interface de Jaeger, choisissez le service `demo
 
 Les processors transforment les données entre le receiver et les exporters. Ils s'exécutent dans l'ordre où ils sont listés dans le pipeline, et cet ordre a des conséquences.
 
-Ajoutez trois processors à votre configuration :
-
-- `memory_limiter`, qui protège le Collector d'un dépassement de mémoire. Réglez-le avec un intervalle de vérification de 1 s, une limite de 256 MiB et une marge de pic de 64 MiB ;
-- `resource`, qui ajoute deux attributs de ressource à toutes les données : `deployment.environment.name` avec la valeur `tp1`, et `lab.id` avec le numéro de votre environnement. Le compose transmet déjà `LAB_ID` au conteneur : utilisez la syntaxe de substitution `${env:LAB_ID}` du Collector ;
-- `batch`, qui regroupe les données avant l'envoi. Réglez-le avec `timeout: 2s`.
-
-Placez-les dans le pipeline `traces`. Posez-vous la question de l'ordre : le `memory_limiter` doit-il passer avant ou après `batch` ? Le README du `batch` processor donne la réponse.
-
-Redémarrez le Collector et envoyez des traces avec un nouveau nom de service :
+Créez le fichier `processors.yaml` avec la commande suivante, puis saisissez trois processors sous une clé `processors:` :
 
 ```bash
+cat > otelcol/processors.yaml <<'EOF'
+```
+
+- `memory_limiter`, qui protège le Collector d'un dépassement de mémoire. Réglez-le avec un intervalle de vérification de 1 s, une limite de 256 MiB et une marge de pic de 64 MiB ;
+- `resource`, qui ajoute deux attributs de ressource à toutes les données : `deployment.environment.name` avec la valeur `tp1`, et `lab.id` avec le numéro de votre environnement. Le compose transmet déjà `LAB_ID` au conteneur : utilisez la syntaxe de substitution `${env:LAB_ID}` du Collector. Le guillemet simple autour de `'EOF'` empêche le shell de remplacer lui-même cette expression ;
+- `batch`, qui regroupe les données avant l'envoi. Réglez-le avec `timeout: 2s`.
+
+Réécrivez ensuite `service.yaml` avec la même commande `cat > otelcol/service.yaml <<'EOF'` pour placer ces processors dans le pipeline `traces`. Posez-vous la question de l'ordre : le `memory_limiter` doit-il passer avant ou après `batch` ? Le README du `batch` processor donne la réponse.
+
+Validez, redémarrez le Collector et envoyez des traces avec un nouveau nom de service :
+
+```bash
+./check.sh
 docker compose restart otelcol
 ./tg.sh traces --traces 5 --service shop
 ```
@@ -150,7 +170,21 @@ curl -s 'http://localhost:16686/api/traces?service=shop&limit=1' \
 
 La commande affiche votre numéro (la valeur de `$LAB_ID`).
 
-Observez maintenant l'effet du `batch`. Passez `timeout` à `15s`, redémarrez le Collector, puis envoyez trois traces avec le service `shop-delay` pendant que vous suivez les logs avec `docker compose logs -f otelcol`. Les spans n'apparaissent qu'après environ quinze secondes, le temps que le lot soit envoyé. Remettez ensuite `timeout: 2s` et redémarrez.
+Observez maintenant l'effet du `batch`. Passez `timeout` à `15s` avec `sed`, redémarrez le Collector, puis envoyez trois traces avec le service `shop-delay` :
+
+```bash
+sed -i 's/timeout: 2s/timeout: 15s/' otelcol/processors.yaml
+docker compose restart otelcol
+./tg.sh traces --traces 3 --service shop-delay
+docker compose logs -f otelcol
+```
+
+Dans les logs, les spans n'apparaissent qu'après environ quinze secondes, le temps que le lot soit envoyé (quittez le suivi avec Ctrl+C). Remettez ensuite la valeur d'origine :
+
+```bash
+sed -i 's/timeout: 15s/timeout: 2s/' otelcol/processors.yaml
+docker compose restart otelcol
+```
 
 ## Partie 4 : supprimer du bruit avec le filter (20 min)
 
@@ -158,9 +192,15 @@ Les sondes de santé (`/health`, `/ready`) produisent beaucoup de spans qui n'ap
 
 Dans cette version du Collector, le processor `filter` attend une liste `trace_conditions`, et les chemins OTTL commencent par le nom du contexte, par exemple `span.attributes["clé"]`. Le README du processor `filter` détaille la syntaxe.
 
-Ajoutez un processor `filter/healthchecks` qui supprime les spans dont l'attribut `http.route` vaut `/health` ou `/ready`. Placez-le dans le pipeline après `resource` et avant `batch` : il est inutile de grouper des données que l'on va supprimer.
+Ajoutez un processor `filter/healthchecks` qui supprime les spans dont l'attribut `http.route` vaut `/health` ou `/ready`. Cette fois, ajoutez-le à la fin de `processors.yaml` sans toucher au reste, avec `>>` à la place de `>` :
 
-Redémarrez le Collector, puis envoyez deux séries de traces, l'une qui doit être filtrée et l'autre non :
+```bash
+cat >> otelcol/processors.yaml <<'EOF'
+```
+
+Saisissez l'entrée avec la même indentation que les processors déjà présents, c'est-à-dire deux espaces devant le nom du processor, puis `EOF` seul sur une ligne. Réécrivez ensuite `service.yaml` pour placer le processor dans le pipeline après `resource` et avant `batch` : il est inutile de grouper des données que l'on va supprimer.
+
+Validez, redémarrez le Collector, puis envoyez deux séries de traces, l'une qui doit être filtrée et l'autre non :
 
 ```bash
 ./tg.sh traces --traces 10 --service shop-filter --telemetry-attributes 'http.route="/health"'
@@ -200,9 +240,15 @@ Dans Jaeger, ouvrez une de ces traces : l'adresse e-mail apparaît en clair, ce 
 2. remplacer, dans `url.path`, chaque segment numérique par `{id}` ;
 3. renommer les spans appelés `lets-go` en `<méthode> <chemin>`, avec la valeur de `http.request.method` suivie d'une espace et de celle de `url.path`.
 
+Ajoutez-le de la même manière, à la fin de `processors.yaml` :
+
+```bash
+cat >> otelcol/processors.yaml <<'EOF'
+```
+
 Quelques indications. Les fonctions utiles se trouvent dans la référence des fonctions OTTL (dépôt `opentelemetry-collector-contrib`, dossier `pkg/ottl/ottlfuncs`) : cherchez `replace_pattern`, `set` et `Concat`. Les instructions s'exécutent dans l'ordre, ce qui compte pour la troisième : le nom doit être construit avec le chemin déjà normalisé. Ajoutez enfin à chaque instruction une clause `where` qui vérifie que l'attribut utilisé existe (`!= nil`), pour que les données qui ne portent pas ces attributs ne produisent pas d'erreur.
 
-Placez ce processor après `filter/healthchecks` et avant `batch`. Redémarrez le Collector, renvoyez la même commande `./tg.sh`, puis consultez les logs du Collector : l'exporter `debug` affiche les spans tels qu'ils sont après le traitement.
+Réécrivez `service.yaml` pour placer ce processor après `filter/healthchecks` et avant `batch`. Validez et redémarrez le Collector, renvoyez la même commande `./tg.sh`, puis consultez les logs du Collector : l'exporter `debug` affiche les spans tels qu'ils sont après le traitement.
 
 **Vérifier**
 
@@ -218,12 +264,15 @@ La première commande affiche `GET /api/orders/{id}` et `okey-dokey-0` (le span 
 
 Le même Collector peut traiter plusieurs types de signaux. Prometheus récupère les métriques en interrogeant un point d'accès, il faut donc que le Collector en expose un. Le fichier `prometheus/prometheus.yml` fournit déjà un job qui interroge `otelcol:8889`.
 
-Ajoutez à votre configuration :
+Ajoutez d'abord un exporter `prometheus` à la fin de `exporters.yaml`. Il écoute sur `0.0.0.0:8889` et convertit les attributs de ressource en labels (option `resource_to_telemetry_conversion`).
 
-- un exporter `prometheus` qui écoute sur `0.0.0.0:8889` et qui convertit les attributs de ressource en labels (option `resource_to_telemetry_conversion`) ;
-- un pipeline `metrics` avec le receiver `otlp`, les processors `memory_limiter`, `resource` et `batch`, et les exporters `debug` et `prometheus`.
+```bash
+cat >> otelcol/exporters.yaml <<'EOF'
+```
 
-Redémarrez le Collector et vérifiez dans Prometheus, page Status puis Targets, que la cible `otelcol:8889` est `UP`. Envoyez ensuite des métriques pendant trente secondes :
+Réécrivez ensuite `service.yaml` pour conserver le pipeline `traces` et ajouter un pipeline `metrics` avec le receiver `otlp`, les processors `memory_limiter`, `resource` et `batch`, et les exporters `debug` et `prometheus`.
+
+Validez, redémarrez le Collector et vérifiez dans Prometheus, page Status puis Targets, que la cible `otelcol:8889` est `UP`. Envoyez ensuite des métriques pendant trente secondes :
 
 ```bash
 ./tg.sh metrics --duration 30s --rate 1 --service billing --otlp-metric-name tp1_demo
@@ -240,7 +289,11 @@ La commande affiche `billing` suivi de votre numéro. Le nom de la métrique peu
 
 ## Dépannage
 
-**Le Collector s'arrête juste après le démarrage.** Lisez `docker compose logs otelcol`. Le message cite presque toujours la clé ou le composant fautif : erreur d'indentation, composant déclaré mais absent de `service.pipelines`, ou l'inverse. La commande `validate` de la partie 2 détecte ces erreurs avant le démarrage.
+**Le Collector s'arrête juste après le démarrage.** Lisez `docker compose logs otelcol`. Le message cite presque toujours la clé ou le composant fautif : erreur d'indentation, composant déclaré mais absent de `service.pipelines`, ou l'inverse. Le script `./check.sh` détecte ces erreurs avant le démarrage.
+
+**Un fichier est resté incomplet après une saisie dans `cat`.** Si le terminal affiche une invite `>` qui ne revient pas, le shell attend encore la ligne `EOF` : tapez-la, ou interrompez avec Ctrl+C et recommencez la commande. Affichez le résultat avec `cat otelcol/processors.yaml` pour contrôler l'indentation.
+
+**Vous êtes bloqué sur un fichier.** Le dossier `solution/otelcol` du dépôt contient une version complète de chaque fichier. Copiez celui qu'il vous faut, par exemple `cp ~/opentelemetry-labs/tp01-socle/solution/otelcol/receivers.yaml ~/tp01/otelcol/`. Pour `service.yaml`, il existe une version par partie : `cp ~/opentelemetry-labs/tp01-socle/solution/otelcol/service-partie3.yaml ~/tp01/otelcol/service.yaml`.
 
 **`connection refused` vers Jaeger dans les logs du Collector.** L'adresse de l'exporter doit utiliser le nom du service du compose (`jaeger`), pas `localhost`.
 

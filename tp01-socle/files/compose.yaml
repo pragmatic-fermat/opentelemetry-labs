@@ -33,7 +33,12 @@ services:
   # Le Collector est démarré à la partie 2, une fois sa configuration écrite.
   otelcol:
     image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0
-    command: ["--config=/etc/otelcol/config.yaml"]
+    # Quatre fichiers, un par section, fusionnés en une seule configuration.
+    command:
+      - --config=/etc/otelcol/receivers.yaml
+      - --config=/etc/otelcol/processors.yaml
+      - --config=/etc/otelcol/exporters.yaml
+      - --config=/etc/otelcol/service.yaml
     environment:
       LAB_ID: ${LAB_ID:-0}
     volumes:

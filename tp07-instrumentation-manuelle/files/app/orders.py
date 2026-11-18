@@ -1,4 +1,4 @@
-"""Logique métier du service shop. Version de départ : sans instrumentation."""
+"""Logique métier du service shop (ne pas modifier)."""
 import logging
 
 import inventory_client
@@ -8,7 +8,7 @@ logger = logging.getLogger("shop.orders")
 PRICES = {"coffee": 4.5, "tea": 3.0, "mug": 12.0}
 
 
-def create_order(tracer, payload, headers):
+def create_order(payload):
     sku = payload.get("sku")
     qty = int(payload.get("qty", 1))
     customer = payload.get("customer", "anonymous")
@@ -19,7 +19,7 @@ def create_order(tracer, payload, headers):
         return {"error": "unknown sku"}, 404
 
     try:
-        stock = inventory_client.get_stock(tracer, sku)
+        stock = inventory_client.get_stock(sku)
     except Exception as exc:
         logger.error("inventory unavailable: %s", exc)
         return {"error": "inventory unavailable"}, 502

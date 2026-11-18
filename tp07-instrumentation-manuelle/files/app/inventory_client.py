@@ -6,7 +6,7 @@ import requests
 INVENTORY_URL = os.environ.get("INVENTORY_URL", "http://inventory:8081")
 
 
-def get_stock(tracer, sku):
+def get_stock(sku):
     resp = requests.get(f"{INVENTORY_URL}/stock/{sku}", timeout=2)
     resp.raise_for_status()
     return resp.json()["stock"]

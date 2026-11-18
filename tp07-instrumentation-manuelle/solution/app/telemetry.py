@@ -17,4 +17,3 @@ def setup(service_name):
     # L'exporter lit OTEL_EXPORTER_OTLP_ENDPOINT (définie dans compose.yaml).
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     trace.set_tracer_provider(provider)
-    return trace.get_tracer(service_name)

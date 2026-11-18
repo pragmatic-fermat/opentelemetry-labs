@@ -24,8 +24,8 @@ cp ~/opentelemetry-labs/tp03-kubernetes/solution/*.yaml ~/tp03/
 
 ## Partie 4 : Operator
 
-- Les options `admissionWebhooks.certManager.enabled=false` et `admissionWebhooks.autoGenerateCert.enabled=true` évitent d'installer cert-manager. Avec les valeurs par défaut du chart, l'installation échoue faute de CRD `Certificate`.
+- Les options `admissionWebhooks.certManager.enabled=false` et `admissionWebhooks.autoGenerateCert.enabled=true` évitent d'installer cert-manager. Les valeurs du chart précisent que `certManager`, lorsqu'il est activé (c'est le cas par défaut), prend le pas sur la génération automatique : il faut donc le désactiver explicitement pour que le certificat soit généré par Helm.
 - L'annotation `instrumentation.opentelemetry.io/inject-nodejs: "true"` utilise l'`Instrumentation` de l'espace de noms du pod. Il est aussi possible de viser une ressource précise avec son nom, ou une ressource d'un autre espace de noms avec `espace/nom`.
-- Le nom de service des traces est déduit par l'Operator : label `app.kubernetes.io/name` s'il existe, sinon nom du Deployment. Les déploiements de la démonstration n'ayant que le label `app`, le nom du Deployment (`frontend`, `backend`) est utilisé.
+- Le nom de service des traces est déterminé par l'Operator à partir des informations du pod. Pour les déploiements de la démonstration, les noms attendus sont `frontend` et `backend`. Si la trace affiche d'autres noms, l'Operator a retenu une autre source (voir sa documentation sur `OTEL_SERVICE_NAME`).
 - L'argument de l'échantillonneur est une chaîne (`"1"`). Sans guillemets, la ressource est refusée à la validation.
 - Pour la réponse « pourquoi l'agent plutôt que la gateway comme destination de l'`Instrumentation` ? » : l'agent est sur le même nœud (latence faible, trafic qui ne sort pas du nœud), enrichit les données avec les métadonnées du pod, et laisse à la gateway le rôle de point de sortie unique vers le backend.

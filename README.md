@@ -1,0 +1,19 @@
+# Labs OpenTelemetry
+
+Travaux pratiques de la formation OpenTelemetry, du socle Collector jusqu'au diagnostic d'incident.
+
+## Programme
+
+| TP | Titre | Contenu | Durée |
+|---|---|---|---|
+| [TP1](tp01-socle/) | Socle | Backend Jaeger/Grafana, premier Collector, processors (batch, filtrage, OTTL) | 1/4 j |
+| [TP2](tp02-collector-ocb-alloy/) | Collector sur mesure et Alloy | Build d'un Collector sur mesure (OCB) et alternative Grafana Alloy (gains et limites) | 1/4 j |
+| [TP3](tp03-kubernetes/) | Kubernetes | Collector en agent et gateway (Helm), OTel Operator et auto-instrumentation par annotation | 1/4 j |
+| [TP4](tp04-ansible/) | Ansible + Jinja2 | Déploiement du Collector sur VM Linux, puis modification de la configuration | 1/4 j |
+| [TP5](tp05-nodejs-nginx/) | Node.js + Nginx | Auto-instrumentation, export OTLP vers Jaeger, trace de bout en bout | 1/4 j |
+| [TP6](tp06-java-python-dotnet/) | Java, Python et .NET | Auto-instrumentation sur Linux | 1/4 j |
+| [TP7](tp07-instrumentation-manuelle/) | Instrumentation manuelle | Spans et attributs custom, propagation, corrélation logs/traces | 1/4 j |
+| [TP8](tp08-ebpf-obi/) | eBPF (OBI) | Instrumentation sans modifier le code, comparaison avec l'auto-instrumentation | 1/4 j |
+| [TP9](tp09-gateway-production/) | Gateway et production | Tail sampling, sécurité (TLS/auth), retry et file d'attente | 1/4 j |
+| [TP10](tp10-exploitation/) | Exploitation | Supervision du Collector, dépannage de pipeline, export OTLP vers le backend du client | 1/4 j |
+| [TP11](tp11-diagnostic-incident/) | Diagnostic d'incident | OpenTelemetry Demo (feature flags) | 1/4 j |

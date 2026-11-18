@@ -39,4 +39,5 @@ Le TP a été rédigé sans démarrer la stack. Les points suivants sont à vér
 ## Pour la discussion
 
 - Dans le README du composant, `queuebatch` est présenté comme le remplaçant du processor `batch`. Les deux sont présents dans la distribution contrib 0.165.0 et `batch` reste en statut beta : ce TP garde `batch` parce qu'il est le plus répandu dans les configurations existantes.
-- Les composants du Collector ont des noms de type et des noms d'instance (`otlp/jaeger`). La distinction revient dans les TP suivants.
+- Les composants du Collector ont un type et un nom d'instance (`otlp_grpc/jaeger`). La distinction revient dans les TP suivants.
+- Plusieurs composants ont changé de type : `otlp` est devenu `otlp_grpc` pour l'exporter, `otlphttp` est devenu `otlp_http` et `k8sattributes` est devenu `k8s_attributes`. Les anciens noms restent acceptés comme alias dépréciés dans la version 0.165.0 (champ `deprecated_type` du composant), mais les configurations trouvées sur Internet les utilisent encore beaucoup : les participants peuvent les rencontrer.

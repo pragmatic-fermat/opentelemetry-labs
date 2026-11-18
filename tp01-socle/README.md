@@ -76,7 +76,7 @@ Ici, la configuration est répartie en quatre fichiers du dossier `otelcol/`, un
 
 Vous les écrivez depuis le terminal, sans éditeur, avec `cat` et un here-document : après la commande, le shell lit ce que vous tapez ou collez jusqu'à une ligne qui contient seulement `EOF`, et l'écrit dans le fichier. Le YAML s'indente avec des espaces, jamais avec des tabulations.
 
-Pour retrouver les options de chaque composant, consultez son README dans le dépôt `opentelemetry-collector-contrib` (les exporters `debug` et `otlp` sont dans le dépôt `opentelemetry-collector`). Gardez à l'esprit que le Collector tourne dans un conteneur : `localhost` désigne le conteneur lui-même, pas Jaeger.
+Pour retrouver les options de chaque composant, consultez son README dans le dépôt `opentelemetry-collector-contrib` (les exporters `debug` et `otlp_grpc` sont dans le dépôt `opentelemetry-collector`). Gardez à l'esprit que le Collector tourne dans un conteneur : `localhost` désigne le conteneur lui-même, pas Jaeger.
 
 **Les receivers.** Lancez la commande suivante, puis saisissez un receiver `otlp` qui accepte le gRPC (port 4317) et le HTTP (port 4318) sur toutes les interfaces du conteneur. Terminez par `EOF` seul sur une ligne.
 
@@ -84,7 +84,7 @@ Pour retrouver les options de chaque composant, consultez son README dans le dé
 cat > otelcol/receivers.yaml <<'EOF'
 ```
 
-**Les exporters.** Même principe pour deux exporters : `debug` avec le niveau de détail `detailed`, qui écrit les données reçues dans les logs du Collector, et un exporter `otlp` nommé `otlp/jaeger`, qui envoie vers le service `jaeger` du compose, port 4317, sans TLS.
+**Les exporters.** Même principe pour deux exporters : `debug` avec le niveau de détail `detailed`, qui écrit les données reçues dans les logs du Collector, et un exporter `otlp_grpc` nommé `otlp_grpc/jaeger`, qui envoie vers le service `jaeger` du compose, port 4317, sans TLS.
 
 ```bash
 cat > otelcol/exporters.yaml <<'EOF'

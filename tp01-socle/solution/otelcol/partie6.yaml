@@ -1,0 +1,59 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  resource:
+    attributes:
+      - key: deployment.environment.name
+        value: tp1
+        action: upsert
+      - key: lab.id
+        value: ${env:LAB_ID}
+        action: upsert
+  filter/healthchecks:
+    error_mode: ignore
+    trace_conditions:
+      - span.attributes["http.route"] == "/health"
+      - span.attributes["http.route"] == "/ready"
+  transform/normalize:
+    error_mode: ignore
+    trace_statements:
+      - replace_pattern(span.attributes["user.email"], "^[^@]+", "***") where span.attributes["user.email"] != nil
+      - replace_pattern(span.attributes["url.path"], "/[0-9]+", "/{id}") where span.attributes["url.path"] != nil
+      - set(span.name, Concat([span.attributes["http.request.method"], span.attributes["url.path"]], " ")) where span.name == "lets-go" and span.attributes["http.request.method"] != nil and span.attributes["url.path"] != nil
+      # Pour aller plus loin
+      - set(span.attributes["slo.violation"], true) where span.status.code == STATUS_CODE_ERROR
+  batch:
+    timeout: 2s
+
+exporters:
+  debug:
+    verbosity: detailed
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, filter/healthchecks, transform/normalize, batch]
+      exporters: [debug, otlp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, prometheus]

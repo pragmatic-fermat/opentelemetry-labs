@@ -1,0 +1,6 @@
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, filter/healthchecks, transform/normalize, batch]
+      exporters: [debug, otlp/jaeger]

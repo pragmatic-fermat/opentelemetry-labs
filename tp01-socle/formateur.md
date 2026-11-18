@@ -21,9 +21,13 @@ Le TP a été rédigé sans démarrer la stack. Les points suivants sont à vér
 - le provisioning de la source de données Jaeger sur Grafana 13.3.1 ;
 - le nombre exact de lignes `Span #` affiché par l'exporter `debug` (dix pour cinq traces de deux spans) ;
 - le nom final de la métrique dans Prometheus, qui dépend de l'unité émise par `telemetrygen` ;
-- le comportement des instructions OTTL de la partie 5 sur la version 0.165.0.
+- le comportement des instructions OTTL de la partie 5 sur la version 0.165.0 ;
+- la fusion des quatre fichiers passés avec plusieurs options `--config` (les clés de premier niveau sont toutes différentes, donc seule la fusion de base est sollicitée) ;
+- l'écriture des fichiers par here-document dans le terminal de code-server (collage de plusieurs lignes indentées).
 
 ## Points d'attention
+
+- Aucune étape ne demande d'ouvrir un éditeur : les fichiers sont écrits avec `cat > fichier <<'EOF'`, complétés avec `cat >>` et modifiés avec `sed`. Les erreurs les plus probables sont une indentation perdue au collage et un `EOF` oublié (le terminal affiche alors une invite `>`). Le dépannage de l'énoncé les décrit, et le dossier `solution/otelcol` sert de repli.
 
 - Le tag de l'image du Collector est `0.165.0` mais celui de `telemetrygen` est `v0.165.0` (avec le `v`). C'est vérifié dans le registre ghcr.io.
 - `telemetrygen` émet un débit de 1 span par seconde et par worker par défaut, et les spans enfants comptent aussi. Le script `tg.sh` impose `--rate 10` pour que les commandes restent rapides.

@@ -17,9 +17,9 @@ cp $S/service-partie4.yaml otelcol/service.yaml
 Voir `otelcol/receivers.yaml`, `otelcol/exporters.yaml` et `otelcol/service-partie2.yaml`.
 
 - Le receiver `otlp` doit écouter sur `0.0.0.0`. Sans cette précision, il n'écoute que sur `localhost` à l'intérieur du conteneur et le port publié par Docker ne répond pas.
-- L'exporter `otlp/jaeger` vise `jaeger:4317`. Le suffixe `/jaeger` est un nom d'instance : il permet de déclarer plusieurs exporters du même type. `tls.insecure: true` est nécessaire car Jaeger écoute en clair.
+- L'exporter `otlp_grpc/jaeger` vise `jaeger:4317`. Le type du composant est `otlp_grpc` (l'ancien nom `otlp` fonctionne encore comme alias déprécié, mais il faut utiliser le nouveau), et le suffixe `/jaeger` est un nom d'instance : il permet de déclarer plusieurs exporters du même type. `tls.insecure: true` est nécessaire car Jaeger écoute en clair.
 - La fusion des quatre fichiers ne pose pas de difficulté tant que chaque fichier porte une clé de premier niveau différente (`receivers`, `processors`, `exporters`, `service`). Une clé présente dans deux fichiers serait fusionnée, et les listes d'un fichier remplaceraient celles de l'autre.
-- L'exporter `debug` est ajouté à côté de `otlp/jaeger` dans le même pipeline : un pipeline peut avoir plusieurs exporters, chacun reçoit toutes les données.
+- L'exporter `debug` est ajouté à côté de `otlp_grpc/jaeger` dans le même pipeline : un pipeline peut avoir plusieurs exporters, chacun reçoit toutes les données.
 
 ## Partie 3 : memory_limiter, resource, batch
 

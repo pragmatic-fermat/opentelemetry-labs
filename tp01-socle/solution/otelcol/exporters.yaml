@@ -1,7 +1,7 @@
 exporters:
   debug:
     verbosity: detailed
-  otlp/jaeger:
+  otlp_grpc/jaeger:
     endpoint: jaeger:4317
     tls:
       insecure: true

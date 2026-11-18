@@ -18,6 +18,7 @@ Le TP a été rédigé sans cluster. Ont été contrôlés : la syntaxe des mani
 - l'appel à l'ingress par `localhost:8080` avec l'en-tête `Host` (fonctions de `helpers.sh`) et la réponse de l'API de Jaeger 2.23.0 sur `/api/services` et `/api/traces` ;
 - le démarrage de l'Operator avec le certificat généré par le chart et l'enregistrement du webhook ;
 - le nom du conteneur d'initialisation injecté (`opentelemetry-auto-instrumentation-nodejs`) ;
+- les noms de service obtenus dans Jaeger (`frontend` et `backend` attendus, déduits par l'Operator) ;
 - le fonctionnement de l'image d'auto-instrumentation `0.82.0-1` avec Node.js 22.23.5 ;
 - les attributs `k8s.*` effectivement présents sur les traces de l'agent (l'association se fait par l'adresse IP de la connexion) ;
 - le comportement de `kubectl run --rm -i` avec l'image `telemetrygen`, qui est construite `FROM scratch` (pas de shell).

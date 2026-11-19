@@ -4,7 +4,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 # Objectifs
 
-À la fin du lab, nous saurons :
+À la fin du lab, vous saurez :
 
 - comparer l'échantillonnage en tête (head) et en queue (tail) et configurer un tail sampling sur la gateway ;
 - sécuriser le lien entre l'agent et la gateway avec TLS puis mTLS ;

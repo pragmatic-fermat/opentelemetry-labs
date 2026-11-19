@@ -4,7 +4,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 # Objectifs
 
-À la fin du lab, nous saurons :
+À la fin du lab, vous saurez :
 
 - démarrer une application de microservices (deux services Node.js, RabbitMQ, PostgreSQL, Nginx) et suivre un message de bout en bout, sans télémétrie ;
 - auto-instrumenter deux services Node.js et exporter leurs données en OTLP vers un Collector, puis Jaeger ;

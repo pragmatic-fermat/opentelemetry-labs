@@ -4,7 +4,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 # Objectifs
 
-À la fin du lab, nous saurons :
+À la fin du lab, vous saurez :
 
 - décrire un serveur dans un inventaire Ansible et vérifier la connexion avec un module ad hoc ;
 - écrire un playbook idempotent qui installe le Collector à partir d'un paquet, dont le téléchargement est vérifié par une somme de contrôle ;

@@ -4,7 +4,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 # Objectifs
 
-À la fin du lab, nous saurons :
+À la fin du lab, vous saurez :
 
 - activer l'auto-instrumentation d'une application Java avec l'agent Java, sans modifier son code ;
 - faire de même pour une application Python avec `opentelemetry-instrument` ;

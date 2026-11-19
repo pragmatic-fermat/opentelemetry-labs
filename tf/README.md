@@ -11,7 +11,7 @@ Pour chaque numéro N de 0 à `group_count - 1` (le numéro 0 est celui du forma
 - deux enregistrements DNS `clt-N` et `srv-N` dans la zone `domain_name` ;
 - un tag commun (`tag_name`) et un projet DigitalOcean `training` qui regroupe les droplets (les VPC ne sont pas assignables à un projet, ils restent en dehors).
 
-Chaque machine expose un terminal web (code-server derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`. L'utilisateur `stagiaire` (sudo sans mot de passe) est créé sur les deux machines, et le dépôt des labs est cloné dans `~/opentelemetry-labs`. Le cluster Kubernetes des TP suivants sera un cluster KinD sur `clt-N`, d'où les 8 Go de RAM et le swap de 2 Go.
+Chaque machine expose un terminal web (ttyd derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`, protégé par le mot de passe `webshell_password` (compte `stagiaire`, sudo sans mot de passe). Le dépôt des labs est cloné dans `~/opentelemetry-labs`. Le cluster Kubernetes des TP suivants sera un cluster KinD sur `clt-N`, d'où les 8 Go de RAM et le swap de 2 Go.
 
 ## Utilisation avec TFC
 
@@ -21,6 +21,7 @@ Créez un workspace relié à ce dépôt (workflow par gestion de versions) et i
 |---|---|---|
 | `do_token` | Terraform, sensible | Jeton d'API DigitalOcean |
 | `root_password` | Terraform, sensible | Mot de passe du compte root, injecté dans les fichiers cloud-init |
+| `webshell_password` | Terraform, sensible | Mot de passe du webshell (ttyd), communiqué aux stagiaires |
 | `domain_name` | Terraform | Zone DNS DigitalOcean qui reçoit les enregistrements |
 | `prefix` | Terraform | Préfixe de nommage des droplets (déclaré, à renseigner) |
 | `tag_name` | Terraform | Nom du tag appliqué aux droplets |
@@ -37,7 +38,7 @@ Les paquets apt (Docker, Ansible, Caddy) sont installés sans épinglage de vers
 | Image de droplet | Ubuntu 24.04 LTS (`ubuntu-24-04-x64`) | DigitalOcean |
 | Docker Engine | 29.8.1 | dépôt officiel Docker |
 | Ansible | core 2.16.3 | dépôt Ubuntu noble |
-| code-server | `4.145.2` | GitHub releases |
+| ttyd | `1.7.7` | GitHub releases |
 | Caddy | 2.11.9 | dépôt officiel Caddy |
 | yq | `4.54.3` | GitHub releases |
 | kubectl | `1.37.2` | dl.k8s.io |

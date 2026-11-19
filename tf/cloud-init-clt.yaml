@@ -1,7 +1,7 @@
 #cloud-config
 # Machine clt-N : poste de travail des labs OpenTelemetry.
 # Ubuntu 24.04, Docker et Compose v2, Ansible, outils Kubernetes clients
-# (kubectl, helm, kind), terminal web (code-server derrière Caddy).
+# (kubectl, helm, kind), terminal web (ttyd derrière Caddy).
 #
 # Versions épinglées et vérifiées le 2026-11-19 (voir README.md).
 package_update: true
@@ -27,13 +27,10 @@ users:
     sudo: "ALL=(ALL) NOPASSWD:ALL"
 ssh_pwauth: true
 write_files:
-  # Terminal web : code-server écoute en local, Caddy le publie en HTTPS
-  # sur https://${clt_machine}.${lab_domain} (certificat Let's Encrypt automatique).
-  - content: |
-      bind-addr: 127.0.0.1:8080
-      auth: none
-      cert: false
-    path: /etc/code-server/config.yaml
+  # Terminal web : ttyd écoute en local, Caddy le publie en HTTPS sur
+  # https://${clt_machine}.${lab_domain} (certificat Let's Encrypt automatique).
+  # ttyd sert un simple shell dans le navigateur (avec copier/coller),
+  # protégé par le mot de passe statique de la variable TFC webshell_password.
   - content: |
       {
         email webmaster@${lab_domain}
@@ -43,6 +40,21 @@ write_files:
         reverse_proxy 127.0.0.1:8080
       }
     path: /etc/caddy/Caddyfile
+  # Service systemd du terminal web : sessions ouvertes sous le compte
+  # stagiaire (sudo sans mot de passe), authentification basic auth.
+  - content: |
+      [Unit]
+      Description=Terminal web des labs (ttyd)
+      After=network.target
+
+      [Service]
+      User=stagiaire
+      ExecStart=/usr/local/bin/ttyd -W -p 8080 -c "stagiaire:${webshell_password}" bash
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+    path: /etc/systemd/system/ttyd.service
   # Variables d'environnement des labs, disponibles dans tous les terminaux.
   - content: |
       export LAB_ID="${lab_id}"
@@ -84,10 +96,10 @@ runcmd:
   - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt -o /etc/apt/sources.list.d/caddy-stable.list
   - apt-get update
   - apt-get install -y caddy
-  # code-server (VS Code dans le navigateur), service systemd pour stagiaire.
-  - curl -fsSL https://github.com/coder/code-server/releases/download/v4.145.2/code-server_4.145.2_amd64.deb -o /tmp/code-server.deb
-  - dpkg -i /tmp/code-server.deb || apt-get -f install -y
-  - systemctl enable --now code-server@stagiaire
+  # Terminal web ttyd (shell dans le navigateur), binaire épinglé.
+  - curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /usr/local/bin/ttyd
+  - chmod +x /usr/local/bin/ttyd
+  - systemctl enable --now ttyd
   # Outils Kubernetes clients, binaires épinglés.
   - curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.54.3/yq_linux_amd64 -o /usr/local/bin/yq
   - chmod +x /usr/local/bin/yq

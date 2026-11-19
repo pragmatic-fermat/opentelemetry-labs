@@ -396,10 +396,10 @@ curl -s 'http://localhost:16686/api/v3/traces?query.service_name=shop&query.star
   | jq -r '.result.resourceSpans[0].resource.attributes[] | select(.key=="lab.id") | .value | (.stringValue // .intValue)'
 ```
 
-On obtient votre numéro, la valeur de `$LAB_ID` :
+On obtient votre numéro de participant, la valeur de `$LAB_ID` (par exemple `3` pour le participant 3) :
 
 ```text
-1
+3
 ```
 
 Observez maintenant l'effet du `batch`. Passez `timeout` à `15s` avec `sed`, redémarrez le Collector, puis envoyez trois traces avec le service `shop-delay` :
@@ -597,10 +597,10 @@ curl -s http://localhost:9090/api/v1/query --data-urlencode 'query={__name__=~"t
   | jq -r '.data.result[0].metric | "\(.service_name) \(.lab_id)"'
 ```
 
-On obtient `billing` suivi de votre numéro :
+On obtient `billing` suivi de votre numéro de participant (par exemple `3` pour le participant 3) :
 
 ```text
-billing 1
+billing 3
 ```
 
 **Note** : le nom de la métrique peut porter un suffixe ajouté par le convertisseur selon l'unité, d'où l'expression régulière. Retrouvez la même série dans Grafana, via Explore et la source de données Prometheus.
@@ -618,8 +618,87 @@ Les traces de Jaeger étant stockées en mémoire, elles disparaissent avec le c
 
 ## Extra
 
-À vous de jouer, si le temps le permet :
+À vous de jouer, si le temps le permet.
 
-- envoyer un span en JSON avec `curl` directement sur le port 4318 (`/v1/traces`), pour comprendre ce que fait un SDK ;
-- ajouter [à la partie 5](#5-masquer-et-normaliser-avec-transform-et-ottl) une instruction qui positionne un attribut `slo.violation` à `true` sur les spans dont le statut est `Error` (option `--status-code Error` de `telemetrygen`) ;
-- supprimer le `batch` du pipeline et comparer le nombre de requêtes que reçoit Jaeger.
+### 1. Un span sans SDK
+
+Le SDK d'une application ne fait rien d'autre que fabriquer du JSON (ou du Protobuf) et le poster sur le port du receiver. Envoyons un span directement avec `curl`, et vérifions qu'il arrive dans Jaeger :
+
+```bash
+NOW=$(date +%s%N)
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces \
+  -H 'Content-Type: application/json' -d '{
+  "resourceSpans": [{
+    "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "manuel"}}]},
+    "scopeSpans": [{
+      "scope": {"name": "curl"},
+      "spans": [{
+        "traceId": "5b8efff798038103d269b633813fc60c",
+        "spanId": "eee19b7ec3c1b174",
+        "name": "hello",
+        "kind": 1,
+        "startTimeUnixNano": "'"$NOW"'",
+        "endTimeUnixNano": "'"$NOW"'"
+      }]
+    }]
+  }]
+}'
+```
+
+On obtient `200`. Retrouvez le span dans l'interface de Jaeger (service `manuel`, traces sur la dernière heure) : un seul span, sans client, sans instrumentation, seulement un POST JSON.
+
+### 2. Marquer les erreurs en OTTL
+
+Ajoutez [à la partie 5](#5-masquer-et-normaliser-avec-transform-et-ottl) un processor qui marque d'un attribut les spans en erreur :
+
+```bash
+cat >> otelcol/processors.yaml <<'EOF'
+  transform/slo:
+    error_mode: ignore
+    trace_statements:
+      - set(span.attributes["slo.violation"], true) where span.status.code == STATUS_CODE_ERROR
+EOF
+```
+
+Ajoutez `transform/slo` dans le pipeline `traces` (après `transform/normalize`), validez, redémarrez, puis envoyez des traces en erreur :
+
+```bash
+./check.sh
+docker compose restart otelcol
+./tg.sh traces --traces 2 --service errdemo --status-code Error
+```
+
+Dans Jaeger, les spans du service `errdemo` portent l'attribut `slo.violation` à `true`, et les autres services non.
+
+### 3. Ajouter le signal logs
+
+Le Collector traite aussi les logs, avec le même receiver et les mêmes processors. Ajoutez un pipeline `logs` au fichier `service.yaml` :
+
+```bash
+cat > otelcol/service.yaml <<'EOF'
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, filter/healthchecks, transform/normalize, batch]
+      exporters: [debug, otlp_http/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug, prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [debug]
+EOF
+```
+
+Validez, redémarrez, puis envoyez des logs :
+
+```bash
+./check.sh
+docker compose restart otelcol
+./tg.sh logs --logs 3 --service appli
+```
+
+L'exporter `debug` affiche trois blocs `LogRecord #` dans les logs du Collector. Aucun backend ne stocke les logs ici : c'est le rôle des TP suivants.

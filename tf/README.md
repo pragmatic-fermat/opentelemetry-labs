@@ -9,7 +9,7 @@ Pour chaque numéro N de 0 à `group_count - 1` (le numéro 0 est celui du forma
 - un droplet `clt-N` (poste de travail, Docker et Compose, Ansible, kubectl, helm, kind) et un droplet `srv-N` (serveur cible minimal, sans Docker), initialisés par les fichiers `cloud-init-clt.yaml` et `cloud-init-srv.yaml` ;
 - un VPC `vpc-N` (plage `10.20.N.0/24`, découpée depuis `vpc_base_range`) dans lequel sont placés les deux droplets du groupe : les machines d'un même groupe se voient sur le réseau privé, les groupes restent cloisonnés entre eux ;
 - deux enregistrements DNS `clt-N` et `srv-N` dans la zone `domain_name` ;
-- un tag commun (`tag_name`) et un projet DigitalOcean `training` qui regroupe les VPC et les droplets.
+- un tag commun (`tag_name`) et un projet DigitalOcean `training` qui regroupe les droplets (les VPC ne sont pas assignables à un projet, ils restent en dehors).
 
 Chaque machine expose un terminal web (code-server derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`. L'utilisateur `stagiaire` (sudo sans mot de passe) est créé sur les deux machines, et le dépôt des labs est cloné dans `~/opentelemetry-labs`. Le cluster Kubernetes des TP suivants sera un cluster KinD sur `clt-N`, d'où les 8 Go de RAM et le swap de 2 Go.
 

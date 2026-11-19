@@ -30,6 +30,21 @@ variable "root_password" {
   sensitive = true
 }
 
+# Mot de passe du webshell (ttyd), communiqué aux stagiaires.
+variable "webshell_password" {
+  type      = string
+  sensitive = true
+}
+
+# Clé de déploiement GitHub (lecture seule) pour cloner le dépôt des labs
+# tant qu'il est privé. Vide quand le dépôt est public : le clone se fait
+# alors en HTTPS anonyme.
+variable "github_deploy_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
 variable "group_count" {
   type = number
 }
@@ -66,10 +81,13 @@ resource "digitalocean_droplet" "clt" {
   monitoring = true
   ssh_keys   = var.ssh_keys
   user_data = templatefile("${path.module}/cloud-init-clt.yaml", {
-    root_password = var.root_password
-    lab_id        = count.index
-    lab_domain    = var.domain_name
-    machine       = "${var.prefix}clt-${count.index}"
+    root_password     = var.root_password
+    webshell_password = var.webshell_password
+    github_deploy_key = var.github_deploy_key
+    lab_id            = count.index
+    lab_domain        = var.domain_name
+    clt_machine       = "${var.prefix}clt-${count.index}"
+    srv_machine       = "${var.prefix}srv-${count.index}"
   })
 }
 
@@ -85,10 +103,13 @@ resource "digitalocean_droplet" "srv" {
   monitoring = true
   ssh_keys   = var.ssh_keys
   user_data = templatefile("${path.module}/cloud-init-srv.yaml", {
-    root_password = var.root_password
-    lab_id        = count.index
-    lab_domain    = var.domain_name
-    machine       = "${var.prefix}srv-${count.index}"
+    root_password     = var.root_password
+    webshell_password = var.webshell_password
+    github_deploy_key = var.github_deploy_key
+    lab_id            = count.index
+    lab_domain        = var.domain_name
+    clt_machine       = "${var.prefix}clt-${count.index}"
+    srv_machine       = "${var.prefix}srv-${count.index}"
   })
 }
 
@@ -98,7 +119,8 @@ resource "digitalocean_record" "clt_dns" {
   type   = "A"
   name   = "${var.prefix}clt-${count.index}"
   value  = digitalocean_droplet.clt[count.index].ipv4_address
-  ttl    = 60
+  # TTL court : les machines sont éphémères.
+  ttl = 60
 }
 
 resource "digitalocean_record" "srv_dns" {
@@ -107,7 +129,8 @@ resource "digitalocean_record" "srv_dns" {
   type   = "A"
   name   = "${var.prefix}srv-${count.index}"
   value  = digitalocean_droplet.srv[count.index].ipv4_address
-  ttl    = 60
+  # TTL court : les machines sont éphémères.
+  ttl = 60
 }
 
 resource "digitalocean_project" "training" {

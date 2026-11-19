@@ -28,6 +28,19 @@
 
 Ce lab se déroule sur la VM `clt-N` (N est votre numéro de participant, disponible dans la variable `LAB_ID`). Docker, Docker Compose, `curl` et `jq` y sont déjà installés. Il n'y a pas de prérequis : aucun lab précédent n'est nécessaire.
 
+### Terminal web
+
+L'animateur vous communique en séance deux informations :
+
+- l'adresse de votre terminal web : `https://clt-N.<domaine>`, où `<domaine>` est le domaine de la session et N votre numéro de participant (remplacez `CLT_HOST` par la sortie de `echo $CLT_HOST` pour retrouver l'adresse complète) ;
+- le mot de passe du terminal web.
+
+Ouvrez cette adresse dans votre navigateur : un formulaire demande le nom d'utilisateur (`stagiaire`) et le mot de passe. Vous arrivez ensuite dans un shell directement en root, dans le home `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`. Vous pouvez copier-coller entre votre poste et le terminal web (Ctrl+Maj+C / Ctrl+Maj+V dans Firefox, Ctrl+Shift+C / Ctrl+Shift+V dans Chrome, ou clic droit selon le navigateur).
+
+Le terminal web est publié en HTTPS avec un certificat Let's Encrypt : le navigateur affiche un cadenas, aucun avertissement de sécurité n'est attendu.
+
+### Données de télémétrie
+
 Les données sont produites par `telemetrygen`, un générateur de télémétrie fourni avec le projet OpenTelemetry. Cela permet de se concentrer sur le Collector sans avoir besoin d'une application.
 
 Versions utilisées, vérifiées le 2026-11-18 :
@@ -50,11 +63,13 @@ Les interfaces web sont accessibles depuis votre navigateur (remplacez `CLT_HOST
 
 ## 1. Démarrer les backends
 
-Si le dépôt des labs n'est pas encore cloné sur votre machine, clonez-le dans `~/opentelemetry-labs` :
+Le dépôt des labs est déjà cloné dans `~/opentelemetry-labs` (soit par la préparation de la machine, soit par vous). Si ce n'est pas le cas, clonez-le :
 
 ```bash
 git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git ~/opentelemetry-labs
 ```
+
+Si le clone échoue parce que le dépôt est privé, demandez l'accès à l'animateur.
 
 Créez un dossier de travail et récupérez-y les fichiers fournis (deux scripts et la déclaration des sources de données de Grafana) depuis le clone des labs :
 

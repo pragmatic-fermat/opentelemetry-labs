@@ -1,38 +1,104 @@
 #cloud-config
-##apt_upgrade: True
-##apt_reboot_if_required: False
+# Machine clt-N : poste de travail des labs OpenTelemetry.
+# Ubuntu 24.04, Docker et Compose v2, Ansible, outils Kubernetes clients
+# (kubectl, helm, kind), terminal web (code-server derrière Caddy).
+#
+# Versions épinglées et vérifiées le 2026-11-19 (voir README.md).
+package_update: true
+package_upgrade: false
 packages:
-  - python3-prometheus-client
-  - python3-flask
-  - mariadb-server
-  - unzip
-  - git
-  - dirmngr
-  - gpg
+  - ca-certificates
   - curl
-  - wget
-  - gawk
-  - net-tools
+  - git
+  - gnupg
+  - jq
+  - python3
+  - unzip
+  - ansible=9.2.0+dfsg-0ubuntu5
 users:
   - name: root
     lock-passwd: false
     plain_text_passwd: "${root_password}"
-ssh_pwauth: True ## This line enables ssh password authentication
+  - name: stagiaire
+    gecos: Participant des labs
+    shell: /bin/bash
+    home: /home/stagiaire
+    lock-passwd: true
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+ssh_pwauth: true
+write_files:
+  # Terminal web : code-server écoute en local, Caddy le publie en HTTPS
+  # sur https://${machine}.${lab_domain} (certificat Let's Encrypt automatique).
+  - content: |
+      bind-addr: 127.0.0.1:8080
+      auth: none
+      cert: false
+    path: /etc/code-server/config.yaml
+  - content: |
+      {
+        email webmaster@${lab_domain}
+      }
+
+      https://${machine}.${lab_domain} {
+        reverse_proxy 127.0.0.1:8080
+      }
+    path: /etc/caddy/Caddyfile
+  # Variables d'environnement des labs, disponibles dans tous les terminaux.
+  - content: |
+      export LAB_ID="${lab_id}"
+      export LAB_DOMAIN="${lab_domain}"
+      export CLT_HOST="${machine}.${lab_domain}"
+      export SRV_HOST="srv-${lab_id}.${lab_domain}"
+    path: /etc/profile.d/lab-env.sh
+  - content: |
+      [ -f /etc/profile.d/lab-env.sh ] && . /etc/profile.d/lab-env.sh
+    path: /etc/bash.bashrc
+    append: true
 runcmd:
+  # Accès SSH root par mot de passe (maintenance d'urgence). Le compte
+  # stagiaire n'a pas de mot de passe et se connecte par clé.
   - ufw disable
-  - sed -i -e '/^PermitRootLogin/s/^.*$/PermitRootLogin yes/' /etc/ssh/sshd_config
-  - sed -i -e '/^PasswordAuthentication/s/^.*$/PasswordAuthentication yes/' /etc/ssh/sshd_config
-  - restart ssh
-  - rm -rf /etc/update-motd.d/99-one-click
-## DB data
-  - cd /home && wget "https://github.com/pragmatic-fermat/observabilite_des_applications/raw/refs/heads/main/data/mysqlsampledatabase.zip" && unzip /home/mysqlsampledatabase.zip
-## asdf  
-  - cd /root && git clone https://github.com/asdf-vm/asdf.git /root/.asdf --branch v0.14.0
-  - echo '. "$HOME/.asdf/asdf.sh"' >> /root/.bashrc
-  - echo '. "$HOME/.asdf/completions/asdf.bash"' >> /root/.bashrc
-  - /root/.asdf/bin/asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
-snap:
-    commands:
-        00: ['install', 'yq']
-        01: ['install', 'kubectl', '--classic']
-        02: ['install', 'helm', '--classic']
+  - sed -i -E 's/^#?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - sed -i -E 's/^#?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  - grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+  - grep -q '^PasswordAuthentication yes' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
+  - systemctl restart ssh
+  # Swap 2G, utile pour le cluster KinD des TP suivants.
+  - fallocate -l 2G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  # Docker Engine et Compose v2 depuis le dépôt officiel Docker.
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update
+  - apt-get install -y docker-ce=5:29.8.1-1~ubuntu.24.04~noble docker-ce-cli=5:29.8.1-1~ubuntu.24.04~noble containerd.io docker-buildx-plugin docker-compose-plugin
+  - usermod -aG docker stagiaire
+  # Caddy depuis le dépôt officiel, avec le Caddyfile écrit plus haut.
+  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key -o /usr/share/keyrings/caddy-stable-archive-keyring.asc
+  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt -o /etc/apt/sources.list.d/caddy-stable.list
+  - apt-get update
+  - apt-get install -y caddy=2.11.9
+  # code-server (VS Code dans le navigateur), service systemd pour stagiaire.
+  - curl -fsSL https://github.com/coder/code-server/releases/download/v4.145.2/code-server_4.145.2_amd64.deb -o /tmp/code-server.deb
+  - dpkg -i /tmp/code-server.deb || apt-get -f install -y
+  - systemctl enable --now code-server@stagiaire
+  # Outils Kubernetes clients, binaires épinglés.
+  - curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.54.3/yq_linux_amd64 -o /usr/local/bin/yq
+  - chmod +x /usr/local/bin/yq
+  - curl -fsSL https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl -o /usr/local/bin/kubectl
+  - chmod +x /usr/local/bin/kubectl
+  - curl -fsSL https://get.helm.sh/helm-v4.3.2-linux-amd64.tar.gz -o /tmp/helm.tgz
+  - tar -xzf /tmp/helm.tgz -C /tmp
+  - install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+  - curl -fsSL https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64 -o /usr/local/bin/kind
+  - chmod +x /usr/local/bin/kind
+  # Clone du dépôt des labs dans le home de stagiaire. Le dépôt étant encore
+  # privé au moment de la rédaction, le clone échoue tant qu'il n'est pas
+  # public : le cloner à la main avec le jeton GitHub dans ce cas.
+  - rm -rf /home/stagiaire/opentelemetry-labs
+  - git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git /home/stagiaire/opentelemetry-labs || true
+  - chown -R stagiaire:stagiaire /home/stagiaire/opentelemetry-labs || true

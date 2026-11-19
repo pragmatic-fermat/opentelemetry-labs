@@ -1,23 +1,76 @@
 #cloud-config
-##apt_upgrade: True
-##apt_reboot_if_required: False
+# Machine srv-N : serveur cible des labs OpenTelemetry.
+# Ubuntu 24.04 minimal, sans Docker. Cible des déploiements Ansible et des
+# auto-instrumentations sur hôte. Terminal web (code-server derrière Caddy).
+#
+# Versions épinglées et vérifiées le 2026-11-19 (voir README.md).
+package_update: true
+package_upgrade: false
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - python3
 users:
   - name: root
     lock-passwd: false
     plain_text_passwd: "${root_password}"
-ssh_pwauth: True ## This line enables ssh password authentication
-packages:
-  - curl
-  - git
-  - net-tools
+  - name: stagiaire
+    gecos: Participant des labs
+    shell: /bin/bash
+    home: /home/stagiaire
+    lock-passwd: true
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+ssh_pwauth: true
+write_files:
+  # Terminal web : code-server écoute en local, Caddy le publie en HTTPS
+  # sur https://${machine}.${lab_domain} (certificat Let's Encrypt automatique).
+  - content: |
+      bind-addr: 127.0.0.1:8080
+      auth: none
+      cert: false
+    path: /etc/code-server/config.yaml
+  - content: |
+      {
+        email webmaster@${lab_domain}
+      }
+
+      https://${machine}.${lab_domain} {
+        reverse_proxy 127.0.0.1:8080
+      }
+    path: /etc/caddy/Caddyfile
+  # Variables d'environnement des labs, disponibles dans tous les terminaux.
+  - content: |
+      export LAB_ID="${lab_id}"
+      export LAB_DOMAIN="${lab_domain}"
+      export CLT_HOST="clt-${lab_id}.${lab_domain}"
+      export SRV_HOST="${machine}.${lab_domain}"
+    path: /etc/profile.d/lab-env.sh
+  - content: |
+      [ -f /etc/profile.d/lab-env.sh ] && . /etc/profile.d/lab-env.sh
+    path: /etc/bash.bashrc
+    append: true
 runcmd:
+  # Accès SSH root par mot de passe (maintenance d'urgence). Le compte
+  # stagiaire n'a pas de mot de passe et se connecte par clé.
   - ufw disable
-  - sed -i -e '/^PermitRootLogin/s/^.*$/PermitRootLogin yes/' /etc/ssh/sshd_config
-  - sed -i -e '/^PasswordAuthentication/s/^.*$/PasswordAuthentication yes/' /etc/ssh/sshd_config
-  - restart ssh
-  - rm -rf /etc/update-motd.d/99-one-click
-snap:
-    commands:
-        00: ['install', 'yq']
-        01: ['install', 'kubectl', '--classic']
-        02: ['install', 'helm', '--classic']
+  - sed -i -E 's/^#?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - sed -i -E 's/^#?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  - grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+  - grep -q '^PasswordAuthentication yes' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
+  - systemctl restart ssh
+  # Caddy depuis le dépôt officiel, avec le Caddyfile écrit plus haut.
+  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key -o /usr/share/keyrings/caddy-stable-archive-keyring.asc
+  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt -o /etc/apt/sources.list.d/caddy-stable.list
+  - apt-get update
+  - apt-get install -y caddy=2.11.9
+  # code-server (VS Code dans le navigateur), service systemd pour stagiaire.
+  - curl -fsSL https://github.com/coder/code-server/releases/download/v4.145.2/code-server_4.145.2_amd64.deb -o /tmp/code-server.deb
+  - dpkg -i /tmp/code-server.deb || apt-get -f install -y
+  - systemctl enable --now code-server@stagiaire
+  # Clone du dépôt des labs dans le home de stagiaire. Le dépôt étant encore
+  # privé au moment de la rédaction, le clone échoue tant qu'il n'est pas
+  # public : le cloner à la main avec le jeton GitHub dans ce cas.
+  - rm -rf /home/stagiaire/opentelemetry-labs
+  - git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git /home/stagiaire/opentelemetry-labs || true
+  - chown -R stagiaire:stagiaire /home/stagiaire/opentelemetry-labs || true

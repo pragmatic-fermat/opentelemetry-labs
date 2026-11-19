@@ -81,13 +81,13 @@ resource "digitalocean_droplet" "clt" {
   monitoring = true
   ssh_keys   = var.ssh_keys
   user_data = templatefile("${path.module}/cloud-init-clt.yaml", {
-    root_password     = var.root_password
-    webshell_password = var.webshell_password
-    github_deploy_key = var.github_deploy_key
-    lab_id            = count.index
-    lab_domain        = var.domain_name
-    clt_machine       = "${var.prefix}clt-${count.index}"
-    srv_machine       = "${var.prefix}srv-${count.index}"
+    root_password         = var.root_password
+    webshell_password     = var.webshell_password
+    github_deploy_key_b64 = base64encode(var.github_deploy_key)
+    lab_id                = count.index
+    lab_domain            = var.domain_name
+    clt_machine           = "${var.prefix}clt-${count.index}"
+    srv_machine           = "${var.prefix}srv-${count.index}"
   })
 }
 
@@ -103,13 +103,13 @@ resource "digitalocean_droplet" "srv" {
   monitoring = true
   ssh_keys   = var.ssh_keys
   user_data = templatefile("${path.module}/cloud-init-srv.yaml", {
-    root_password     = var.root_password
-    webshell_password = var.webshell_password
-    github_deploy_key = var.github_deploy_key
-    lab_id            = count.index
-    lab_domain        = var.domain_name
-    clt_machine       = "${var.prefix}clt-${count.index}"
-    srv_machine       = "${var.prefix}srv-${count.index}"
+    root_password         = var.root_password
+    webshell_password     = var.webshell_password
+    github_deploy_key_b64 = base64encode(var.github_deploy_key)
+    lab_id                = count.index
+    lab_domain            = var.domain_name
+    clt_machine           = "${var.prefix}clt-${count.index}"
+    srv_machine           = "${var.prefix}srv-${count.index}"
   })
 }
 

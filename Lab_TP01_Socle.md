@@ -116,6 +116,23 @@ EOF
 
 Créez ensuite le fichier `compose.yaml`. Il décrit quatre services : Jaeger, Prometheus et Grafana, que vous démarrez maintenant, et le Collector, que vous démarrerez [à la partie 2](#2-un-premier-collector). Le Collector reçoit sa configuration en quatre fichiers, un par section, passés avec quatre options `--config` : il les fusionne en une seule configuration. Ce découpage permet d'ajouter des éléments au fil du lab sans réécrire un fichier entier.
 
+Le schéma suivant représente cette architecture : les services tournent dans des conteneurs reliés par le réseau Docker du compose, et chacun publie un port sur la machine `clt-N` pour l'accès depuis votre navigateur. Le Collector et le générateur de télémétrie `telemetrygen` sont ajoutés [à la partie 2](#2-un-premier-collector).
+
+```mermaid
+---
+title: Stack du TP1
+---
+flowchart LR
+  browser([Navigateur]) -->|16686| J[(Jaeger)]
+  browser -->|9090| P[(Prometheus)]
+  browser -->|3000| G[(Grafana)]
+  browser -->|4318| O[[Collector]]
+  O -->|traces, OTLP/HTTP| J
+  O -->|métriques, port 8889| P
+  G -->|requêtes PromQL| P
+  T([telemetrygen]) -->|OTLP/HTTP| O
+```
+
 ```bash
 cat > compose.yaml <<'EOF'
 name: tp01

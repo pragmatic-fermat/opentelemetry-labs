@@ -1,8 +1,0 @@
-global:
-  scrape_interval: 5s
-
-scrape_configs:
-  # Métriques exposées par l'exporter prometheus du Collector (partie 6).
-  - job_name: otelcol-exporter
-    static_configs:
-      - targets: ["otelcol:8889"]

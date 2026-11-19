@@ -81,13 +81,7 @@ Les interfaces web sont accessibles depuis votre navigateur, sur votre machine `
 
 ## 1. Démarrer les backends
 
-Le dépôt des labs est déjà cloné dans `~/opentelemetry-labs` (soit par la préparation de la machine, soit par vous). Si ce n'est pas le cas, clonez-le :
-
-```bash
-git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git ~/opentelemetry-labs
-```
-
-Si le clone échoue parce que le dépôt est privé, demandez l'accès à l'animateur.
+Le dépôt des labs est déjà cloné dans `~/opentelemetry-labs`.
 
 Créez un dossier de travail et récupérez-y les fichiers fournis (deux scripts et la déclaration des sources de données de Grafana) depuis le clone des labs :
 

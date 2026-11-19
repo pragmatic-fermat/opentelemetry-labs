@@ -281,7 +281,8 @@ On obtient :
 Contrôlons que Jaeger a reçu les traces :
 
 ```bash
-curl -s 'http://localhost:16686/api/traces?service=demo&limit=20' | jq '.data | length'
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq '.result.resourceSpans | length'
 ```
 
 On obtient :
@@ -290,7 +291,7 @@ On obtient :
 5
 ```
 
-Dans l'interface de Jaeger, choisissons le service `demo` puis cliquons sur Find Traces : nous retrouvons les cinq traces. Faisons la même recherche dans Grafana, via Explore et la source de données Jaeger.
+Dans l'interface de Jaeger, choisissons le service `demo` puis cliquons sur Find Traces : nous retrouvons les cinq traces.
 
 **Note** : dans la commande `docker compose logs`, une erreur de type `connection refused` vers Jaeger signifie que l'adresse de l'exporter n'utilise pas le nom du service (`jaeger`). Si `telemetrygen` ne se connecte pas, vérifions que le Collector tourne (`docker compose ps`) et que son receiver écoute sur `0.0.0.0`.
 
@@ -350,8 +351,8 @@ docker compose restart otelcol
 Les attributs de ressource apparaissent dans Jaeger, sur chaque trace du service `shop`, dans la section Process des détails d'un span. En ligne de commande :
 
 ```bash
-curl -s 'http://localhost:16686/api/traces?service=shop&limit=1' \
-  | jq -r '.data[0].processes[].tags[] | select(.key=="lab.id") | .value'
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq -r '.result.resourceSpans[0].resource.attributes[] | select(.key=="lab.id") | .value | (.stringValue // .intValue)'
 ```
 
 On obtient notre numéro, la valeur de `$LAB_ID` :
@@ -423,9 +424,10 @@ docker compose restart otelcol
 Seules les dix traces de `/api/orders` doivent exister dans Jaeger :
 
 ```bash
-curl -s 'http://localhost:16686/api/traces?service=shop-filter&limit=50' | jq '.data | length'
-curl -s 'http://localhost:16686/api/traces?service=shop-filter&limit=50' \
-  | jq -c '[.data[].spans[].tags[] | select(.key=="http.route") | .value] | unique'
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=shop-filter&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq '.result.resourceSpans | length'
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=shop-filter&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq -c '[.result.resourceSpans[].scopeSpans[].spans[].attributes[] | select(.key=="http.route") | .value.stringValue] | unique'
 ```
 
 On obtient :
@@ -485,9 +487,10 @@ EOF
 Validons, redémarrons le Collector et renvoyons la même commande `./tg.sh` que ci-dessus. L'exporter `debug` affiche dans les logs du Collector les spans tels qu'ils sont après le traitement. Dans Jaeger, contrôlons les noms de spans et les attributs :
 
 ```bash
-curl -s 'http://localhost:16686/api/traces?service=accounts&limit=1' | jq -r '.data[0].spans[].operationName'
-curl -s 'http://localhost:16686/api/traces?service=accounts&limit=1' \
-  | jq -r '.data[0].spans[0].tags[] | select(.key=="user.email" or .key=="url.path") | "\(.key)=\(.value)"'
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=accounts&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[].name'
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=accounts&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[] | .attributes[]? | select(.key=="user.email" or .key=="url.path") | "\(.key)=\(.value.stringValue)"'
 ```
 
 On obtient, dans un ordre quelconque :

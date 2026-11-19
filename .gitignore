@@ -14,3 +14,4 @@ Export_Conversation_Formation_OpenTelemetry.md
 
 # Identifiants locaux (mot de passe root des machines de lab)
 creds.txt
+deploy_key

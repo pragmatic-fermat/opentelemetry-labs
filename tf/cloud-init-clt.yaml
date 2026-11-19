@@ -16,15 +16,11 @@ packages:
   - unzip
   - ansible
 users:
+  # Le terminal web ouvre des sessions directement en root (machines
+  # éphémères) : aucun autre compte n'est nécessaire.
   - name: root
     lock-passwd: false
     plain_text_passwd: "${root_password}"
-  - name: stagiaire
-    gecos: Participant des labs
-    shell: /bin/bash
-    home: /home/stagiaire
-    lock-passwd: true
-    sudo: "ALL=(ALL) NOPASSWD:ALL"
 ssh_pwauth: true
 write_files:
   # Terminal web : ttyd écoute en local, Caddy le publie en HTTPS sur
@@ -40,15 +36,16 @@ write_files:
         reverse_proxy 127.0.0.1:8080
       }
     path: /etc/caddy/Caddyfile
-  # Service systemd du terminal web : sessions ouvertes sous le compte
-  # stagiaire (sudo sans mot de passe), authentification basic auth.
+  # Service systemd du terminal web : sessions ouvertes directement en root,
+  # authentification basic auth (mot de passe de la variable TFC).
   - content: |
       [Unit]
       Description=Terminal web des labs (ttyd)
       After=network.target
 
       [Service]
-      User=stagiaire
+      User=root
+      WorkingDirectory=/root
       ExecStart=/usr/local/bin/ttyd -W -p 8080 -c "stagiaire:${webshell_password}" bash
       Restart=on-failure
 
@@ -88,7 +85,6 @@ runcmd:
   - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
   - apt-get update
   - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  - usermod -aG docker stagiaire
   # Caddy depuis le dépôt officiel, avec le Caddyfile écrit plus haut.
   # Le fichier de dépôt Cloudsmith référence la clé au format binaire .gpg :
   # il faut déblinder la clé téléchargée (gpg --dearmor).
@@ -110,9 +106,18 @@ runcmd:
   - install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
   - curl -fsSL https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64 -o /usr/local/bin/kind
   - chmod +x /usr/local/bin/kind
-  # Clone du dépôt des labs dans le home de stagiaire. Le dépôt étant encore
-  # privé au moment de la rédaction, le clone échoue tant qu'il n'est pas
-  # public : le cloner à la main avec le jeton GitHub dans ce cas.
-  - rm -rf /home/stagiaire/opentelemetry-labs
-  - git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git /home/stagiaire/opentelemetry-labs || true
-  - chown -R stagiaire:stagiaire /home/stagiaire/opentelemetry-labs || true
+  # Clone du dépôt des labs dans /root. Tant que le dépôt est privé, une
+  # clé de déploiement GitHub (lecture seule) est passée par la variable
+  # TFC github_deploy_key : le clone se fait en SSH. Une fois le dépôt
+  # public, cette variable reste vide et le clone se fait en HTTPS anonyme.
+  - rm -rf /root/opentelemetry-labs
+  - if [ -n "${github_deploy_key}" ]; then
+    install -d -m 700 /root/.ssh
+    echo "${github_deploy_key}" > /root/.ssh/id_ed25519_labs
+    chmod 600 /root/.ssh/id_ed25519_labs
+    printf 'Host github.com\n  IdentityFile /root/.ssh/id_ed25519_labs\n  StrictHostKeyChecking accept-new\n' > /root/.ssh/config
+    chmod 600 /root/.ssh/config
+    git clone git@github.com:pragmatic-fermat/opentelemetry-labs.git /root/opentelemetry-labs
+    else
+    git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git /root/opentelemetry-labs
+    fi

@@ -1,30 +1,26 @@
 # Lab TP2 : Collector sur mesure et Alloy
 
-<!--
-Gabarit : la structure est en place, le contenu reste à rédiger.
-Règles : voir CONVENTIONS.md (narration en « nous », configurations complètes avec cat <<'EOF',
-sortie attendue après chaque commande, versions épinglées et vérifiées dans le registre, Cleanup en fin de lab).
-Fichiers fournis dans config/tp02/, notes du formateur dans formateur/TP02.md.
-Le découpage en parties ci-dessous est une proposition à confirmer.
--->
+Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédiger. Hors périmètre actuel : le TP est conservé pour mémoire.
 
 # Objectifs
 
 À la fin du lab, nous saurons :
 
-- À compléter : construire un Collector sur mesure avec OpenTelemetry Collector Builder (OCB) ;
-- À compléter : choisir les composants d'un Collector selon un besoin et en mesurer l'effet (taille, surface) ;
-- À compléter : installer et configurer Grafana Alloy comme alternative ;
-- À compléter : comparer les deux approches et en citer les gains et les limites.
+- expliquer pourquoi la distribution `contrib` n'est pas adaptée à la production (taille, surface d'attaque, mises à jour subies en bloc) et dans quels cas `core` suffit ;
+- décrire un Collector sur mesure dans un manifeste OCB (OpenTelemetry Collector Builder), en ne retenant que les receivers, processors et exporters nécessaires ;
+- construire le binaire puis une image Docker, et comparer taille et liste de composants avec `contrib` ;
+- faire tourner la configuration du TP1 sur ce Collector et constater qu'un composant absent est refusé dès la validation ;
+- reproduire un pipeline OTLP vers Jaeger avec Grafana Alloy, puis citer ses gains et ses limites.
 
 # Contenu
 
 - [Environnement](#environnement)
-- [1. Décrire le Collector voulu](#1-décrire-le-collector-voulu)
-- [2. Construire le Collector avec OCB](#2-construire-le-collector-avec-ocb)
-- [3. Exécuter et valider le Collector sur mesure](#3-exécuter-et-valider-le-collector-sur-mesure)
-- [4. Grafana Alloy comme alternative](#4-grafana-alloy-comme-alternative)
-- [5. Comparer les deux approches](#5-comparer-les-deux-approches)
+- [1. Comparer les distributions core et contrib](#1-comparer-les-distributions-core-et-contrib) : lister les composants de chaque distribution et mesurer leur image.
+- [2. Décrire le Collector voulu dans un manifeste OCB](#2-décrire-le-collector-voulu-dans-un-manifeste-ocb) : choisir les composants et épingler leurs versions.
+- [3. Construire le binaire et l'image](#3-construire-le-binaire-et-limage) : compiler avec `ocb`, puis produire une image Docker.
+- [4. Valider avec la configuration du TP1](#4-valider-avec-la-configuration-du-tp1) : exécuter le Collector sur mesure et constater l'effet d'un composant absent.
+- [5. Grafana Alloy : le même pipeline](#5-grafana-alloy--le-même-pipeline) : reproduire OTLP vers Jaeger avec Alloy.
+- [6. Gains et limites](#6-gains-et-limites) : remplir une grille de comparaison Collector sur mesure et Alloy.
 - [Cleanup](#cleanup)
 - [Extra](#extra)
 
@@ -32,35 +28,55 @@ Le découpage en parties ci-dessous est une proposition à confirmer.
 
 ## Environnement
 
-À compléter : machine utilisée, prérequis (TP précédents éventuels), outils.
+Machine(s) : `clt-N`.
 
-Versions utilisées (à vérifier dans le registre et à dater au moment de la rédaction) :
+Prérequis : TP1 recommandé : les backends et la configuration du Collector du TP1 sont réutilisés pour valider le Collector sur mesure.
 
-| Composant | Version |
-|---|---|
-| OpenTelemetry Collector Builder (`ocb`) | À compléter |
-| Composants du Collector sur mesure | À compléter |
-| Grafana Alloy | À compléter |
+Durée prévue : 1/4 j (environ 2 heures de manipulation).
 
-## 1. Décrire le Collector voulu
+Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 
-À compléter : choix des composants (receivers, processors, exporters) et écriture du manifeste OCB.
+## 1. Comparer les distributions core et contrib
 
-## 2. Construire le Collector avec OCB
+À compléter. Points couverts :
 
-À compléter : installation d'`ocb`, compilation, résultat attendu.
+- Lister les composants disponibles dans chaque distribution.
+- Mesurer la taille des images et en tirer les conséquences en production.
 
-## 3. Exécuter et valider le Collector sur mesure
+## 2. Décrire le Collector voulu dans un manifeste OCB
 
-À compléter : configuration, démarrage et envoi de données de test.
+À compléter. Points couverts :
 
-## 4. Grafana Alloy comme alternative
+- Partir de la configuration du TP1 pour déduire la liste minimale de composants.
+- Écrire le manifeste OCB avec des versions exactes.
 
-À compléter : installation d'Alloy et équivalent de la configuration précédente.
+## 3. Construire le binaire et l'image
 
-## 5. Comparer les deux approches
+À compléter. Points couverts :
 
-À compléter : gains et limites constatés (taille, maintenance, composants disponibles, configuration).
+- Installer `ocb` à une version épinglée.
+- Construire le binaire, puis l'image, et comparer les tailles avec `contrib`.
+
+## 4. Valider avec la configuration du TP1
+
+À compléter. Points couverts :
+
+- Valider et démarrer le Collector avec la configuration du TP1.
+- Ajouter un composant absent du manifeste et lire l'erreur de validation.
+
+## 5. Grafana Alloy : le même pipeline
+
+À compléter. Points couverts :
+
+- Installer Alloy et écrire l'équivalent du pipeline dans sa syntaxe.
+- Utiliser l'interface de debug d'Alloy pour suivre le pipeline.
+
+## 6. Gains et limites
+
+À compléter. Points couverts :
+
+- Comparer la portabilité des configurations, les composants disponibles, le support et le périmètre fonctionnel.
+- Conclure par des critères de choix et non par une recommandation unique. Les points sur Alloy sont à revérifier sur la version retenue.
 
 ## Cleanup
 
@@ -68,4 +84,4 @@ Versions utilisées (à vérifier dans le registre et à dater au moment de la r
 
 ## Extra
 
-À compléter (facultatif) : une partie où le participant avance seul.
+À compléter. Idée : ajouter un second exporter au manifeste, reconstruire et mesurer l'écart de taille.

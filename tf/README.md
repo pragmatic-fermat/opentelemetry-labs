@@ -11,7 +11,7 @@ Pour chaque numéro N de 0 à `group_count - 1` (le numéro 0 est celui du forma
 - deux enregistrements DNS `clt-N` et `srv-N` dans la zone `domain_name` ;
 - un tag commun (`tag_name`) et un projet DigitalOcean `training` qui regroupe les droplets (les VPC ne sont pas assignables à un projet, ils restent en dehors).
 
-Chaque machine expose un terminal web (code-server derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`. L'utilisateur `stagiaire` (sudo sans mot de passe) est créé sur les deux machines, et le dépôt des labs est cloné dans `~/opentelemetry-labs`. Le cluster Kubernetes des TP suivants sera un cluster KinD sur `clt-N`, d'où les 8 Go de RAM et le swap de 2 Go.
+Chaque machine expose un terminal web (ttyd derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`, protégé par le mot de passe `webshell_password` (compte `stagiaire` dans la basic auth). Le terminal ouvre des sessions directement en root (machines éphémères), le dépôt des labs est cloné dans `/root/opentelemetry-labs`, en SSH avec la clé de déploiement `github_deploy_key` tant que le dépôt est privé, en HTTPS anonyme ensuite. Le cluster Kubernetes des TP suivants sera un cluster KinD sur `clt-N`, d'où les 8 Go de RAM et le swap de 2 Go.
 
 ## Utilisation avec TFC
 
@@ -21,6 +21,8 @@ Créez un workspace relié à ce dépôt (workflow par gestion de versions) et i
 |---|---|---|
 | `do_token` | Terraform, sensible | Jeton d'API DigitalOcean |
 | `root_password` | Terraform, sensible | Mot de passe du compte root, injecté dans les fichiers cloud-init |
+| `webshell_password` | Terraform, sensible | Mot de passe du webshell (ttyd), communiqué aux stagiaires |
+| `github_deploy_key` | Terraform, sensible | Clé de déploiement GitHub (lecture seule) pour cloner le dépôt tant qu'il est privé ; vide quand le dépôt est public |
 | `domain_name` | Terraform | Zone DNS DigitalOcean qui reçoit les enregistrements |
 | `prefix` | Terraform | Préfixe de nommage des droplets (déclaré, à renseigner) |
 | `tag_name` | Terraform | Nom du tag appliqué aux droplets |
@@ -28,15 +30,17 @@ Créez un workspace relié à ce dépôt (workflow par gestion de versions) et i
 
 Les autres variables (`region_name`, `clt_size`, `srv_size`, `droplet_image`, `ssh_keys`, `vpc_base_range`) ont leur valeur dans `common.auto.tfvars`, que TFC charge automatiquement. Aucun secret ne doit être écrit dans ce dossier : le jeton et le mot de passe se saisissent uniquement dans les variables du workspace.
 
-## Versions épinglées (vérifiées le 2026-11-19)
+## Versions (vérifiées le 2026-11-19)
 
-| Composant | Version | Source |
+Les paquets apt (Docker, Ansible, Caddy) sont installés sans épinglage de version : la dernière version des dépôts est utilisée à chaque création de machine. Les binaires téléchargés hors apt restent épinglés.
+
+| Composant | Version vérifiée | Source |
 |---|---|---|
 | Image de droplet | Ubuntu 24.04 LTS (`ubuntu-24-04-x64`) | DigitalOcean |
-| Docker Engine | `5:29.8.1-1~ubuntu.24.04~noble` | dépôt officiel Docker |
-| Ansible | `9.2.0+dfsg-0ubuntu5` | dépôt Ubuntu noble |
-| code-server | `4.145.2` | GitHub releases |
-| Caddy | `2.11.9` | dépôt officiel Caddy |
+| Docker Engine | 29.8.1 | dépôt officiel Docker |
+| Ansible | core 2.16.3 | dépôt Ubuntu noble |
+| ttyd | `1.7.7` | GitHub releases |
+| Caddy | 2.11.9 | dépôt officiel Caddy |
 | yq | `4.54.3` | GitHub releases |
 | kubectl | `1.37.2` | dl.k8s.io |
 | helm | `4.3.2` | get.helm.sh |

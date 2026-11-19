@@ -1,7 +1,7 @@
 #cloud-config
 # Machine srv-N : serveur cible des labs OpenTelemetry.
 # Ubuntu 24.04 minimal, sans Docker. Cible des déploiements Ansible et des
-# auto-instrumentations sur hôte. Terminal web (code-server derrière Caddy).
+# auto-instrumentations sur hôte. Terminal web (ttyd derrière Caddy).
 #
 # Versions épinglées et vérifiées le 2026-11-19 (voir README.md).
 package_update: true
@@ -12,39 +12,48 @@ packages:
   - git
   - python3
 users:
+  # Le terminal web ouvre des sessions directement en root (machines
+  # éphémères) : aucun autre compte n'est nécessaire.
   - name: root
     lock-passwd: false
     plain_text_passwd: "${root_password}"
-  - name: stagiaire
-    gecos: Participant des labs
-    shell: /bin/bash
-    home: /home/stagiaire
-    lock-passwd: true
-    sudo: "ALL=(ALL) NOPASSWD:ALL"
 ssh_pwauth: true
 write_files:
-  # Terminal web : code-server écoute en local, Caddy le publie en HTTPS
-  # sur https://${machine}.${lab_domain} (certificat Let's Encrypt automatique).
-  - content: |
-      bind-addr: 127.0.0.1:8080
-      auth: none
-      cert: false
-    path: /etc/code-server/config.yaml
+  # Terminal web : ttyd écoute en local, Caddy le publie en HTTPS sur
+  # https://${srv_machine}.${lab_domain} (certificat Let's Encrypt automatique).
+  # ttyd sert un simple shell dans le navigateur (avec copier/coller),
+  # protégé par le mot de passe statique de la variable TFC webshell_password.
   - content: |
       {
         email webmaster@${lab_domain}
       }
 
-      https://${machine}.${lab_domain} {
+      https://${srv_machine}.${lab_domain} {
         reverse_proxy 127.0.0.1:8080
       }
     path: /etc/caddy/Caddyfile
+  # Service systemd du terminal web : sessions ouvertes directement en root,
+  # authentification basic auth (mot de passe de la variable TFC).
+  - content: |
+      [Unit]
+      Description=Terminal web des labs (ttyd)
+      After=network.target
+
+      [Service]
+      User=root
+      WorkingDirectory=/root
+      ExecStart=/usr/local/bin/ttyd -W -p 8080 -c "stagiaire:${webshell_password}" bash
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+    path: /etc/systemd/system/ttyd.service
   # Variables d'environnement des labs, disponibles dans tous les terminaux.
   - content: |
       export LAB_ID="${lab_id}"
       export LAB_DOMAIN="${lab_domain}"
-      export CLT_HOST="clt-${lab_id}.${lab_domain}"
-      export SRV_HOST="${machine}.${lab_domain}"
+      export CLT_HOST="${clt_machine}.${lab_domain}"
+      export SRV_HOST="${srv_machine}.${lab_domain}"
     path: /etc/profile.d/lab-env.sh
   - content: |
       [ -f /etc/profile.d/lab-env.sh ] && . /etc/profile.d/lab-env.sh
@@ -60,17 +69,28 @@ runcmd:
   - grep -q '^PasswordAuthentication yes' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
   - systemctl restart ssh
   # Caddy depuis le dépôt officiel, avec le Caddyfile écrit plus haut.
-  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key -o /usr/share/keyrings/caddy-stable-archive-keyring.asc
+  # Le fichier de dépôt Cloudsmith référence la clé au format binaire .gpg :
+  # il faut déblinder la clé téléchargée (gpg --dearmor).
+  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt -o /etc/apt/sources.list.d/caddy-stable.list
   - apt-get update
-  - apt-get install -y caddy=2.11.9
-  # code-server (VS Code dans le navigateur), service systemd pour stagiaire.
-  - curl -fsSL https://github.com/coder/code-server/releases/download/v4.145.2/code-server_4.145.2_amd64.deb -o /tmp/code-server.deb
-  - dpkg -i /tmp/code-server.deb || apt-get -f install -y
-  - systemctl enable --now code-server@stagiaire
-  # Clone du dépôt des labs dans le home de stagiaire. Le dépôt étant encore
-  # privé au moment de la rédaction, le clone échoue tant qu'il n'est pas
-  # public : le cloner à la main avec le jeton GitHub dans ce cas.
-  - rm -rf /home/stagiaire/opentelemetry-labs
-  - git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git /home/stagiaire/opentelemetry-labs || true
-  - chown -R stagiaire:stagiaire /home/stagiaire/opentelemetry-labs || true
+  - apt-get install -y caddy
+  # Terminal web ttyd (shell dans le navigateur), binaire épinglé.
+  - curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /usr/local/bin/ttyd
+  - chmod +x /usr/local/bin/ttyd
+  - systemctl enable --now ttyd
+  # Clone du dépôt des labs dans /root. Tant que le dépôt est privé, une
+  # clé de déploiement GitHub (lecture seule) est passée par la variable
+  # TFC github_deploy_key : le clone se fait en SSH. Une fois le dépôt
+  # public, cette variable reste vide et le clone se fait en HTTPS anonyme.
+  - rm -rf /root/opentelemetry-labs
+  - if [ -n "${github_deploy_key}" ]; then
+    install -d -m 700 /root/.ssh
+    echo "${github_deploy_key}" > /root/.ssh/id_ed25519_labs
+    chmod 600 /root/.ssh/id_ed25519_labs
+    printf 'Host github.com\n  IdentityFile /root/.ssh/id_ed25519_labs\n  StrictHostKeyChecking accept-new\n' > /root/.ssh/config
+    chmod 600 /root/.ssh/config
+    git clone git@github.com:pragmatic-fermat/opentelemetry-labs.git /root/opentelemetry-labs
+    else
+    git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git /root/opentelemetry-labs
+    fi

@@ -1,0 +1,10 @@
+# Terraform : état, cache des providers et variables locales (les secrets se définissent dans le workspace TFC)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+secrets.auto.tfvars
+*.tfvars.local

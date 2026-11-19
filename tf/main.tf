@@ -30,6 +30,12 @@ variable "root_password" {
   sensitive = true
 }
 
+# Mot de passe du webshell (ttyd), communiqué aux stagiaires.
+variable "webshell_password" {
+  type      = string
+  sensitive = true
+}
+
 variable "group_count" {
   type = number
 }
@@ -66,11 +72,12 @@ resource "digitalocean_droplet" "clt" {
   monitoring = true
   ssh_keys   = var.ssh_keys
   user_data = templatefile("${path.module}/cloud-init-clt.yaml", {
-    root_password = var.root_password
-    lab_id        = count.index
-    lab_domain    = var.domain_name
-    clt_machine   = "${var.prefix}clt-${count.index}"
-    srv_machine   = "${var.prefix}srv-${count.index}"
+    root_password     = var.root_password
+    webshell_password = var.webshell_password
+    lab_id            = count.index
+    lab_domain        = var.domain_name
+    clt_machine       = "${var.prefix}clt-${count.index}"
+    srv_machine       = "${var.prefix}srv-${count.index}"
   })
 }
 
@@ -86,11 +93,12 @@ resource "digitalocean_droplet" "srv" {
   monitoring = true
   ssh_keys   = var.ssh_keys
   user_data = templatefile("${path.module}/cloud-init-srv.yaml", {
-    root_password = var.root_password
-    lab_id        = count.index
-    lab_domain    = var.domain_name
-    clt_machine   = "${var.prefix}clt-${count.index}"
-    srv_machine   = "${var.prefix}srv-${count.index}"
+    root_password     = var.root_password
+    webshell_password = var.webshell_password
+    lab_id            = count.index
+    lab_domain        = var.domain_name
+    clt_machine       = "${var.prefix}clt-${count.index}"
+    srv_machine       = "${var.prefix}srv-${count.index}"
   })
 }
 

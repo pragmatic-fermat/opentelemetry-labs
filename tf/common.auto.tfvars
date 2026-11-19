@@ -1,18 +1,17 @@
-# DigitalOcean API token
-## do_token = 
-# Resources will be prefixed with this to avoid clashing names
-#prefix = 
-# Region where resources should be created
+# Valeurs par défaut communes aux groupes. Les secrets (do_token,
+# root_password) et les variables par groupe (domain_name, prefix, tag_name,
+# group_count) se saisissent dans le workspace Terraform Cloud, jamais ici.
+#
+# Image Ubuntu 24.04 LTS (gabarit vérifié le 2026-11-19).
+droplet_image = "ubuntu-24-04-x64"
+
+# Poste de travail : 8 Go de RAM (Docker + cluster KinD à venir).
+clt_size = "s-4vcpu-8gb-intel"
+# Serveur cible : minimal, sans Docker.
+srv_size = "s-2vcpu-2gb"
+
+# Région où les resources sont créées.
 region_name = "ams3"
-# Droplet size
-droplet_size = "s-4vcpu-8gb-intel"
-##droplet_size = "s-2vcpu-2gb"
-droplet_image = "docker-20-04"
-##tag_name = 
 
-## TO BE CUSTOMIZED BY YOUR NEEDS ###
-##domain_name = 
+# Clé SSH (ID DigitalOcean) autorisée en plus sur chaque droplet.
 ssh_keys = ["24566267"]
-
-##
-##group_count = 1

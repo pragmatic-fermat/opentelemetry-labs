@@ -100,7 +100,8 @@ resource "digitalocean_record" "clt_dns" {
   type   = "A"
   name   = "${var.prefix}clt-${count.index}"
   value  = digitalocean_droplet.clt[count.index].ipv4_address
-  ttl    = 60
+  # TTL court (minimum DO) : les machines sont éphémères.
+  ttl = 30
 }
 
 resource "digitalocean_record" "srv_dns" {
@@ -109,7 +110,8 @@ resource "digitalocean_record" "srv_dns" {
   type   = "A"
   name   = "${var.prefix}srv-${count.index}"
   value  = digitalocean_droplet.srv[count.index].ipv4_address
-  ttl    = 60
+  # TTL court (minimum DO) : les machines sont éphémères.
+  ttl = 30
 }
 
 resource "digitalocean_project" "training" {

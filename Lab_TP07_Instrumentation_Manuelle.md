@@ -4,7 +4,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 # Objectifs
 
-À la fin du lab, nous saurons :
+À la fin du lab, vous saurez :
 
 - configurer le SDK OpenTelemetry pour Python (ressource, provider, processor, exporter OTLP) ;
 - créer des spans avec un type (`SpanKind`), des attributs métier, des événements et un statut d'erreur ;

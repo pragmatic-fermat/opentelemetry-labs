@@ -4,7 +4,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 # Objectifs
 
-À la fin du lab, nous saurons :
+À la fin du lab, vous saurez :
 
 - expliquer le principe de l'instrumentation par eBPF, ses prérequis (noyau, privilèges) et ce qu'elle observe ;
 - déployer OBI (OpenTelemetry eBPF Instrumentation) à côté d'une application existante, sans la modifier ni la redémarrer ;

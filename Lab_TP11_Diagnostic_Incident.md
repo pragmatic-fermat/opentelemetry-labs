@@ -4,7 +4,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 # Objectifs
 
-À la fin du lab, nous saurons :
+À la fin du lab, vous saurez :
 
 - déployer l'OpenTelemetry Demo (Astronomy Shop) et se repérer dans son architecture et ses backends ;
 - activer des pannes préconfigurées par feature flags et observer leurs symptômes ;

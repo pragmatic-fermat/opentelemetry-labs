@@ -13,4 +13,4 @@ signal="${1:?Usage : ./tg.sh traces|metrics|logs [options]}"
 shift
 
 exec docker compose run --rm telemetrygen "$signal" \
-  --otlp-endpoint otelcol:4317 --otlp-insecure --rate 10 "$@"
+  --otlp-endpoint otelcol:4318 --otlp-http --otlp-insecure --rate 10 "$@"

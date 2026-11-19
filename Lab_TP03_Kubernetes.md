@@ -4,7 +4,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 # Objectifs
 
-À la fin du lab, nous saurons :
+À la fin du lab, vous saurez :
 
 - déployer un Collector en mode gateway puis en mode agent (DaemonSet) avec le chart Helm officiel, et adapter sa configuration par un fichier de valeurs ;
 - expliquer comment le chart fusionne la configuration fournie avec ses valeurs par défaut et ce que fait un preset ;

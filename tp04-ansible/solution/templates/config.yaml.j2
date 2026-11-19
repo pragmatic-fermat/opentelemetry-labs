@@ -1,0 +1,54 @@
+{{ ansible_managed | comment }}
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+{% if otelcol_hostmetrics_enabled %}
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu: {}
+      load: {}
+      memory: {}
+{% endif %}
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  resource:
+    attributes:
+{% for key, value in otelcol_resource_attributes.items() %}
+      - key: {{ key }}
+        value: {{ value | to_json }}
+        action: upsert
+{% endfor %}
+  batch:
+    timeout: {{ otelcol_batch_timeout }}
+
+exporters:
+  otlp_grpc/jaeger:
+    endpoint: {{ otelcol_backend_host }}:4317
+    tls:
+      insecure: true
+{% if otelcol_hostmetrics_enabled %}
+  otlp_http/prometheus:
+    metrics_endpoint: http://{{ otelcol_backend_host }}:9090/api/v1/otlp/v1/metrics
+{% endif %}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp_grpc/jaeger]
+{% if otelcol_hostmetrics_enabled %}
+    metrics:
+      receivers: [hostmetrics]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp_http/prometheus]
+{% endif %}

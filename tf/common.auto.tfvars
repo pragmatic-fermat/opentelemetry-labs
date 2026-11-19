@@ -15,3 +15,6 @@ region_name = "ams3"
 
 # Clé SSH (ID DigitalOcean) autorisée en plus sur chaque droplet.
 ssh_keys = ["24566267"]
+
+# Plage dont chaque groupe tire son /24 de VPC (groupe N : 10.20.N.0/24).
+vpc_base_range = "10.20.0.0/16"

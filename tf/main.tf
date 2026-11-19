@@ -34,8 +34,23 @@ variable "group_count" {
   type = number
 }
 
+# Plage IP dont chaque groupe tire son /24 (10.x.N.0/24 pour le groupe N).
+variable "vpc_base_range" {
+  type = string
+}
+
 resource "digitalocean_tag" "tag" {
   name = var.tag_name
+}
+
+# Un VPC par groupe : clt-N et srv-N d'un même groupe se voient sur le réseau
+# privé, les groupes restent cloisonnés entre eux. Chaque groupe reçoit un
+# /24 découpé depuis vpc_base_range (256 groupes au maximum).
+resource "digitalocean_vpc" "group" {
+  count    = var.group_count
+  name     = "${var.prefix}vpc-${count.index}"
+  region   = var.region_name
+  ip_range = cidrsubnet(var.vpc_base_range, 8, count.index)
 }
 
 # Machine clt-N : poste de travail des labs. Le cluster Kubernetes des TP
@@ -47,6 +62,7 @@ resource "digitalocean_droplet" "clt" {
   region     = var.region_name
   size       = var.clt_size
   tags       = [digitalocean_tag.tag.id]
+  vpc_uuid   = digitalocean_vpc.group[count.index].id
   monitoring = true
   ssh_keys   = var.ssh_keys
   user_data = templatefile("${path.module}/cloud-init-clt.yaml", {
@@ -65,6 +81,7 @@ resource "digitalocean_droplet" "srv" {
   region     = var.region_name
   size       = var.srv_size
   tags       = [digitalocean_tag.tag.id]
+  vpc_uuid   = digitalocean_vpc.group[count.index].id
   monitoring = true
   ssh_keys   = var.ssh_keys
   user_data = templatefile("${path.module}/cloud-init-srv.yaml", {
@@ -98,6 +115,7 @@ resource "digitalocean_project" "training" {
   description = "Labs OpenTelemetry"
   environment = "Development"
   resources = flatten([
+    [for vpc in digitalocean_vpc.group : vpc.urn],
     [for droplet in digitalocean_droplet.clt : droplet.urn],
     [for droplet in digitalocean_droplet.srv : droplet.urn],
   ])

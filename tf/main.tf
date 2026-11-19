@@ -69,7 +69,8 @@ resource "digitalocean_droplet" "clt" {
     root_password = var.root_password
     lab_id        = count.index
     lab_domain    = var.domain_name
-    machine       = "${var.prefix}clt-${count.index}"
+    clt_machine   = "${var.prefix}clt-${count.index}"
+    srv_machine   = "${var.prefix}srv-${count.index}"
   })
 }
 
@@ -88,7 +89,8 @@ resource "digitalocean_droplet" "srv" {
     root_password = var.root_password
     lab_id        = count.index
     lab_domain    = var.domain_name
-    machine       = "${var.prefix}srv-${count.index}"
+    clt_machine   = "${var.prefix}clt-${count.index}"
+    srv_machine   = "${var.prefix}srv-${count.index}"
   })
 }
 

@@ -28,15 +28,17 @@ Créez un workspace relié à ce dépôt (workflow par gestion de versions) et i
 
 Les autres variables (`region_name`, `clt_size`, `srv_size`, `droplet_image`, `ssh_keys`, `vpc_base_range`) ont leur valeur dans `common.auto.tfvars`, que TFC charge automatiquement. Aucun secret ne doit être écrit dans ce dossier : le jeton et le mot de passe se saisissent uniquement dans les variables du workspace.
 
-## Versions épinglées (vérifiées le 2026-11-19)
+## Versions (vérifiées le 2026-11-19)
 
-| Composant | Version | Source |
+Les paquets apt (Docker, Ansible, Caddy) sont installés sans épinglage de version : la dernière version des dépôts est utilisée à chaque création de machine. Les binaires téléchargés hors apt restent épinglés.
+
+| Composant | Version vérifiée | Source |
 |---|---|---|
 | Image de droplet | Ubuntu 24.04 LTS (`ubuntu-24-04-x64`) | DigitalOcean |
-| Docker Engine | `5:29.8.1-1~ubuntu.24.04~noble` | dépôt officiel Docker |
-| Ansible | `9.2.0+dfsg-0ubuntu5` | dépôt Ubuntu noble |
+| Docker Engine | 29.8.1 | dépôt officiel Docker |
+| Ansible | core 2.16.3 | dépôt Ubuntu noble |
 | code-server | `4.145.2` | GitHub releases |
-| Caddy | `2.11.9` | dépôt officiel Caddy |
+| Caddy | 2.11.9 | dépôt officiel Caddy |
 | yq | `4.54.3` | GitHub releases |
 | kubectl | `1.37.2` | dl.k8s.io |
 | helm | `4.3.2` | get.helm.sh |

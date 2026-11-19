@@ -14,7 +14,7 @@ packages:
   - jq
   - python3
   - unzip
-  - ansible=9.2.0+dfsg-0ubuntu5
+  - ansible
 users:
   - name: root
     lock-passwd: false
@@ -28,7 +28,7 @@ users:
 ssh_pwauth: true
 write_files:
   # Terminal web : code-server écoute en local, Caddy le publie en HTTPS
-  # sur https://${machine}.${lab_domain} (certificat Let's Encrypt automatique).
+  # sur https://${clt_machine}.${lab_domain} (certificat Let's Encrypt automatique).
   - content: |
       bind-addr: 127.0.0.1:8080
       auth: none
@@ -39,7 +39,7 @@ write_files:
         email webmaster@${lab_domain}
       }
 
-      https://${machine}.${lab_domain} {
+      https://${clt_machine}.${lab_domain} {
         reverse_proxy 127.0.0.1:8080
       }
     path: /etc/caddy/Caddyfile
@@ -47,8 +47,8 @@ write_files:
   - content: |
       export LAB_ID="${lab_id}"
       export LAB_DOMAIN="${lab_domain}"
-      export CLT_HOST="${machine}.${lab_domain}"
-      export SRV_HOST="srv-${lab_id}.${lab_domain}"
+      export CLT_HOST="${clt_machine}.${lab_domain}"
+      export SRV_HOST="${srv_machine}.${lab_domain}"
     path: /etc/profile.d/lab-env.sh
   - content: |
       [ -f /etc/profile.d/lab-env.sh ] && . /etc/profile.d/lab-env.sh
@@ -75,13 +75,15 @@ runcmd:
   - chmod a+r /etc/apt/keyrings/docker.asc
   - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
   - apt-get update
-  - apt-get install -y docker-ce=5:29.8.1-1~ubuntu.24.04~noble docker-ce-cli=5:29.8.1-1~ubuntu.24.04~noble containerd.io docker-buildx-plugin docker-compose-plugin
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   - usermod -aG docker stagiaire
   # Caddy depuis le dépôt officiel, avec le Caddyfile écrit plus haut.
-  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key -o /usr/share/keyrings/caddy-stable-archive-keyring.asc
+  # Le fichier de dépôt Cloudsmith référence la clé au format binaire .gpg :
+  # il faut déblinder la clé téléchargée (gpg --dearmor).
+  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt -o /etc/apt/sources.list.d/caddy-stable.list
   - apt-get update
-  - apt-get install -y caddy=2.11.9
+  - apt-get install -y caddy
   # code-server (VS Code dans le navigateur), service systemd pour stagiaire.
   - curl -fsSL https://github.com/coder/code-server/releases/download/v4.145.2/code-server_4.145.2_amd64.deb -o /tmp/code-server.deb
   - dpkg -i /tmp/code-server.deb || apt-get -f install -y

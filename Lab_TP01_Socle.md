@@ -26,18 +26,36 @@
 
 ## Environnement
 
-Ce lab se déroule sur la VM `clt-N` (N est votre numéro de participant, disponible dans la variable `LAB_ID`). Docker, Docker Compose, `curl` et `jq` y sont déjà installés. Il n'y a pas de prérequis : aucun lab précédent n'est nécessaire.
+Ce lab se déroule sur la VM `clt-N` (N est votre numéro de participant). Il n'y a pas de prérequis : aucun lab précédent n'est nécessaire.
 
 ### Terminal web
 
 L'animateur vous communique en séance deux informations :
 
-- l'adresse de votre terminal web : `https://clt-N.<domaine>`, où `<domaine>` est le domaine de la session et N votre numéro de participant (remplacez `CLT_HOST` par la sortie de `echo $CLT_HOST` pour retrouver l'adresse complète) ;
+- l'adresse de votre terminal web : `https://clt-N.<domaine>`, où `<domaine>` est le domaine de la session et N votre numéro de participant ;
 - le mot de passe du terminal web.
 
 Ouvrez cette adresse dans votre navigateur : un formulaire demande le nom d'utilisateur (`stagiaire`) et le mot de passe. Vous arrivez ensuite dans un shell directement en root, dans le home `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`. Vous pouvez copier-coller entre votre poste et le terminal web (Ctrl+Maj+C / Ctrl+Maj+V dans Firefox, Ctrl+Shift+C / Ctrl+Shift+V dans Chrome, ou clic droit selon le navigateur).
 
-Le terminal web est publié en HTTPS avec un certificat Let's Encrypt : le navigateur affiche un cadenas, aucun avertissement de sécurité n'est attendu.
+### Variables d'environnement
+
+La machine est déjà configurée avec des variables d'environnement utilisées par tous les labs, disponibles dans chaque terminal :
+
+```bash
+echo $LAB_ID $CLT_HOST $SRV_HOST
+```
+
+On obtient (N est votre numéro de participant) :
+
+```text
+N clt-N.<domaine> srv-N.<domaine>
+```
+
+- `LAB_ID` : votre numéro de participant ;
+- `CLT_HOST` : le nom de votre machine `clt-N` (`clt-N.<domaine>`) ;
+- `SRV_HOST` : le nom de la machine cible `srv-N` (`srv-N.<domaine>`).
+
+Vous les utiliserez telles quelles dans les commandes des labs.
 
 ### Données de télémétrie
 
@@ -55,7 +73,7 @@ Versions utilisées, vérifiées le 2026-11-18 :
 
 **Note** : le tag de l'image du Collector est `0.165.0` alors que celui de `telemetrygen` est `v0.165.0` (avec le `v`).
 
-Les interfaces web sont accessibles depuis votre navigateur (remplacez `CLT_HOST` par la sortie de `echo $CLT_HOST`) :
+Les interfaces web sont accessibles depuis votre navigateur, sur votre machine `clt-N` (`$CLT_HOST`) :
 
 - Jaeger : `http://CLT_HOST:16686`
 - Prometheus : `http://CLT_HOST:9090`
@@ -63,13 +81,7 @@ Les interfaces web sont accessibles depuis votre navigateur (remplacez `CLT_HOST
 
 ## 1. Démarrer les backends
 
-Le dépôt des labs est déjà cloné dans `~/opentelemetry-labs` (soit par la préparation de la machine, soit par vous). Si ce n'est pas le cas, clonez-le :
-
-```bash
-git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git ~/opentelemetry-labs
-```
-
-Si le clone échoue parce que le dépôt est privé, demandez l'accès à l'animateur.
+Le dépôt des labs est déjà cloné dans `~/opentelemetry-labs`.
 
 Créez un dossier de travail et récupérez-y les fichiers fournis (deux scripts et la déclaration des sources de données de Grafana) depuis le clone des labs :
 
@@ -103,6 +115,23 @@ EOF
 ```
 
 Créez ensuite le fichier `compose.yaml`. Il décrit quatre services : Jaeger, Prometheus et Grafana, que vous démarrez maintenant, et le Collector, que vous démarrerez [à la partie 2](#2-un-premier-collector). Le Collector reçoit sa configuration en quatre fichiers, un par section, passés avec quatre options `--config` : il les fusionne en une seule configuration. Ce découpage permet d'ajouter des éléments au fil du lab sans réécrire un fichier entier.
+
+Le schéma suivant représente cette architecture : les services tournent dans des conteneurs reliés par le réseau Docker du compose, et chacun publie un port sur la machine `clt-N` pour l'accès depuis votre navigateur. Le Collector et le générateur de télémétrie `telemetrygen` sont ajoutés [à la partie 2](#2-un-premier-collector).
+
+```mermaid
+---
+title: Stack du TP1
+---
+flowchart LR
+  browser([Navigateur]) -->|16686| J[(Jaeger)]
+  browser -->|9090| P[(Prometheus)]
+  browser -->|3000| G[(Grafana)]
+  browser -->|4318| O[[Collector]]
+  O -->|traces, OTLP/HTTP| J
+  O -->|métriques, port 8889| P
+  G -->|requêtes PromQL| P
+  T([telemetrygen]) -->|OTLP/HTTP| O
+```
 
 ```bash
 cat > compose.yaml <<'EOF'

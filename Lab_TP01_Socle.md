@@ -26,18 +26,16 @@
 
 ## Environnement
 
-Ce lab se déroule sur la VM `clt-N` (N est votre numéro de participant, disponible dans la variable `LAB_ID`). Docker, Docker Compose, `curl` et `jq` y sont déjà installés. Il n'y a pas de prérequis : aucun lab précédent n'est nécessaire.
+Ce lab se déroule sur la VM `clt-N` (N est votre numéro de participant). Il n'y a pas de prérequis : aucun lab précédent n'est nécessaire.
 
 ### Terminal web
 
 L'animateur vous communique en séance deux informations :
 
-- l'adresse de votre terminal web : `https://clt-N.<domaine>`, où `<domaine>` est le domaine de la session et N votre numéro de participant (remplacez `CLT_HOST` par la sortie de `echo $CLT_HOST` pour retrouver l'adresse complète) ;
+- l'adresse de votre terminal web : `https://clt-N.<domaine>`, où `<domaine>` est le domaine de la session et N votre numéro de participant ;
 - le mot de passe du terminal web.
 
 Ouvrez cette adresse dans votre navigateur : un formulaire demande le nom d'utilisateur (`stagiaire`) et le mot de passe. Vous arrivez ensuite dans un shell directement en root, dans le home `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`. Vous pouvez copier-coller entre votre poste et le terminal web (Ctrl+Maj+C / Ctrl+Maj+V dans Firefox, Ctrl+Shift+C / Ctrl+Shift+V dans Chrome, ou clic droit selon le navigateur).
-
-Le terminal web est publié en HTTPS avec un certificat Let's Encrypt : le navigateur affiche un cadenas, aucun avertissement de sécurité n'est attendu.
 
 ### Données de télémétrie
 
@@ -55,7 +53,7 @@ Versions utilisées, vérifiées le 2026-11-18 :
 
 **Note** : le tag de l'image du Collector est `0.165.0` alors que celui de `telemetrygen` est `v0.165.0` (avec le `v`).
 
-Les interfaces web sont accessibles depuis votre navigateur (remplacez `CLT_HOST` par la sortie de `echo $CLT_HOST`) :
+Les interfaces web sont accessibles depuis votre navigateur, sur la même machine que le terminal web (`clt-N`), en remplaçant `CLT_HOST` par le nom de la machine que l'animateur vous a communiqué :
 
 - Jaeger : `http://CLT_HOST:16686`
 - Prometheus : `http://CLT_HOST:9090`

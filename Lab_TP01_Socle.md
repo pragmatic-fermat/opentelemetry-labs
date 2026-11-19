@@ -37,6 +37,26 @@ L'animateur vous communique en séance deux informations :
 
 Ouvrez cette adresse dans votre navigateur : un formulaire demande le nom d'utilisateur (`stagiaire`) et le mot de passe. Vous arrivez ensuite dans un shell directement en root, dans le home `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`. Vous pouvez copier-coller entre votre poste et le terminal web (Ctrl+Maj+C / Ctrl+Maj+V dans Firefox, Ctrl+Shift+C / Ctrl+Shift+V dans Chrome, ou clic droit selon le navigateur).
 
+### Variables d'environnement
+
+La machine est déjà configurée avec des variables d'environnement utilisées par tous les labs, disponibles dans chaque terminal :
+
+```bash
+echo $LAB_ID $CLT_HOST $SRV_HOST
+```
+
+On obtient (N est votre numéro de participant) :
+
+```text
+N clt-N.<domaine> srv-N.<domaine>
+```
+
+- `LAB_ID` : votre numéro de participant ;
+- `CLT_HOST` : le nom de votre machine `clt-N` (`clt-N.<domaine>`) ;
+- `SRV_HOST` : le nom de la machine cible `srv-N` (`srv-N.<domaine>`).
+
+Vous les utiliserez telles quelles dans les commandes des labs.
+
 ### Données de télémétrie
 
 Les données sont produites par `telemetrygen`, un générateur de télémétrie fourni avec le projet OpenTelemetry. Cela permet de se concentrer sur le Collector sans avoir besoin d'une application.
@@ -53,7 +73,7 @@ Versions utilisées, vérifiées le 2026-11-18 :
 
 **Note** : le tag de l'image du Collector est `0.165.0` alors que celui de `telemetrygen` est `v0.165.0` (avec le `v`).
 
-Les interfaces web sont accessibles depuis votre navigateur, sur la même machine que le terminal web (`clt-N`), en remplaçant `CLT_HOST` par le nom de la machine que l'animateur vous a communiqué :
+Les interfaces web sont accessibles depuis votre navigateur, sur votre machine `clt-N` (`$CLT_HOST`) :
 
 - Jaeger : `http://CLT_HOST:16686`
 - Prometheus : `http://CLT_HOST:9090`

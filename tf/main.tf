@@ -114,8 +114,9 @@ resource "digitalocean_project" "training" {
   name        = "training"
   description = "Labs OpenTelemetry"
   environment = "Development"
+  # Les VPC ne sont pas assignables à un projet (type de ressource non
+  # accepté par l'API) ; seuls les droplets sont regroupés ici.
   resources = flatten([
-    [for vpc in digitalocean_vpc.group : vpc.urn],
     [for droplet in digitalocean_droplet.clt : droplet.urn],
     [for droplet in digitalocean_droplet.srv : droplet.urn],
   ])

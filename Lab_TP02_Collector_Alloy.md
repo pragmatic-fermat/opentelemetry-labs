@@ -4,7 +4,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 # Objectifs
 
-À la fin du lab, nous saurons :
+À la fin du lab, vous saurez :
 
 - expliquer pourquoi la distribution `contrib` n'est pas adaptée à la production (taille, surface d'attaque, mises à jour subies en bloc) et dans quels cas `core` suffit ;
 - décrire un Collector sur mesure dans un manifeste OCB (OpenTelemetry Collector Builder), en ne retenant que les receivers, processors et exporters nécessaires ;

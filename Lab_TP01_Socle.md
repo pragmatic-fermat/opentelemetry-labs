@@ -339,7 +339,7 @@ EOF
 
 **NB** : `otlp_http` est le type actuel de l'exporter, l'ancien nom `otlphttp` n'est conservé que comme alias déprécié. Vous le rencontrerez encore dans beaucoup de configurations trouvées sur Internet.
 
-Le nom après la barre oblique (`jaeger`) distingue plusieurs instances d'un même type de composant.
+Le nom qui suit le `/` (`jaeger`) distingue plusieurs instances d'un même type de composant.
 
 Le fichier des processors reste vide pour l'instant (vous le remplirez [à la partie 3](#3-les-premiers-processors)), mais le Collector attend quand même les quatre fichiers :
 

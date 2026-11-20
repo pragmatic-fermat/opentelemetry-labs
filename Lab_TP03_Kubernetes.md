@@ -452,7 +452,33 @@ puis `helm upgrade --install` avec le nouveau fichier de valeurs. Les traces app
 
 L'OpenTelemetry Operator injecte un agent d'instrumentation dans les pods qui portent une annotation, au moment de leur création, sans modifier l'image de l'application.
 
-Pour Node.js, il ajoute un conteneur d'initialisation qui copie la bibliothèque d'instrumentation dans le pod, et il définit les variables d'environnement qui l'activent.
+Pour Node.js, il ajoute un **init container** qui copie la bibliothèque d'instrumentation dans un volume partagé du pod, et il définit les variables d'environnement qui l'activent.
+
+Le schéma suivant montre ce qui se passe au moment de la création d'un pod :
+
+```mermaid
+---
+title: Injection de l'instrumentation dans un pod
+---
+flowchart TB
+  D["Deployment frontend<br/>annotation inject-nodejs: true"]
+  D -->|création du pod| W[webhook de l'Operator]
+  W -->|ajoute| IC["init container<br/>opentelemetry-auto-instrumentation-nodejs"]
+  W -->|ajoute| ENV["variables d'environnement<br/>NODE_OPTIONS, OTEL_*"]
+
+  subgraph POD["pod frontend"]
+    direction TB
+    IC -->|écrit la bibliothèque| V[(volume<br/>otel-auto-instrumentation-nodejs)]
+    V -->|monté en lecture seule| APP["conteneur frontend<br/>node server.js"]
+    ENV --> APP
+  end
+
+  APP -->|OTLP/HTTP<br/>TCP/4318| AG[otel-agent]
+  AG -->|gateway| GW[otel-gateway]
+  GW --> J[(Jaeger)]
+```
+
+L'init container s'exécute avant l'application, écrit la bibliothèque dans le volume puis se termine. Le conteneur de l'application démarre ensuite avec `NODE_OPTIONS=--require /otel-auto-instrumentation-nodejs/autoinstrumentation.js` : Node charge la bibliothèque au démarrage, sans que l'image ni le code ne changent.
 
 Installez d'abord l'Operator. Le chart propose par défaut d'utiliser cert-manager pour les certificats de son webhook, ce qui n'est pas installé ici : les deux options `admissionWebhooks` demandent au chart de générer lui-même un certificat. L'attente `--wait` rend la main lorsque les pods de l'Operator sont prêts.
 
@@ -531,7 +557,7 @@ Générez du trafic :
 for i in $(seq 20); do app /api/orders > /dev/null; done
 ```
 
-Les pods contiennent maintenant un conteneur d'initialisation que vos manifestes ne déclarent pas :
+Les pods contiennent maintenant un **init container** que vos manifestes ne déclarent pas :
 
 ```bash
 kubectl -n demo get pod -l app=frontend -o jsonpath='{.items[*].spec.initContainers[*].name}{"\n"}'
@@ -541,6 +567,23 @@ On obtient :
 
 ```text
 opentelemetry-auto-instrumentation-nodejs
+```
+
+Les variables d'environnement ajoutées au conteneur de l'application disent tout du mécanisme :
+
+```bash
+kubectl -n demo get pod -l app=frontend \
+  -o jsonpath='{range .items[*].spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}' | grep OTEL_
+```
+
+```text
+OTEL_METRICS_EXPORTER=otlp
+OTEL_SERVICE_NAME=frontend
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-agent.observability.svc.cluster.local:4318
+OTEL_PROPAGATORS=tracecontext,baggage
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=1
+OTEL_RESOURCE_ATTRIBUTES=k8s.container.name=frontend,k8s.deployment.name=frontend,...
 ```
 
 Dans Jaeger, les services `frontend` et `backend` sont apparus :
@@ -561,7 +604,7 @@ Une même trace traverse donc les deux services. Ouvrez-la dans l'interface de J
 
 Regardez enfin les attributs de ressource de cette trace : `k8s.pod.name`, `k8s.namespace.name` et `k8s.node.name` y figurent, ajoutés par l'agent.
 
-**NB** : si les pods redémarrent mais qu'aucune trace n'apparaît, vérifiez que le conteneur d'initialisation est présent (`kubectl -n demo describe pod -l app=frontend`). S'il manque, l'annotation n'est pas sur le modèle de pod ou l'`Instrumentation` a été créée après les pods : dans ce second cas, redémarrez-les avec `kubectl -n demo rollout restart deployment/frontend`.
+**NB** : si les pods redémarrent mais qu'aucune trace n'apparaît, vérifiez que l'init container est présent (`kubectl -n demo describe pod -l app=frontend`). S'il manque, l'annotation n'est pas sur le modèle de pod ou l'`Instrumentation` a été créée après les pods : dans ce second cas, redémarrez-les avec `kubectl -n demo rollout restart deployment/frontend`.
 
 ## Cleanup
 

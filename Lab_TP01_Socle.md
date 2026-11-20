@@ -139,7 +139,7 @@ On obtient :
 check.sh  grafana  tg.sh
 ```
 
-Créez le fichier `prometheus/prometheus.yml`. Prometheus va interroger toutes les 5 secondes un point d'accès que le collector exposera [à la partie 6](#6-les-métriques-vers-prometheus-et-grafana) :
+Créez le fichier `prometheus/prometheus.yml`. Prometheus va interroger toutes les 5 secondes un endpoint que le collector exposera [à la partie 6](#6-les-métriques-vers-prometheus-et-grafana) :
 
 ```bash
 mkdir -p prometheus
@@ -714,9 +714,35 @@ Les deux commandes se terminent par `sort` et `sort -u` parce que Jaeger renvoie
 
 Le même collector peut traiter plusieurs types de signaux.
 
-Prometheus récupère les métriques en interrogeant un point d'accès, il faut donc que le collector en expose un.
+Prometheus récupère les métriques en interrogeant un endpoint, il faut donc que le collector en expose un.
 
-Le fichier `prometheus/prometheus.yml` créé [à la partie 1](#1-démarrer-les-backends) contient déjà un job qui interroge `otelcol:8889`.
+Le fichier `prometheus/prometheus.yml` créé [à la partie 1](#1-démarrer-les-backends) contient déjà un job qui interroge l'endpoint `otelcol:8889`.
+
+Prometheus tourne donc depuis la partie 1 et tente déjà de récupérer cet endpoint toutes les 5 secondes. Jusqu'ici la cible était simplement `DOWN`, faute d'exporter `prometheus` en face : c'est ce que cette partie ajoute.
+
+Le schéma de cette partie se limite donc au collector et aux deux backends qui échangent avec lui :
+
+```mermaid
+---
+title: Métriques de la partie 6
+---
+flowchart LR
+  B([Navigateur<br/>depuis Internet])
+  T([telemetrygen]) -->|OTLP/HTTP<br/>TCP/4318| RM
+
+  subgraph C["collector"]
+    direction TB
+    RM[receiver otlp] --> ML[processor memory_limiter]
+    ML --> RS[processor resource]
+    RS --> BA[processor batch]
+    BA --> PE[exporter prometheus]
+  end
+
+  PE -->|expose les métriques<br/>TCP/8889| P[(Prometheus)]
+  P -->|PromQL<br/>TCP/9090| G[(Grafana)]
+  B -->|TCP/9090| P
+  B -->|TCP/3000| G
+```
 
 Ajoutez un exporter `prometheus` à la fin de `exporters.yaml`. Il écoute sur `0.0.0.0:8889` et convertit les attributs de ressource en labels (option `resource_to_telemetry_conversion`) :
 
@@ -753,7 +779,9 @@ Validez et redémarrez le collector :
 docker compose restart otelcol
 ```
 
-Dans Prometheus, page Status puis Targets (`http://$SRV_HOST:9090/targets`), la cible `otelcol:8889` doit être `UP`.
+Ouvrez l'interface de Prometheus (`http://$SRV_HOST:9090`), déroulez le menu **Status** en haut de page puis cliquez sur **Targets** (adresse directe : `http://$SRV_HOST:9090/targets`).
+
+La cible `otelcol:8889`, qui était `DOWN` jusqu'ici, doit maintenant être `UP` : Prometheus atteint l'endpoint exposé par le collector.
 
 Envoyez ensuite des métriques pendant trente secondes :
 

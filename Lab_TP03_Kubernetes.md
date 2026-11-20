@@ -620,9 +620,140 @@ Le cluster KinD lui-même peut être conservé : il sert aux TP suivants.
 
 ## Extra
 
-À vous de jouer, si le temps le permet.
+À vous de jouer, si le temps le permet. Chaque exercice est guidé pas à pas ; les commandes se suivent.
 
-- Ajoutez au chart de l'agent le preset `logsCollection` et observez les logs des conteneurs arriver dans le pipeline `logs`.
-- Ajoutez dans l'`Instrumentation` un attribut de ressource, par exemple `deployment.environment.name`, avec la section `resource.resourceAttributes`.
-- Déployez le collector avec la ressource `OpenTelemetryCollector` de l'Operator plutôt qu'avec Helm, et comparez les deux approches.
-- Placez le backend hors du cluster : voir l'encadré de la partie 3 sur les échanges entre le cluster et `srv-N`.
+### 1. Collecter les logs des conteneurs
+
+Le chart de l'agent propose un preset `logsCollection` : il ajoute un receiver `file_log` qui lit les fichiers de `/var/log/pods`, monte ce dossier dans le pod, et complète le pipeline `logs`.
+
+Mettez à jour l'agent en activant ce preset :
+
+```bash
+helm upgrade --install otel-agent open-telemetry/opentelemetry-collector \
+  --version 0.179.1 -n observability -f agent-values.yaml \
+  --set presets.logsCollection.enabled=true --wait
+```
+
+Vérifiez que le volume est bien monté dans les pods de l'agent :
+
+```bash
+kubectl -n observability get pods -l app.kubernetes.io/instance=otel-agent \
+  -o jsonpath='{.items[0].spec.containers[0].volumeMounts[*].mountPath}{"\n"}'
+```
+
+La liste contient `/var/log/pods`. Regardez ensuite la configuration générée par le chart :
+
+```bash
+kubectl -n observability get configmap otel-agent-agent \
+  -o jsonpath='{.data.relay}' | sed -n '/logs:/,/metrics:/p'
+```
+
+Le pipeline `logs` reçoit maintenant deux receivers, `otlp` et `file_log`, et exporte vers `debug` :
+
+```text
+        logs:
+          exporters:
+          - debug
+          processors:
+          - k8s_attributes
+          - memory_limiter
+          - batch
+          receivers:
+          - otlp
+          - file_log
+```
+
+Les enregistrements collectés apparaissent dans les logs du pod de l'agent :
+
+```bash
+kubectl -n observability logs daemonset/otel-agent-agent --tail=5
+```
+
+Revenez à la configuration de départ sans le preset :
+
+```bash
+helm upgrade --install otel-agent open-telemetry/opentelemetry-collector \
+  --version 0.179.1 -n observability -f agent-values.yaml --wait
+```
+
+### 2. Ajouter un attribut de ressource à l'instrumentation
+
+La ressource `Instrumentation` accepte des attributs ajoutés à toutes les données des pods instrumentés, dans `spec.resource.resourceAttributes`. Ajoutons l'environnement de déploiement :
+
+```bash
+kubectl -n demo patch instrumentation demo --type merge -p \
+  '{"spec":{"resource":{"resourceAttributes":{"deployment.environment.name":"tp3"}}}}'
+```
+
+Ces attributs sont posés à la création du pod : redémarrez les déploiements pour que les nouveaux pods en héritent.
+
+```bash
+kubectl -n demo rollout restart deployment/frontend deployment/backend
+kubectl -n demo rollout status deployment/frontend
+```
+
+Contrôlez la variable d'environnement injectée :
+
+```bash
+kubectl -n demo get pods -l app=frontend \
+  -o jsonpath='{range .items[*].spec.containers[0].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]}{.value}{"\n"}{end}'
+```
+
+Elle commence maintenant par `deployment.environment.name=tp3,` suivi des attributs `k8s.*` ajoutés par l'Operator. Générez du trafic (`for i in $(seq 10); do app /api/orders > /dev/null; done`) et retrouvez l'attribut dans la ressource des traces, dans Jaeger.
+
+### 3. Déployer un collector avec la ressource `OpenTelemetryCollector`
+
+L'Operator sait aussi déployer un collector : au lieu d'écrire un fichier de valeurs Helm, on décrit un objet `OpenTelemetryCollector`, et l'Operator crée le Deployment, le Service et la configuration.
+
+```bash
+cat > otelcol-cr.yaml <<'EOF'
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otelcol-cr
+  namespace: observability
+spec:
+  mode: deployment
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch:
+        timeout: 2s
+    exporters:
+      debug:
+        verbosity: basic
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [debug]
+EOF
+kubectl apply -f otelcol-cr.yaml
+kubectl -n observability get opentelemetrycollectors
+```
+
+L'objet apparaît, prêt :
+
+```text
+NAME        MODE         VERSION   READY   AGE   IMAGE
+otelcol-cr  deployment   0.162.0   1/1     25s   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s:0.162.0
+```
+
+Regardez ce que l'Operator a créé : un Deployment, deux Services et un Service de supervision.
+
+```bash
+kubectl -n observability get pods,svc | grep otelcol-cr
+```
+
+L'image par défaut est la distribution `k8s`, plus légère que `contrib` ; pour utiliser une autre distribution, ajoutez `image:` dans `spec`. Comparez enfin les deux approches : avec Helm, la configuration est rendue par le chart et versionnée dans un fichier de valeurs ; avec l'Operator, elle est portée par un objet Kubernetes, visible avec `kubectl get` et modifiable comme n'importe quelle ressource.
+
+### 4. Placer le backend hors du cluster
+
+Reprenez l'encadré de [la partie 3](#3-le-collector-en-mode-agent) : pointez l'exporter de la gateway vers le collector du TP1 installé sur `srv-N`, puis vérifiez que les traces arrivent dans le Jaeger de `srv-N`, sur `http://$SRV_HOST:16686`.

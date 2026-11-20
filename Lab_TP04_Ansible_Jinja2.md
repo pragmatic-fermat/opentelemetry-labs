@@ -45,7 +45,7 @@ Les interfaces web sont accessibles depuis votre navigateur, sur `clt-N` (`$CLT_
 
 ## 1. Préparer le poste de contrôle
 
-Deux machines entrent en jeu, et il faut savoir où se trouve quoi avant de taper la première commande. Le schéma suivant les montre, avec les deux moteurs logiciels : le moteur Ansible, qui exécute les playbooks depuis `clt-N`, et le moteur Docker, qui héberge les backends sur `clt-N`.
+Deux machines entrent en jeu, et il faut savoir où se trouve quoi avant de taper la première commande. Le schéma suivant les montre, avec les deux moteurs logiciels : le moteur Ansible, installé sur `clt-N`, qui exécute les playbooks, et le moteur Docker, qui héberge les backends sur `clt-N`.
 
 ```mermaid
 ---
@@ -54,7 +54,7 @@ title: TP4, où se trouve chaque composant
 flowchart LR
   subgraph CLT["Machine cliente clt-N"]
     direction TB
-    AN["Ansible, nœud de contrôle<br/>inventaire, playbook, template"]
+    AN["Ansible, moteur d'exécution<br/>nœud de contrôle : inventaire,<br/>playbook, template"]
     DK["Docker, moteur"]
     J[("Jaeger<br/>TCP/16686 et 4317")]
     P[("Prometheus<br/>TCP/9090")]
@@ -76,7 +76,7 @@ flowchart LR
 
 Trois points à retenir de ce schéma :
 
-- **Ansible ne tourne que sur `clt-N`** : c'est le nœud de contrôle. Il se connecte en SSH à `srv-N` et y exécute les tâches ; aucun playbook n'est lancé sur le serveur, et `srv-N` n'a pas besoin d'Ansible ;
+- **le moteur Ansible ne tourne que sur `clt-N`** : c'est le nœud de contrôle. Il se connecte en SSH à `srv-N` et y exécute les tâches ; aucun playbook n'est lancé sur le serveur, et `srv-N` n'a pas besoin d'Ansible ;
 - **le collector tourne sur `srv-N`**, comme service `otelcol-contrib` géré par systemd. C'est la seule machine qui reçoit le paquet `.deb` et la configuration générée ;
 - **les backends tournent sur `clt-N`**, dans Docker : Jaeger écoute sur `TCP/16686` (interface web) et `TCP/4317` (OTLP des traces), Prometheus sur `TCP/9090`. Le collector de `srv-N` leur envoie ses données par le réseau privé du VPC.
 

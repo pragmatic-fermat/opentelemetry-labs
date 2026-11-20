@@ -29,6 +29,8 @@ write_files:
   # protégé par le mot de passe statique de la variable TFC webshell_password.
   # Service systemd du terminal web : sessions ouvertes directement en root,
   # authentification basic auth (mot de passe de la variable TFC).
+  # ttyd écoute sur 127.0.0.1:7681, et non sur le port 8080 : celui-ci est
+  # réservé au port publié du cluster KinD des TP Kubernetes.
   - content: |
       [Unit]
       Description=Terminal web des labs (ttyd)
@@ -37,12 +39,20 @@ write_files:
       [Service]
       User=root
       WorkingDirectory=/root
-      ExecStart=/usr/local/bin/ttyd -W -p 8080 -c "stagiaire:${webshell_password}" bash
+      ExecStart=/usr/local/bin/ttyd -W -i 127.0.0.1 -p 7681 -c "stagiaire:${webshell_password}" bash
       Restart=on-failure
 
       [Install]
       WantedBy=multi-user.target
     path: /etc/systemd/system/ttyd.service
+  # Limites inotify : chaque nœud KinD, et chaque kubelet, consomme des
+  # instances inotify. Les valeurs par défaut (128 instances) saturent dès
+  # qu'un second cluster démarre, et systemd échoue alors avec « Too many
+  # open files ». Valeurs appliquées au démarrage par sysctl --system.
+  - content: |
+      fs.inotify.max_user_instances = 512
+      fs.inotify.max_user_watches = 524288
+    path: /etc/sysctl.d/90-inotify.conf
   # Variables d'environnement des labs, disponibles dans tous les terminaux.
   - content: |
       export LAB_ID="${lab_id}"
@@ -80,6 +90,8 @@ runcmd:
   # Accès SSH root par mot de passe (maintenance d'urgence). Le compte
   # stagiaire n'a pas de mot de passe et se connecte par clé.
   - ufw disable
+  # Applique les limites inotify sans attendre le prochain démarrage.
+  - sysctl --system
   - sed -i -E 's/^#?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
   - sed -i -E 's/^#?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
   - grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
@@ -115,7 +127,7 @@ runcmd:
     }
 
     https://${clt_machine}.${lab_domain} {
-      reverse_proxy 127.0.0.1:8080
+      reverse_proxy 127.0.0.1:7681
     }
     EOF
   - systemctl reload caddy || systemctl restart caddy

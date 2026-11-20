@@ -34,6 +34,8 @@ Versions utilisées dans ce lab :
 
 | Composant | Version |
 |---|---|
+| Gateway API | v1.7.0 |
+| Traefik (chart / image) | 42.4.1 / 3.7.19 |
 | Chart Helm `opentelemetry-collector` | 0.179.1 |
 | Image du **collector** (distribution `otelcol-contrib`) | 0.163.2 (version du chart) |
 | Chart Helm `opentelemetry-operator` | 0.129.1 |
@@ -43,7 +45,7 @@ Versions utilisées dans ce lab :
 | Node.js (application de démonstration) | 22.23.5 |
 | telemetrygen | v0.165.0 |
 
-Les interfaces web passent par l'ingress du cluster, publié sur le port `TCP/8080` de la machine `clt-N` :
+Les interfaces web passent par la Gateway API du cluster, publiée sur le port `TCP/8080` de la machine `clt-N` :
 
 - Jaeger : `http://jaeger.$INGRESS_HOST:8080` ;
 - application : `http://app.$INGRESS_HOST:8080`.
@@ -54,7 +56,7 @@ La variable `INGRESS_HOST` contient le nom qui pointe vers la machine (`echo $IN
 
 Vous travaillez sur la machine cliente `clt-N`, dans le terminal web, sous `/root`. Le cluster Kubernetes n'est pas une machine à part : c'est un **cluster KinD**, c'est-à-dire des conteneurs Docker qui jouent le rôle de nœuds, tous sur `clt-N`.
 
-Le schéma suivant montre l'ensemble : votre navigateur arrive par Internet sur `clt-N`, Caddy publie le terminal web sur `TCP/443`, et le cluster publie son ingress sur `TCP/8080` de la même machine. À l'intérieur, le nœud control-plane porte l'ingress-nginx, les workers portent les pods de l'application et de Jaeger :
+Le schéma suivant montre l'ensemble : votre navigateur arrive par Internet sur `clt-N`, Caddy publie le terminal web sur `TCP/443`, et le cluster publie sa Gateway API sur `TCP/8080` de la même machine. À l'intérieur, le nœud control-plane porte Traefik, l'implémentation de la Gateway API qui reçoit ce port, et les workers portent les pods de l'application et de Jaeger :
 
 ```mermaid
 ---
@@ -71,19 +73,22 @@ flowchart TB
 
     subgraph K["Cluster KinD (conteneurs Docker)"]
       direction TB
-      CP["control-plane<br/>ingress-nginx"]
+      CP["control-plane<br/>Traefik et port 8080"]
       W1[worker]
       W2[worker 2]
       W3[worker 3]
       P1[frontend 8080]
       P2[backend 8080]
       P3[jaeger 16686/4317/4318]
+      R1["HTTPRoute app"]
+      R2["HTTPRoute jaeger"]
       W1 --- P1
       W2 --- P2
       W2 --- P3
-      CP --> P1
-      CP --> P2
-      CP --> P3
+      CP --> R1
+      CP --> R2
+      R1 --> P1
+      R2 --> P3
     end
   end
 
@@ -95,89 +100,168 @@ Le cluster a un nœud control-plane et trois workers : les pods de l'application
 
 ### Créer le cluster
 
-Copiez les fichiers fournis dans un dossier de travail, puis écrivez la configuration du cluster :
+Copiez les fichiers du TP dans un dossier de travail :
 
 ```bash
 mkdir -p ~/tp03
 cp -r ~/opentelemetry-labs/config/tp03/. ~/tp03/
 cd ~/tp03
-cat > kind-config.yaml <<'EOF'
+```
+
+Le cluster, lui, est commun à tous les TP Kubernetes : sa configuration et son script de lancement sont dans `config/cluster/` du dépôt, au même endroit pour chaque TP. Affichez la configuration :
+
+```bash
+cat ~/opentelemetry-labs/config/cluster/kind-config.yaml
+```
+
+```yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: tp03
+# Nom unique, commun à tous les TP Kubernetes : une machine n'héberge
+# qu'un seul cluster, et cluster-create.sh supprime le précédent.
+name: cluster
 nodes:
   - role: control-plane
-    kubeadmConfigPatches:
-      - |
-        kind: InitConfiguration
-        nodeRegistration:
-          kubeletExtraArgs:
-            node-labels: "ingress-ready=true"
     extraPortMappings:
+      # Port 80 du nœud, publié sur la machine en 8080 : c'est par là
+      # qu'entre le trafic du navigateur vers la Gateway API.
       - containerPort: 80
         hostPort: 8080
         protocol: TCP
-      - containerPort: 443
-        hostPort: 8443
-        protocol: TCP
   - role: worker
   - role: worker
   - role: worker
-EOF
 ```
 
 Chaque bloc de ce fichier a un rôle précis :
 
 - `kind: Cluster` et `apiVersion` : le format attendu par `kind`, identique à celui des manifestes Kubernetes ;
 - `nodes` : la liste des nœuds. Chaque ligne `- role: worker` ajoute un worker ; trois lignes donnent trois workers ;
-- `kubeadmConfigPatches` : le control-plane reçoit l'étiquette `ingress-ready=true`. L'ingress-nginx s'en servira pour savoir où se placer ;
-- `extraPortMappings` : les ports du conteneur control-plane (80 et 443, ceux du service ingress-nginx) sont publiés sur la machine `clt-N` en 8080 et 8443. Les ports 80 et 443 de la machine sont déjà pris par Caddy, qui publie le terminal web.
+- `extraPortMappings` : le port 80 du conteneur control-plane est publié sur la machine `clt-N` en 8080. C'est par là qu'entrera le trafic du navigateur. Les ports 80 et 443 de la machine sont déjà pris par Caddy, qui publie le terminal web.
 
-Créez le cluster :
+Le cluster porte toujours le nom `cluster`, quel que soit le TP : une machine n'en héberge qu'un, et les TP Kubernetes suivants réutilisent le même. Affichez le script de lancement, puis exécutez-le :
 
 ```bash
-kind create cluster --config kind-config.yaml
-kubectl wait --for=condition=Ready nodes --all --timeout=180s
-kubectl get nodes
+cat ~/opentelemetry-labs/config/cluster/cluster-create.sh
+bash ~/opentelemetry-labs/config/cluster/cluster-create.sh
 ```
+
+Le script tient en trois étapes : `kind get clusters` liste ce qui tourne, `kind delete cluster --name <nom>` supprime chaque cluster trouvé, et `kind create cluster --config kind-config.yaml` crée le nouveau avec le fichier ci-dessus, lu dans le même dossier. Il supprime tous les clusters présents, et pas seulement celui nommé `cluster` : un cluster laissé sous un autre nom occuperait le port 8080 et ferait échouer la création.
+
+**Attention** : le script efface les clusters présents, releases Helm, espaces de noms et données comprises. Un cluster neuf se reconstruit en rejouant le TP depuis le début.
 
 On obtient quatre nœuds `Ready` :
 
 ```text
-NAME                 STATUS   ROLES           AGE   VERSION
-tp03-control-plane   Ready    control-plane   2m    v1.37.0
-tp03-worker          Ready    <none>          1m    v1.37.0
-tp03-worker2         Ready    <none>          1m    v1.37.0
-tp03-worker3         Ready    <none>          1m    v1.37.0
+NAME                    STATUS   ROLES           AGE   VERSION
+cluster-control-plane   Ready    control-plane   2m    v1.37.0
+cluster-worker          Ready    <none>          1m    v1.37.0
+cluster-worker2         Ready    <none>          1m    v1.37.0
+cluster-worker3         Ready    <none>          1m    v1.37.0
 ```
 
-**NB** : KinD préfixe le nom de chaque nœud avec celui du cluster, fixé ici par la ligne `name: tp03` : les nœuds s'appellent donc `tp03-control-plane`, `tp03-worker`, `tp03-worker2` et `tp03-worker3`. Sans cette option, le cluster prendrait le nom par défaut `kind` et les nœuds s'appelleraient `kind-control-plane`, `kind-worker`, etc. Retenez le nom du nœud control-plane : une commande de la partie suivante le cite pour retirer la `taint`.
+**NB** : une machine n'héberge qu'un seul cluster à la fois. Le port 8080 publié vers la machine est unique, et chaque nœud consomme de la mémoire et des ressources système (les instances `inotify`) ; un second cluster échoue au démarrage ou déstabilise le premier. C'est pourquoi tous les TP Kubernetes utilisent le même nom de cluster, et pourquoi `kind` refuse d'en créer un deuxième avec ce nom :
 
-### Installer l'ingress
+```text
+ERROR: failed to create cluster: node(s) already exist for a cluster with the name "cluster"
+```
 
-Le cluster n'a pas d'ingress par défaut. Installez l'ingress-nginx dans sa variante KinD, qui se place sur le nœud étiqueté et utilise ses ports publiés :
+Pour supprimer le cluster à la main : `kind get clusters` pour voir ce qui tourne, puis `kind delete cluster --name cluster`.
+
+**NB** : KinD préfixe le nom de chaque nœud avec celui du cluster, fixé ici par la ligne `name: cluster` : les nœuds s'appellent donc `cluster-control-plane`, `cluster-worker`, `cluster-worker2` et `cluster-worker3`. Sans cette option, le cluster prendrait le nom par défaut `kind` et les nœuds s'appelleraient `kind-control-plane`, `kind-worker`, etc. Retenez le nom du nœud control-plane : c'est lui qui détient le port publié, et le fichier de valeurs de Traefik le cite.
+
+### Installer la Gateway API
+
+Le cluster n'expose rien par défaut. Jusqu'en 2025, on installait un contrôleur d'Ingress ; cette API est en fin de vie : l'Ingress NGINX historique n'est plus maintenu que jusqu'en mars 2026, sans correctif de sécurité ensuite. Son successeur est la **Gateway API**, une API de routage conçue dès le départ par plusieurs implémentations.
+
+La Gateway API se compose de deux objets principaux :
+
+- une ressource `Gateway`, qui déclare un point d'entrée : un port, un protocole, et quelles routes sont acceptées ;
+- une ressource `HTTPRoute`, qui décrit le routage : pour quel nom d'hôte, vers quel Service.
+
+L'API ne fait rien par elle-même : il faut une implémentation. Nous utilisons Traefik, qui sait tourner en DaemonSet et occuper directement le port 80 des nœuds, ce qui se combine bien avec le port publié par KinD.
+
+Installez d'abord les types de ressources de la Gateway API. Les implémentations ne les fournissent pas : sans elles, toute installation de `Gateway` échoue sur un type inconnu.
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.15.1/deploy/static/provider/kind/deploy.yaml
-kubectl -n ingress-nginx wait --for=condition=Ready pod \
-  --selector=app.kubernetes.io/component=controller --timeout=300s
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.7.0/standard-install.yaml
+kubectl get crd | grep -c gateway.networking.k8s.io
 ```
 
-Sur un cluster récent, le nœud control-plane porte une interdiction (`taint`) qui empêche d'y placer des pods ordinaires. Le contrôleur d'ingress doit pourtant y tourner, puisque c'est lui qui détient les ports 80 et 443 publiés vers la machine. Retirez cette interdiction et forcez le placement du contrôleur sur le nœud étiqueté :
+On obtient `10` : le standard comprend les types `GatewayClass`, `Gateway`, `HTTPRoute`, `GRPCRoute`, `TCPRoute`, `TLSRoute`, `UDPRoute` et quelques autres.
+
+Installez ensuite Traefik, configuré par un fichier de valeurs :
 
 ```bash
-kubectl taint nodes tp03-control-plane node-role.kubernetes.io/control-plane:NoSchedule-
-kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type merge \
-  -p '{"spec":{"template":{"spec":{"nodeSelector":{"ingress-ready":"true"}}}}}'
-kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller
-kubectl -n ingress-nginx get pods -o wide
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+cat > traefik-values.yaml <<'EOF'
+deployment:
+  kind: DaemonSet
+ports:
+  web:
+    hostPort: 80
+providers:
+  kubernetesGateway:
+    enabled: true
+gateway:
+  enabled: true
+  listeners:
+    web:
+      namespacePolicy:
+        from: All
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+EOF
+helm install traefik traefik/traefik -n traefik --create-namespace \
+  -f traefik-values.yaml --wait
 ```
 
-Le contrôleur apparaît sur `tp03-control-plane`.
+**NB** : le chart affiche un rappel sur les CRD Gateway API, alors qu'elles viennent d'être installées. C'est un message du chart, sans conséquence ici.
+
+Chaque réglage a son rôle :
+
+- `deployment.kind: DaemonSet` : un pod par nœud, comme une brique d'infrastructure ;
+- `ports.web.hostPort: 80` : le pod prend le port 80 du nœud directement, dans le conteneur. Côté machine, ce port 80 est celui que KinD publie sur `TCP/8080` ;
+- `providers.kubernetesGateway.enabled` : Traefik lit les ressources `Gateway` et `HTTPRoute` ;
+- `gateway.enabled` : le chart crée lui-même une ressource `Gateway` et sa `GatewayClass`, au lieu de vous demander de les écrire ;
+- `namespacePolicy.from: All` : par défaut, une `Gateway` n'accepte que les routes de son propre espace de noms. Sans ce réglage, les routes de `demo` et d'`observability` seraient ignorées ;
+- `tolerations` : le nœud control-plane porte une interdiction (`taint`) qui écarte les pods ordinaires. Or c'est lui qui détient le port publié vers la machine : le pod Traefik doit donc y être toléré.
+
+Vérifiez le résultat :
+
+```bash
+kubectl -n traefik get pods -o wide
+kubectl get gatewayclass,gateway -n traefik
+```
+
+Le DaemonSet a quatre pods, dont un sur `cluster-control-plane` :
+
+```text
+NAME            READY   STATUS    RESTARTS   AGE   NODE
+traefik-42l42   1/1     Running   0          19s   cluster-control-plane
+traefik-85pkg   1/1     Running   0          19s   cluster-worker
+traefik-khs6m   1/1     Running   0          19s   cluster-worker3
+traefik-rl52k   1/1     Running   0          19s   cluster-worker2
+```
+
+Le chart a créé la `GatewayClass traefik` et la `Gateway traefik-gateway` :
+
+```text
+NAME                                             CONTROLLER                      ACCEPTED   AGE
+gatewayclass.gateway.networking.k8s.io/traefik   traefik.io/gateway-controller   True       30m
+
+NAME                                                CLASS     ADDRESS   PROGRAMMED   AGE
+gateway.gateway.networking.k8s.io/traefik-gateway   traefik             True         30m
+```
+
+**NB** : les autres implémentations (NGINX Gateway Fabric, Envoy Gateway) exposent leur plan de données derrière un Service, de type `LoadBalancer` ou `NodePort`, et non par un `hostPort`. Avec KinD, cela demande en plus une adresse de type LoadBalancer (MetalLB) ou un port de nœud fixé puis publié. C'est la raison du choix de Traefik ici.
 
 ### Comprendre `INGRESS_HOST`
 
-Un Ingress route les requêtes selon le nom d'hôte demandé : l'Ingress de l'application ne répond que si la requête porte l'en-tête `Host: app.<INGRESS_HOST>`, et celui de Jaeger seulement pour `Host: jaeger.<INGRESS_HOST>`. Une même adresse IP sert ainsi plusieurs services, séparés par le nom.
+Une `HTTPRoute` route les requêtes selon le nom d'hôte demandé : la route de l'application ne répond que si la requête porte l'en-tête `Host: app.<INGRESS_HOST>`, et celle de Jaeger seulement pour `Host: jaeger.<INGRESS_HOST>`. Une même adresse IP sert ainsi plusieurs services, séparés par le nom.
 
 Comme le cluster tourne sur `clt-N`, `INGRESS_HOST` doit être un nom qui pointe vers cette machine depuis votre navigateur. Le plus simple est le service `sslip.io`, qui transforme une adresse IP en nom : `178-62-255-117.sslip.io` pointe vers `178.62.255.117`. La fonction d'aide le calcule à partir de l'adresse publique de la machine :
 
@@ -192,7 +276,7 @@ On obtient un nom de la forme :
 178-62-255-117.sslip.io
 ```
 
-Les fonctions `app` et `jaeger` de `helpers.sh` s'en servent pour appeler l'ingress par `http://localhost:8080` avec le bon en-tête `Host`, ce qui évite de dépendre de la résolution DNS. Rechargez-les avec `source ~/tp03/helpers.sh` dans chaque nouveau terminal.
+Les fonctions `app` et `jaeger` de `helpers.sh` s'en servent pour appeler la `Gateway` par `http://localhost:8080` avec le bon en-tête `Host`, ce qui évite de dépendre de la résolution DNS. Rechargez-les avec `source ~/tp03/helpers.sh` dans chaque nouveau terminal.
 
 ### Déployer l'application et Jaeger
 
@@ -200,7 +284,7 @@ Le dossier contient trois manifestes : `namespaces.yaml` (les espaces de noms `o
 
 L'application est écrite en JavaScript et tient dans un ConfigMap : les pods l'exécutent avec l'image `node:22.23.5-slim`, sans aucune bibliothèque OpenTelemetry dans un premier temps. Chaque service écoute sur le port `8080` dans son pod, derrière un Service Kubernetes sur le port 80.
 
-Les deux manifestes qui déclarent un Ingress contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom avant l'envoi au cluster :
+Les deux manifestes qui déclarent une `HTTPRoute` contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom avant l'envoi au cluster :
 
 ```bash
 kubectl apply -f namespaces.yaml
@@ -221,8 +305,8 @@ On obtient par exemple :
 
 ```text
 NAME                       READY   STATUS    RESTARTS   AGE   IP           NODE
-backend-6bc7bd9b8d-vtlgr   1/1     Running   0          7s    10.244.3.3   tp03-worker2
-frontend-7cd9b8f4d7-wj7pb  1/1     Running   0          7s    10.244.3.4   tp03-worker2
+backend-6bc7bd9b8d-4ftph    1/1     Running   0          8s    10.244.2.3   cluster-worker
+frontend-7cd9b8f4d7-dwpp6   1/1     Running   0          8s    10.244.3.3   cluster-worker2
 ```
 
 Contrôlez que l'application répond et que Jaeger est vide :
@@ -262,6 +346,8 @@ flowchart LR
   end
   B([Navigateur]) -->|TCP/8080<br/>Host: jaeger.INGRESS_HOST| J
 ```
+
+**NB** : le mot **gateway** désigne ici un rôle du monde OpenTelemetry, à ne pas confondre avec la ressource `Gateway` de Kubernetes installée en partie 1, qui est le point d'entrée HTTP du cluster. La première reçoit de la télémétrie, la seconde reçoit du trafic web.
 
 Une **gateway** est un **collector** central, déployé comme un Deployment, qui reçoit les données de plusieurs sources et les envoie au backend. Vous allez la déployer avec le chart Helm officiel.
 
@@ -421,7 +507,7 @@ La commande affiche notamment :
 
 ```text
 k8s.namespace.name=demo
-k8s.node.name=tp03-worker2
+k8s.node.name=cluster-worker2
 k8s.pod.name=tg-agent
 ```
 
@@ -431,7 +517,7 @@ Comparez avec les traces `k8s-gateway` de la partie 2, qui n'ont pas ces attribu
 
 Jusqu'ici, Jaeger tourne dans le cluster, à côté de la **gateway**. Dans une vraie installation, le backend est ailleurs : il collecte les données de plusieurs clusters et survit à leur recréation. Le TP1 a justement installé une stack (**collector**, Jaeger, Prometheus, Grafana) sur `srv-N` ; on peut s'en servir comme backend.
 
-Est-ce que cela passe par l'ingress, des ports publiés ou des règles `iptables` ? Seulement dans un sens. Un pod peut **sortir** librement : ses paquets passent par le réseau Docker de `clt-N`, qui les traduit (NAT) puis par le VPC DigitalOcean. Depuis un pod du cluster, joindre `srv-N` sur son adresse privée fonctionne donc sans aucune règle supplémentaire, comme le montre l'essai ci-dessous (la stack du TP1 doit tourner sur `srv-N`) :
+Est-ce que cela passe par la `Gateway`, des ports publiés ou des règles `iptables` ? Seulement dans un sens. Un pod peut **sortir** librement : ses paquets passent par le réseau Docker de `clt-N`, qui les traduit (NAT) puis par le VPC DigitalOcean. Depuis un pod du cluster, joindre `srv-N` sur son adresse privée fonctionne donc sans aucune règle supplémentaire, comme le montre l'essai ci-dessous (la stack du TP1 doit tourner sur `srv-N`) :
 
 ```bash
 kubectl -n demo run nettest --restart=Never --image=curlimages/curl:8.11.0 --command -- sleep 120
@@ -443,7 +529,7 @@ kubectl -n demo delete pod nettest
 
 On obtient `200` : le pod a joint le **collector** de `srv-N` sur `TCP/4318`, sur le réseau privé du VPC.
 
-L'inverse, faire **entrer** du trafic depuis Internet vers un service du cluster, demande en revanche une publication de port : c'est exactement ce que fait `extraPortMappings` pour l'ingress, en publiant le port 80 du control-plane sur `TCP/8080` de `clt-N`. `iptables` n'est à écrire à la main dans aucun des deux cas : Docker et KinD posent les règles de NAT, et un `NodePort` suffit lorsqu'on veut exposer un service sur la machine sans passer par l'ingress.
+L'inverse, faire **entrer** du trafic depuis Internet vers un service du cluster, demande en revanche une publication de port : c'est exactement ce que fait `extraPortMappings` pour la `Gateway`, en publiant le port 80 du control-plane sur `TCP/8080` de `clt-N`. `iptables` n'est à écrire à la main dans aucun des deux cas : Docker et KinD posent les règles de NAT, et un `NodePort` suffit lorsqu'on veut exposer un service sur la machine sans passer par la `Gateway`.
 
 Pour brancher la **gateway** sur le backend externe, remplacez l'endpoint de l'exporter dans `gateway-values.yaml` par l'adresse privée de `srv-N` (obtenue avec `getent hosts $SRV_HOST`), par exemple :
 

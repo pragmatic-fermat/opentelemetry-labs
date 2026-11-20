@@ -31,7 +31,7 @@ Vous travaillez depuis son terminal web, dans `/root`, où le dépôt des labs e
 
 Vous instrumentez à la main une petite application Python composée de deux services : `shop` reçoit des commandes et interroge `inventory` pour connaître le stock. Aucune bibliothèque d'auto-instrumentation n'est utilisée.
 
-Le TP1 est conseillé pour le rôle du collector. Aucune connaissance de Python au-delà de la lecture d'un script n'est nécessaire : le code utile est court et commenté.
+Le TP1 est conseillé pour le rôle du **collector**. Aucune connaissance de Python au-delà de la lecture d'un script n'est nécessaire : le code utile est court et commenté.
 
 Versions utilisées dans ce lab :
 
@@ -40,7 +40,7 @@ Versions utilisées dans ce lab :
 | Python (image de l'application) | 3.13.18 |
 | API, SDK et exporter OTLP/HTTP OpenTelemetry pour Python | 1.45.2 |
 | Flask, requests | 3.1.3, 2.34.2 |
-| collector OpenTelemetry (distribution `otelcol-contrib`) | 0.165.0 |
+| **collector** OpenTelemetry (distribution `otelcol-contrib`) | 0.165.0 |
 | Jaeger | 2.23.0 |
 | Loki | 3.7.10 |
 | Grafana | 13.3.1 |
@@ -62,9 +62,9 @@ docker compose up -d --build
 docker compose ps
 ```
 
-La stack comprend l'application (`shop` et `inventory`), un collector, Jaeger pour les traces, Loki pour les logs et Grafana pour les consulter.
+La stack comprend l'application (`shop` et `inventory`), un **collector**, Jaeger pour les traces, Loki pour les logs et Grafana pour les consulter.
 
-La configuration du collector, fournie dans `otelcol/config.yaml`, reçoit l'OTLP/HTTP, envoie les traces à Jaeger et les logs à Loki.
+La configuration du **collector**, fournie dans `otelcol/config.yaml`, reçoit l'OTLP/HTTP, envoie les traces à Jaeger et les logs à Loki.
 
 Le dossier `app/` contient le code Python. Lisez-le avec `cat`, en commençant par `app/shop.py` et `app/orders.py`. Les modules `orders.py` et `stock.py` portent la logique métier et ne sont jamais modifiés.
 
@@ -104,7 +104,7 @@ Vous allez écrire le module `telemetry.py`, que `shop.py` et `inventory.py` app
 
 La fonction `setup(service_name)` doit créer une `Resource` avec les attributs `service.name`, `service.version` et `deployment.environment.name`, un `TracerProvider` avec cette ressource, lui ajouter un `BatchSpanProcessor` qui s'appuie sur un `OTLPSpanExporter` créé sans argument, et enregistrer ce provider comme provider global avec `trace.set_tracer_provider`.
 
-L'exporter sans argument lit l'adresse du collector dans la variable `OTEL_EXPORTER_OTLP_ENDPOINT`, que `compose.yaml` définit.
+L'exporter sans argument lit l'adresse du **collector** dans la variable `OTEL_EXPORTER_OTLP_ENDPOINT`, que `compose.yaml` définit.
 
 Les classes se trouvent dans les modules suivants :
 

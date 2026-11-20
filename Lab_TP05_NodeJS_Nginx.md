@@ -7,7 +7,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 À la fin du lab, vous saurez :
 
 - démarrer une application de microservices (deux services Node.js, RabbitMQ, PostgreSQL, Nginx) et suivre un message de bout en bout, sans télémétrie ;
-- auto-instrumenter deux services Node.js et exporter leurs données en OTLP vers un Collector, puis Jaeger ;
+- auto-instrumenter deux services Node.js et exporter leurs données en OTLP vers un **collector**, puis Jaeger ;
 - nommer les services avec des attributs de ressource et lire un waterfall dans Jaeger ;
 - instrumenter Nginx avec le module OpenTelemetry et obtenir une trace unique de Nginx jusqu'au second service, à travers RabbitMQ ;
 - enrichir des spans avec des données applicatives, reconnaître le risque pour les données sensibles et le corriger avec un processor de masquage.
@@ -17,7 +17,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 - [Environnement](#environnement)
 - [1. L'application et le parcours d'un message](#1-lapplication-et-le-parcours-dun-message) : démarrer la stack et envoyer un message sans télémétrie.
 - [2. Auto-instrumenter le premier service](#2-auto-instrumenter-le-premier-service) : ajouter le SDK et l'auto-instrumentation, voir les spans en console.
-- [3. Exporter vers le Collector et Jaeger](#3-exporter-vers-le-collector-et-jaeger) : passer à l'export OTLP et nommer le service.
+- [3. Exporter vers le **collector** et Jaeger](#3-exporter-vers-le-collector-et-jaeger) : passer à l'export OTLP et nommer le service.
 - [4. Instrumenter le second service](#4-instrumenter-le-second-service) : obtenir une trace qui traverse RabbitMQ.
 - [5. Nginx devant l'application](#5-nginx-devant-lapplication) : instrumenter Nginx avec le module OpenTelemetry.
 - [6. Données custom dans les spans et masquage](#6-données-custom-dans-les-spans-et-masquage) : ajouter le corps des requêtes comme contre-exemple, puis le masquer.
@@ -52,11 +52,11 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 - Ajouter les paquets d'auto-instrumentation à des versions épinglées.
 - Lire les spans affichés en console pour une requête.
 
-## 3. Exporter vers le Collector et Jaeger
+## 3. Exporter vers le **collector** et Jaeger
 
 À compléter. Points couverts :
 
-- Envoyer les spans à un Collector qui les transmet à Jaeger.
+- Envoyer les spans à un **collector** qui les transmet à Jaeger.
 - Définir `service.name` et retrouver le service dans Jaeger.
 
 ## 4. Instrumenter le second service

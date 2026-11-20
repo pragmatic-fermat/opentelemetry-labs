@@ -1,22 +1,22 @@
-# Lab TP3 : collector sur Kubernetes, gateway, agent et Operator
+# Lab TP3 : **collector** sur Kubernetes, **gateway**, **agent** et **operator**
 
 # Objectifs
 
 À la fin du lab, vous saurez :
 
-- déployer un **collector** en mode gateway puis en mode agent (DaemonSet) avec le chart Helm officiel, et adapter sa configuration par un fichier de valeurs ;
+- déployer un **collector** en mode **gateway** puis en mode **agent** (DaemonSet) avec le chart Helm officiel, et adapter sa configuration par un fichier de valeurs ;
 - expliquer comment le chart fusionne votre configuration avec ses valeurs par défaut et ce que fait un preset ;
 - enrichir les traces avec les métadonnées Kubernetes grâce au processor `k8s_attributes` ;
-- installer l'OpenTelemetry Operator et décrire une auto-instrumentation avec une ressource `Instrumentation` ;
+- installer l'OpenTelemetry **operator** et décrire une auto-instrumentation avec une ressource `Instrumentation` ;
 - activer l'instrumentation d'un déploiement par une annotation et retrouver la trace de bout en bout dans Jaeger.
 
 # Contenu
 
 - [Environnement](#environnement)
 - [1. Préparer le cluster](#1-préparer-le-cluster)
-- [2. Le collector en mode gateway](#2-le-collector-en-mode-gateway)
-- [3. Le collector en mode agent](#3-le-collector-en-mode-agent)
-- [4. L'Operator et l'auto-instrumentation](#4-loperator-et-lauto-instrumentation)
+- [2. Le **collector** en mode **gateway**](#2-le-collector-en-mode-gateway)
+- [3. Le **collector** en mode **agent**](#3-le-collector-en-mode-agent)
+- [4. L'**operator** et l'auto-instrumentation](#4-loperator-et-lauto-instrumentation)
 - [Cleanup](#cleanup)
 - [Extra](#extra)
 
@@ -28,16 +28,16 @@ Ce lab se déroule sur la machine cliente `clt-N` (N est votre numéro de partic
 
 Vous travaillez depuis le terminal web de cette machine, dans `/root`, et le dépôt des labs y est déjà cloné dans `/root/opentelemetry-labs`.
 
-Le TP1 est conseillé : il présente les **receiver**, **processor** et **exporter** du collector, qui ne sont pas réexpliqués ici.
+Le TP1 est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici.
 
 Versions utilisées dans ce lab :
 
 | Composant | Version |
 |---|---|
 | Chart Helm `opentelemetry-collector` | 0.179.1 |
-| Image du collector (distribution `otelcol-contrib`) | 0.163.2 (version du chart) |
+| Image du **collector** (distribution `otelcol-contrib`) | 0.163.2 (version du chart) |
 | Chart Helm `opentelemetry-operator` | 0.129.1 |
-| Image de l'Operator | 0.162.0 |
+| Image de l'**operator** | 0.162.0 |
 | Image d'auto-instrumentation Node.js | 0.82.0-1 |
 | Jaeger | 2.23.0 |
 | Node.js (application de démonstration) | 22.23.5 |
@@ -244,13 +244,13 @@ La manipulation attendue tient en deux temps. Dans le terminal, les deux command
 
 ![Interface de Jaeger au démarrage, le sélecteur de service ne propose que jaeger](img/tp03-jaeger-vide.png)
 
-## 2. Le collector en mode gateway
+## 2. Le **collector** en mode **gateway**
 
-Rappelons où se trouve chaque chose. Vous êtes toujours sur `clt-N`, seul poste depuis lequel vous travaillez : c'est là que tournent Docker, le cluster KinD et donc tous les pods. La gateway que vous allez installer sera un pod de l'espace de noms `observability`, sur l'un des workers. Jaeger, le backend, tourne pour l'instant dans le même cluster, dans le même espace de noms.
+Rappelons où se trouve chaque chose. Vous êtes toujours sur `clt-N`, seul poste depuis lequel vous travaillez : c'est là que tournent Docker, le cluster KinD et donc tous les pods. La **gateway** que vous allez installer sera un pod de l'espace de noms `observability`, sur l'un des workers. Jaeger, le backend, tourne pour l'instant dans le même cluster, dans le même espace de noms.
 
 ```mermaid
 ---
-title: Gateway dans le cluster, backend dans le cluster
+title: gateway dans le cluster, backend dans le cluster
 ---
 flowchart LR
   subgraph CLT["clt-N"]
@@ -263,7 +263,7 @@ flowchart LR
   B([Navigateur]) -->|TCP/8080<br/>Host: jaeger.INGRESS_HOST| J
 ```
 
-Une gateway est un collector central, déployé comme un Deployment, qui reçoit les données de plusieurs sources et les envoie au backend. Vous allez la déployer avec le chart Helm officiel.
+Une **gateway** est un **collector** central, déployé comme un Deployment, qui reçoit les données de plusieurs sources et les envoie au backend. Vous allez la déployer avec le chart Helm officiel.
 
 Ajoutez le dépôt de charts :
 
@@ -274,7 +274,7 @@ helm repo update
 
 Le chart se configure par un fichier de valeurs. Le chart n'impose pas d'image par défaut : il faut indiquer la distribution `contrib` et le nom de son exécutable.
 
-La configuration du collector se place sous la clé `config:` de ce fichier. Le chart la fusionne avec sa configuration par défaut : les dictionnaires sont fusionnés, les listes sont remplacées.
+La configuration du **collector** se place sous la clé `config:` de ce fichier. Le chart la fusionne avec sa configuration par défaut : les dictionnaires sont fusionnés, les listes sont remplacées.
 
 Créez le fichier complet, avec l'exporter `otlp_grpc/jaeger` vers `jaeger.observability.svc.cluster.local` (port `TCP/4317`, sans TLS) et un pipeline `traces` qui relie le receiver `otlp`, les processors `memory_limiter` puis `batch`, et cet exporter :
 
@@ -316,7 +316,7 @@ helm template otel-gateway open-telemetry/opentelemetry-collector --version 0.17
 
 Repérez ce que vous n'avez pas écrit : l'extension `health_check`, les receivers par défaut, et les pipelines `metrics` et `logs`. C'est la fusion du chart avec ses propres valeurs.
 
-Installez ensuite la gateway :
+Installez ensuite la **gateway** :
 
 ```bash
 helm upgrade --install otel-gateway open-telemetry/opentelemetry-collector \
@@ -348,13 +348,13 @@ La première commande affiche un pod `otel-gateway-...` à l'état `Running`, la
 
 **NB** : Jaeger 2.x n'a plus l'API v1 (`/api/traces`, `/api/services`) : seule l'API v3 (`/api/v3/...`) répond, et sa recherche de traces exige une fenêtre temporelle explicite (`startTimeMin` et `startTimeMax`).
 
-## 3. Le collector en mode agent
+## 3. Le **collector** en mode **agent**
 
-Un agent est un collector déployé comme un DaemonSet : un pod par nœud, proche des applications. Il enrichit les données avec les métadonnées Kubernetes puis les transmet à la gateway.
+Un **agent** est un **collector** déployé comme un DaemonSet : un pod par nœud, proche des applications. Il enrichit les données avec les métadonnées Kubernetes puis les transmet à la **gateway**.
 
 Le processor `k8s_attributes` interroge l'API Kubernetes pour retrouver, à partir de l'adresse IP du pod émetteur, son nom, son espace de noms, son déploiement et son nœud.
 
-Deux réglages du fichier de valeurs méritent une explication. Le preset `kubernetesAttributes` ajoute au chart le processor `k8s_attributes` et les droits RBAC dont il a besoin pour lire l'API Kubernetes. Le réglage `service.enabled` crée un Service, que le chart ne crée pas par défaut pour un DaemonSet : en mode agent, ce Service est configuré avec `internalTrafficPolicy: Local`, de sorte qu'une application atteint toujours l'agent de son propre nœud.
+Deux réglages du fichier de valeurs méritent une explication. Le preset `kubernetesAttributes` ajoute au chart le processor `k8s_attributes` et les droits RBAC dont il a besoin pour lire l'API Kubernetes. Le réglage `service.enabled` crée un Service, que le chart ne crée pas par défaut pour un DaemonSet : en mode **agent**, ce Service est configuré avec `internalTrafficPolicy: Local`, de sorte qu'une application atteint toujours l'**agent** de son propre nœud.
 
 Listez vous-même `k8s_attributes` dans le pipeline : sans cela, le preset l'ajoute en première position, avant `memory_limiter`.
 
@@ -391,7 +391,7 @@ config:
 EOF
 ```
 
-Installez l'agent :
+Installez l'**agent** :
 
 ```bash
 helm upgrade --install otel-agent open-telemetry/opentelemetry-collector \
@@ -401,7 +401,7 @@ kubectl -n observability get daemonset otel-agent-agent
 
 Le DaemonSet se nomme `otel-agent-agent` : le chart ajoute le suffixe `-agent` en mode daemonset, alors que le Service garde le nom `otel-agent`. Les colonnes `DESIRED` et `READY` sont égales.
 
-Envoyez des traces de test à l'agent, cette fois, et non à la gateway :
+Envoyez des traces de test à l'**agent**, cette fois, et non à la **gateway** :
 
 ```bash
 kubectl -n demo run tg-agent --restart=Never --rm -i \
@@ -425,11 +425,11 @@ k8s.node.name=tp03-worker2
 k8s.pod.name=tg-agent
 ```
 
-Comparez avec les traces `k8s-gateway` de la partie 2, qui n'ont pas ces attributs : l'enrichissement vient de l'agent.
+Comparez avec les traces `k8s-gateway` de la partie 2, qui n'ont pas ces attributs : l'enrichissement vient de l'**agent**.
 
 ### Mettre le backend hors du cluster
 
-Jusqu'ici, Jaeger tourne dans le cluster, à côté de la gateway. Dans une vraie installation, le backend est ailleurs : il collecte les données de plusieurs clusters et survit à leur recréation. Le TP1 a justement installé une stack (collector, Jaeger, Prometheus, Grafana) sur `srv-N` ; on peut s'en servir comme backend.
+Jusqu'ici, Jaeger tourne dans le cluster, à côté de la **gateway**. Dans une vraie installation, le backend est ailleurs : il collecte les données de plusieurs clusters et survit à leur recréation. Le TP1 a justement installé une stack (**collector**, Jaeger, Prometheus, Grafana) sur `srv-N` ; on peut s'en servir comme backend.
 
 Est-ce que cela passe par l'ingress, des ports publiés ou des règles `iptables` ? Seulement dans un sens. Un pod peut **sortir** librement : ses paquets passent par le réseau Docker de `clt-N`, qui les traduit (NAT) puis par le VPC DigitalOcean. Depuis un pod du cluster, joindre `srv-N` sur son adresse privée fonctionne donc sans aucune règle supplémentaire, comme le montre l'essai ci-dessous (la stack du TP1 doit tourner sur `srv-N`) :
 
@@ -441,11 +441,11 @@ kubectl -n demo exec nettest -- curl -s -o /dev/null -w '%{http_code}\n' \
 kubectl -n demo delete pod nettest
 ```
 
-On obtient `200` : le pod a joint le collector de `srv-N` sur `TCP/4318`, sur le réseau privé du VPC.
+On obtient `200` : le pod a joint le **collector** de `srv-N` sur `TCP/4318`, sur le réseau privé du VPC.
 
 L'inverse, faire **entrer** du trafic depuis Internet vers un service du cluster, demande en revanche une publication de port : c'est exactement ce que fait `extraPortMappings` pour l'ingress, en publiant le port 80 du control-plane sur `TCP/8080` de `clt-N`. `iptables` n'est à écrire à la main dans aucun des deux cas : Docker et KinD posent les règles de NAT, et un `NodePort` suffit lorsqu'on veut exposer un service sur la machine sans passer par l'ingress.
 
-Pour brancher la gateway sur le backend externe, remplacez l'endpoint de l'exporter dans `gateway-values.yaml` par l'adresse privée de `srv-N` (obtenue avec `getent hosts $SRV_HOST`), par exemple :
+Pour brancher la **gateway** sur le backend externe, remplacez l'endpoint de l'exporter dans `gateway-values.yaml` par l'adresse privée de `srv-N` (obtenue avec `getent hosts $SRV_HOST`), par exemple :
 
 ```yaml
   exporters:
@@ -455,9 +455,9 @@ Pour brancher la gateway sur le backend externe, remplacez l'endpoint de l'expor
 
 puis `helm upgrade --install` avec le nouveau fichier de valeurs. Les traces apparaissent alors dans le Jaeger de `srv-N`, consultable sur `http://$SRV_HOST:16686`.
 
-## 4. L'Operator et l'auto-instrumentation
+## 4. L'**operator** et l'auto-instrumentation
 
-L'OpenTelemetry Operator injecte un agent d'instrumentation dans les pods qui portent une annotation, au moment de leur création, sans modifier l'image de l'application.
+L'OpenTelemetry **operator** injecte un **agent** d'instrumentation dans les pods qui portent une annotation, au moment de leur création, sans modifier l'image de l'application.
 
 Pour Node.js, il ajoute un **init container** qui copie la bibliothèque d'instrumentation dans un volume partagé du pod, et il définit les variables d'environnement qui l'activent.
 
@@ -469,7 +469,7 @@ title: Injection de l'instrumentation dans un pod
 ---
 flowchart TB
   D["Deployment frontend<br/>annotation inject-nodejs: true"]
-  D -->|création du pod| W[webhook de l'Operator]
+  D -->|création du pod| W[webhook de l'operator]
   W -->|ajoute| IC["init container<br/>opentelemetry-auto-instrumentation-nodejs"]
   W -->|ajoute| ENV["variables d'environnement<br/>NODE_OPTIONS, OTEL_*"]
 
@@ -487,7 +487,7 @@ flowchart TB
 
 L'init container s'exécute avant l'application, écrit la bibliothèque dans le volume puis se termine. Le conteneur de l'application démarre ensuite avec `NODE_OPTIONS=--require /otel-auto-instrumentation-nodejs/autoinstrumentation.js` : Node charge la bibliothèque au démarrage, sans que l'image ni le code ne changent.
 
-Installez d'abord l'Operator. Le chart propose par défaut d'utiliser cert-manager pour les certificats de son webhook, ce qui n'est pas installé ici : les deux options `admissionWebhooks` demandent au chart de générer lui-même un certificat. L'attente `--wait` rend la main lorsque les pods de l'Operator sont prêts.
+Installez d'abord l'**operator**. Le chart propose par défaut d'utiliser cert-manager pour les certificats de son webhook, ce qui n'est pas installé ici : les deux options `admissionWebhooks` demandent au chart de générer lui-même un certificat. L'attente `--wait` rend la main lorsque les pods de l'**operator** sont prêts.
 
 ```bash
 helm upgrade --install operator open-telemetry/opentelemetry-operator \
@@ -497,7 +497,7 @@ helm upgrade --install operator open-telemetry/opentelemetry-operator \
   --set manager.image.tag=0.162.0 --wait
 ```
 
-Une fois l'Operator installé, contrôlez ce qu'il a ajouté au cluster. Un Operator étend l'API Kubernetes par des types de ressources (`CustomResourceDefinition`, ou CRD) : ici `Instrumentation` et `OpenTelemetryCollector`.
+Une fois l'**operator** installé, contrôlez ce qu'il a ajouté au cluster. Un **operator** étend l'API Kubernetes par des types de ressources (`CustomResourceDefinition`, ou CRD) : ici `Instrumentation` et `OpenTelemetryCollector`.
 
 ```bash
 kubectl get crd | grep opentelemetry.io
@@ -512,13 +512,13 @@ opentelemetrycollectors.opentelemetry.io   Namespaced   v1alpha1,v1beta1(storage
 targetallocators.opentelemetry.io          Namespaced   v1alpha1(storage)           2026-11-20T12:35:39Z
 ```
 
-Tant que l'Operator n'est pas installé, ces types n'existent pas et `kubectl apply` d'une ressource `Instrumentation` échoue sur un type inconnu. C'est pourquoi l'installation précède la suite de cette partie.
+Tant que l'**operator** n'est pas installé, ces types n'existent pas et `kubectl apply` d'une ressource `Instrumentation` échoue sur un type inconnu. C'est pourquoi l'installation précède la suite de cette partie.
 
 **NB** : n'exécutez pas `helm test` sur ce chart, ses pods de test utilisent une image qui n'est pas épinglée.
 
 La ressource `Instrumentation` décrit comment instrumenter : où envoyer les données, quels propagators utiliser, quel échantillonnage appliquer et quelle image d'instrumentation injecter.
 
-Créez-la dans l'espace de noms `demo`. L'exporter vise l'agent en OTLP HTTP (`http://otel-agent.observability.svc.cluster.local:4318`), protocole par défaut du SDK Node.js :
+Créez-la dans l'espace de noms `demo`. L'exporter vise l'**agent** en OTLP HTTP (`http://otel-agent.observability.svc.cluster.local:4318`), protocole par défaut du SDK Node.js :
 
 ```bash
 cat > instrumentation.yaml <<'EOF'
@@ -556,7 +556,7 @@ done
 kubectl -n demo rollout status deployment/frontend deployment/backend
 ```
 
-L'`Instrumentation` doit exister avant la création des pods : l'Operator ne modifie pas un pod déjà démarré.
+L'`Instrumentation` doit exister avant la création des pods : l'**operator** ne modifie pas un pod déjà démarré.
 
 Générez du trafic :
 
@@ -610,7 +610,7 @@ La première commande contient `frontend` et `backend`, la seconde affiche :
 
 Une même trace traverse donc les deux services. Ouvrez-la dans l'interface de Jaeger (`http://jaeger.$INGRESS_HOST:8080`) : vous voyez le span serveur du frontend, le span client de son appel au backend, puis le span serveur du backend. Le lien entre les deux services repose sur le propagator `tracecontext`.
 
-Regardez enfin les attributs de ressource de cette trace : `k8s.pod.name`, `k8s.namespace.name` et `k8s.node.name` y figurent, ajoutés par l'agent.
+Regardez enfin les attributs de ressource de cette trace : `k8s.pod.name`, `k8s.namespace.name` et `k8s.node.name` y figurent, ajoutés par l'**agent**.
 
 **NB** : si les pods redémarrent mais qu'aucune trace n'apparaît, vérifiez que l'init container est présent (`kubectl -n demo describe pod -l app=frontend`). S'il manque, l'annotation n'est pas sur le modèle de pod ou l'`Instrumentation` a été créée après les pods : dans ce second cas, redémarrez-les avec `kubectl -n demo rollout restart deployment/frontend`.
 
@@ -632,9 +632,9 @@ Le cluster KinD lui-même peut être conservé : il sert aux TP suivants.
 
 ### 1. Collecter les logs des conteneurs
 
-Le chart de l'agent propose un preset `logsCollection` : il ajoute un receiver `file_log` qui lit les fichiers de `/var/log/pods`, monte ce dossier dans le pod, et complète le pipeline `logs`.
+Le chart de l'**agent** propose un preset `logsCollection` : il ajoute un receiver `file_log` qui lit les fichiers de `/var/log/pods`, monte ce dossier dans le pod, et complète le pipeline `logs`.
 
-Mettez à jour l'agent en activant ce preset :
+Mettez à jour l'**agent** en activant ce preset :
 
 ```bash
 helm upgrade --install otel-agent open-telemetry/opentelemetry-collector \
@@ -642,7 +642,7 @@ helm upgrade --install otel-agent open-telemetry/opentelemetry-collector \
   --set presets.logsCollection.enabled=true --wait
 ```
 
-Vérifiez que le volume est bien monté dans les pods de l'agent :
+Vérifiez que le volume est bien monté dans les pods de l'**agent** :
 
 ```bash
 kubectl -n observability get pods -l app.kubernetes.io/instance=otel-agent \
@@ -671,7 +671,7 @@ Le pipeline `logs` reçoit maintenant deux receivers, `otlp` et `file_log`, et e
           - file_log
 ```
 
-Les enregistrements collectés apparaissent dans les logs du pod de l'agent :
+Les enregistrements collectés apparaissent dans les logs du pod de l'**agent** :
 
 ```bash
 kubectl -n observability logs daemonset/otel-agent-agent --tail=5
@@ -707,11 +707,11 @@ kubectl -n demo get pods -l app=frontend \
   -o jsonpath='{range .items[*].spec.containers[0].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]}{.value}{"\n"}{end}'
 ```
 
-Elle commence maintenant par `deployment.environment.name=tp3,` suivi des attributs `k8s.*` ajoutés par l'Operator. Générez du trafic (`for i in $(seq 10); do app /api/orders > /dev/null; done`) et retrouvez l'attribut dans la ressource des traces, dans Jaeger.
+Elle commence maintenant par `deployment.environment.name=tp3,` suivi des attributs `k8s.*` ajoutés par l'**operator**. Générez du trafic (`for i in $(seq 10); do app /api/orders > /dev/null; done`) et retrouvez l'attribut dans la ressource des traces, dans Jaeger.
 
-### 3. Déployer un collector avec la ressource `OpenTelemetryCollector`
+### 3. Déployer un **collector** avec la ressource `OpenTelemetryCollector`
 
-L'Operator sait aussi déployer un collector : au lieu d'écrire un fichier de valeurs Helm, on décrit un objet `OpenTelemetryCollector`, et l'Operator crée le Deployment, le Service et la configuration.
+L'**operator** sait aussi déployer un **collector** : au lieu d'écrire un fichier de valeurs Helm, on décrit un objet `OpenTelemetryCollector`, et l'**operator** crée le Deployment, le Service et la configuration.
 
 ```bash
 cat > otelcol-cr.yaml <<'EOF'
@@ -754,14 +754,14 @@ NAME        MODE         VERSION   READY   AGE   IMAGE
 otelcol-cr  deployment   0.162.0   1/1     25s   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s:0.162.0
 ```
 
-Regardez ce que l'Operator a créé : un Deployment, deux Services et un Service de supervision.
+Regardez ce que l'**operator** a créé : un Deployment, deux Services et un Service de supervision.
 
 ```bash
 kubectl -n observability get pods,svc | grep otelcol-cr
 ```
 
-L'image par défaut est la distribution `k8s`, plus légère que `contrib` ; pour utiliser une autre distribution, ajoutez `image:` dans `spec`. Comparez enfin les deux approches : avec Helm, la configuration est rendue par le chart et versionnée dans un fichier de valeurs ; avec l'Operator, elle est portée par un objet Kubernetes, visible avec `kubectl get` et modifiable comme n'importe quelle ressource.
+L'image par défaut est la distribution `k8s`, plus légère que `contrib` ; pour utiliser une autre distribution, ajoutez `image:` dans `spec`. Comparez enfin les deux approches : avec Helm, la configuration est rendue par le chart et versionnée dans un fichier de valeurs ; avec l'**operator**, elle est portée par un objet Kubernetes, visible avec `kubectl get` et modifiable comme n'importe quelle ressource.
 
 ### 4. Placer le backend hors du cluster
 
-Reprenez l'encadré de [la partie 3](#3-le-collector-en-mode-agent) : pointez l'exporter de la gateway vers le collector du TP1 installé sur `srv-N`, puis vérifiez que les traces arrivent dans le Jaeger de `srv-N`, sur `http://$SRV_HOST:16686`.
+Reprenez l'encadré de [la partie 3](#3-le-collector-en-mode-agent) : pointez l'exporter de la **gateway** vers le **collector** du TP1 installé sur `srv-N`, puis vérifiez que les traces arrivent dans le Jaeger de `srv-N`, sur `http://$SRV_HOST:16686`.

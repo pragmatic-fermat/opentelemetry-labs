@@ -1,4 +1,4 @@
-# Lab TP2 : Collector sur mesure et Alloy
+# Lab TP2 : **collector** sur mesure et Alloy
 
 Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédiger. Hors périmètre actuel : le TP est conservé pour mémoire.
 
@@ -7,20 +7,20 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 À la fin du lab, vous saurez :
 
 - expliquer pourquoi la distribution `contrib` n'est pas adaptée à la production (taille, surface d'attaque, mises à jour subies en bloc) et dans quels cas `core` suffit ;
-- décrire un Collector sur mesure dans un manifeste OCB (OpenTelemetry Collector Builder), en ne retenant que les receivers, processors et exporters nécessaires ;
+- décrire un **collector** sur mesure dans un manifeste OCB (OpenTelemetry **collector** Builder), en ne retenant que les receivers, processors et exporters nécessaires ;
 - construire le binaire puis une image Docker, et comparer taille et liste de composants avec `contrib` ;
-- faire tourner la configuration du TP1 sur ce Collector et constater qu'un composant absent est refusé dès la validation ;
+- faire tourner la configuration du TP1 sur ce **collector** et constater qu'un composant absent est refusé dès la validation ;
 - reproduire un pipeline OTLP vers Jaeger avec Grafana Alloy, puis citer ses gains et ses limites.
 
 # Contenu
 
 - [Environnement](#environnement)
 - [1. Comparer les distributions core et contrib](#1-comparer-les-distributions-core-et-contrib) : lister les composants de chaque distribution et mesurer leur image.
-- [2. Décrire le Collector voulu dans un manifeste OCB](#2-décrire-le-collector-voulu-dans-un-manifeste-ocb) : choisir les composants et épingler leurs versions.
+- [2. Décrire le **collector** voulu dans un manifeste OCB](#2-décrire-le-collector-voulu-dans-un-manifeste-ocb) : choisir les composants et épingler leurs versions.
 - [3. Construire le binaire et l'image](#3-construire-le-binaire-et-limage) : compiler avec `ocb`, puis produire une image Docker.
-- [4. Valider avec la configuration du TP1](#4-valider-avec-la-configuration-du-tp1) : exécuter le Collector sur mesure et constater l'effet d'un composant absent.
+- [4. Valider avec la configuration du TP1](#4-valider-avec-la-configuration-du-tp1) : exécuter le **collector** sur mesure et constater l'effet d'un composant absent.
 - [5. Grafana Alloy : le même pipeline](#5-grafana-alloy--le-même-pipeline) : reproduire OTLP vers Jaeger avec Alloy.
-- [6. Gains et limites](#6-gains-et-limites) : remplir une grille de comparaison Collector sur mesure et Alloy.
+- [6. Gains et limites](#6-gains-et-limites) : remplir une grille de comparaison **collector** sur mesure et Alloy.
 - [Cleanup](#cleanup)
 - [Extra](#extra)
 
@@ -30,7 +30,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 Machine(s) : `clt-N`.
 
-Prérequis : TP1 recommandé : les backends et la configuration du Collector du TP1 sont réutilisés pour valider le Collector sur mesure.
+Prérequis : TP1 recommandé : les backends et la configuration du **collector** du TP1 sont réutilisés pour valider le **collector** sur mesure.
 
 Durée prévue : 1/4 j (environ 2 heures de manipulation).
 
@@ -43,7 +43,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 - Lister les composants disponibles dans chaque distribution.
 - Mesurer la taille des images et en tirer les conséquences en production.
 
-## 2. Décrire le Collector voulu dans un manifeste OCB
+## 2. Décrire le **collector** voulu dans un manifeste OCB
 
 À compléter. Points couverts :
 
@@ -61,7 +61,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 À compléter. Points couverts :
 
-- Valider et démarrer le Collector avec la configuration du TP1.
+- Valider et démarrer le **collector** avec la configuration du TP1.
 - Ajouter un composant absent du manifeste et lire l'erreur de validation.
 
 ## 5. Grafana Alloy : le même pipeline

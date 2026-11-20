@@ -17,7 +17,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 - [Environnement](#environnement)
 - [1. Principe et prérequis](#1-principe-et-prérequis) : comprendre eBPF et contrôler le noyau de la machine.
 - [2. Déployer OBI à côté d'une application](#2-déployer-obi-à-côté-dune-application) : lancer OBI et l'application, sans modifier le code.
-- [3. Lire ce qu'OBI produit](#3-lire-ce-quobi-produit) : traces et métriques envoyées au Collector.
+- [3. Lire ce qu'OBI produit](#3-lire-ce-quobi-produit) : traces et métriques envoyées au **collector**.
 - [4. Comparer avec l'auto-instrumentation](#4-comparer-avec-lauto-instrumentation) : même application, deux approches.
 - [5. Limites et cas d'usage](#5-limites-et-cas-dusage) : dire quand choisir OBI.
 - [Cleanup](#cleanup)
@@ -40,7 +40,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 À compléter. Points couverts :
 
 - Vérifier la version du noyau et les privilèges nécessaires.
-- Situer eBPF par rapport aux SDK et aux agents.
+- Situer eBPF par rapport aux SDK et aux **agents**.
 
 ## 2. Déployer OBI à côté d'une application
 
@@ -68,7 +68,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 À compléter. Points couverts :
 
 - Examiner la propagation du contexte et l'absence de spans métier.
-- Citer les cas où OBI est adapté (application non modifiable, langage sans agent).
+- Citer les cas où OBI est adapté (application non modifiable, langage sans **agent**).
 
 ## Cleanup
 

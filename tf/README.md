@@ -4,7 +4,7 @@ Ce dossier décrit les machines des labs sur DigitalOcean. Il est prévu pour ê
 
 ## Ressources créées
 
-Pour chaque numéro N de 0 à `group_count - 1` (le numéro 0 est celui du formateur) :
+Pour chaque numéro N de 0 à `group_count - 1` (le numéro 0 est celui de l'animateur) :
 
 - un droplet `clt-N` (machine cliente : Docker et Compose, Ansible, kubectl, helm, kind) et un droplet `srv-N` (machine serveur : Docker et Compose, jq, sans les outils Kubernetes), initialisés par les fichiers `cloud-init-clt.yaml` et `cloud-init-srv.yaml` ;
 - un VPC `vpc-N` (plage `10.20.N.0/24`, découpée depuis `vpc_base_range`) dans lequel sont placés les deux droplets du groupe : les machines d'un même groupe se voient sur le réseau privé, les groupes restent cloisonnés entre eux ;
@@ -21,11 +21,11 @@ Créez un workspace relié à ce dépôt (workflow par gestion de versions) et i
 |---|---|---|
 | `do_token` | Terraform, sensible | Jeton d'API DigitalOcean |
 | `root_password` | Terraform, sensible | Mot de passe du compte root, injecté dans les fichiers cloud-init |
-| `webshell_password` | Terraform, sensible | Mot de passe du webshell (ttyd), communiqué aux stagiaires |
+| `webshell_password` | Terraform, sensible | Mot de passe du webshell (ttyd), communiqué aux participants |
 | `github_deploy_key` | Terraform, sensible | Clé de déploiement GitHub (lecture seule) pour cloner le dépôt tant qu'il est privé ; vide quand le dépôt est public |
 | `domain_name` | Terraform | Zone DNS DigitalOcean qui reçoit les enregistrements |
 | `tag_name` | Terraform | Nom du tag appliqué aux droplets |
-| `group_count` | Terraform | Nombre d'environnements, formateur compris |
+| `group_count` | Terraform | Nombre d'environnements, animateur compris |
 
 Les autres variables (`region_name`, `clt_size`, `srv_size`, `droplet_image`, `ssh_keys`, `vpc_base_range`) ont leur valeur dans `common.auto.tfvars`, que TFC charge automatiquement. Aucun secret ne doit être écrit dans ce dossier : le jeton et le mot de passe se saisissent uniquement dans les variables du workspace.
 

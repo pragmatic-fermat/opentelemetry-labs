@@ -1,10 +1,10 @@
 # Labs OpenTelemetry
 
-Travaux pratiques de la formation OpenTelemetry, du socle Collector jusqu'au diagnostic d'incident.
+Labs OpenTelemetry, du socle Collector jusqu'au diagnostic d'incident.
 
 ## Programme
 
-TPs à concevoir et rédiger : 1, 3, 4, 5, 6, 7, 10 et 11 (numérotation d'origine conservée).
+Labs à concevoir et rédiger : 1, 3, 4, 5, 6, 7, 10 et 11 (numérotation d'origine conservée).
 
 | TP | Titre | Contenu | Durée |
 |---|---|---|---|

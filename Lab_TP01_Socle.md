@@ -253,7 +253,7 @@ Jaeger
 Prometheus
 ```
 
-Ouvrez aussi l'interface de Jaeger dans le navigateur : elle s'affiche avec une liste de services vide.
+Ouvrez aussi l'interface de Jaeger dans le navigateur (`http://$SRV_HOST:16686`) : elle s'affiche avec une liste de services vide.
 
 ## 2. Un premier collector
 
@@ -413,7 +413,7 @@ On obtient :
 5
 ```
 
-Dans l'interface de Jaeger, choisissez le service `demo` puis cliquez sur Find Traces : vous retrouvez les cinq traces.
+Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), choisissez le service `demo` puis cliquez sur Find Traces : vous retrouvez les cinq traces.
 
 **Note** : dans la commande `docker compose logs`, une erreur de type `connection refused` vers Jaeger signifie que l'adresse de l'exporter n'utilise pas le nom du service (`jaeger`). Si `telemetrygen` ne se connecte pas, vérifiez que le collector tourne (`docker compose ps`) et que son receiver écoute sur `0.0.0.0`.
 
@@ -596,7 +596,7 @@ Envoyez d'abord des données qui contiennent une adresse e-mail et un chemin ave
   --telemetry-attributes 'user.email="alice@example.com"'
 ```
 
-Dans Jaeger, ouvrez une de ces traces : l'adresse e-mail apparaît en clair, ce qui pose un problème de confidentialité, et chaque identifiant de commande crée un chemin distinct, ce qui rend les regroupements impossibles.
+Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), ouvrez une de ces traces : l'adresse e-mail apparaît en clair, ce qui pose un problème de confidentialité, et chaque identifiant de commande crée un chemin distinct, ce qui rend les regroupements impossibles.
 
 Ajoutez un processor `transform/normalize` qui règle ces trois points :
 
@@ -634,7 +634,7 @@ service:
 EOF
 ```
 
-Validez, redémarrez le collector et renvoyez la même commande `./tg.sh` que ci-dessus. L'exporter `debug` affiche dans les logs du collector les spans tels qu'ils sont après le traitement. Dans Jaeger, contrôlez les noms de spans et les attributs :
+Validez, redémarrez le collector et renvoyez la même commande `./tg.sh` que ci-dessus. L'exporter `debug` affiche dans les logs du collector les spans tels qu'ils sont après le traitement. Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), contrôlez les noms de spans et les attributs :
 
 ```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=accounts&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
@@ -760,7 +760,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces
 }'
 ```
 
-On obtient `200`. Retrouvez le span dans l'interface de Jaeger (service `manuel`, traces sur la dernière heure) : un seul span, sans client, sans instrumentation, seulement un POST JSON.
+On obtient `200`. Retrouvez le span dans l'interface de Jaeger (`http://$SRV_HOST:16686`, service `manuel`, traces sur la dernière heure) : un seul span, sans client, sans instrumentation, seulement un POST JSON.
 
 ### 2. Marquer les erreurs en OTTL
 
@@ -783,7 +783,7 @@ docker compose restart otelcol
 ./tg.sh traces --traces 2 --service errdemo --status-code Error
 ```
 
-Dans Jaeger, les spans du service `errdemo` portent l'attribut `slo.violation` à `true`, et les autres services non.
+Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), les spans du service `errdemo` portent l'attribut `slo.violation` à `true`, et les autres services non.
 
 ### 3. Ajouter le signal logs
 

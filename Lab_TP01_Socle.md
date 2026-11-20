@@ -821,7 +821,9 @@ Les traces de Jaeger étant stockées en mémoire, elles disparaissent avec le c
 
 ### 1. Un span sans SDK
 
-Le SDK d'une application ne fait rien d'autre que fabriquer du JSON (ou du Protobuf) et le poster sur le port du receiver. Envoyons un span directement avec `curl`, et vérifions qu'il arrive dans Jaeger :
+Tout ce lab a produit des données avec `telemetrygen`, qui embarque un SDK : il crée les spans, leurs identifiants et leurs horodatages, puis les envoie en OTLP. Une application instrumentée fait exactement la même chose.
+
+Sans SDK, il faut donc fabriquer ce que le SDK fabriquerait : un document JSON conforme au format OTLP, avec un identifiant de trace, un identifiant de span et des horodatages, puis le poster sur le receiver. C'est ce que nous faisons ici avec `curl`, pour voir ce qu'il y a derrière l'instrumentation :
 
 ```bash
 NOW=$(date +%s%N)
@@ -844,7 +846,9 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces
 }'
 ```
 
-On obtient `200`. Retrouvez le span dans l'interface de Jaeger (`http://$SRV_HOST:16686`, service `manuel`, traces sur la dernière heure) : un seul span, sans client, sans instrumentation, seulement un POST JSON.
+On obtient `200`. Retrouvez le span dans l'interface de Jaeger (`http://$SRV_HOST:16686`, service `manuel`, traces sur la dernière heure).
+
+Le span existe pourtant, sans SDK, sans bibliothèque, sans instrumentation : seulement un POST JSON. C'est exactement ce qu'un SDK envoie, à ceci près qu'il le fait pour chaque opération de l'application.
 
 ### 2. Marquer les erreurs en OTTL
 
@@ -859,7 +863,20 @@ cat >> otelcol/processors.yaml <<'EOF'
 EOF
 ```
 
-Ajoutez `transform/slo` dans le pipeline `traces` (après `transform/normalize`), validez, redémarrez, puis envoyez des traces en erreur :
+Ajoutez `transform/slo` dans le pipeline `traces`, après `transform/normalize`. Le fichier est réécrit en entier :
+
+```bash
+cat > otelcol/service.yaml <<'EOF'
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, filter/healthchecks, transform/normalize, transform/slo, batch]
+      exporters: [debug, otlp_http/jaeger]
+EOF
+```
+
+Validez, redémarrez, puis envoyez des traces en erreur :
 
 ```bash
 ./check.sh
@@ -900,4 +917,18 @@ docker compose restart otelcol
 ./tg.sh logs --logs 3 --service appli
 ```
 
-L'exporter `debug` affiche trois blocs `LogRecord #` dans les logs du collector. Aucun backend ne stocke les logs ici : c'est le rôle des TP suivants.
+Affichez les logs du collector pour vérifier que les trois enregistrements sont arrivés :
+
+```bash
+docker compose logs otelcol | grep 'LogRecord #'
+```
+
+On obtient trois lignes, une par log envoyé :
+
+```text
+otelcol-1  | LogRecord #0
+otelcol-1  | LogRecord #1
+otelcol-1  | LogRecord #2
+```
+
+Aucun backend ne stocke les logs ici : c'est le rôle des TP suivants.

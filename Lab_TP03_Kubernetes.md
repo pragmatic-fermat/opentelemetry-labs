@@ -52,27 +52,153 @@ La variable `INGRESS_HOST` contient le nom qui pointe vers la machine (`echo $IN
 
 ## 1. Préparer le cluster
 
-Copiez les fichiers fournis dans un dossier de travail et chargez les fonctions d'aide :
+Vous travaillez sur la machine cliente `clt-N`, dans le terminal web, sous `/root`. Le cluster Kubernetes n'est pas une machine à part : c'est un **cluster KinD**, c'est-à-dire des conteneurs Docker qui jouent le rôle de nœuds, tous sur `clt-N`.
+
+Le schéma suivant montre l'ensemble : votre navigateur arrive par Internet sur `clt-N`, Caddy publie le terminal web sur `TCP/443`, et le cluster publie son ingress sur `TCP/8080` de la même machine. À l'intérieur, le nœud control-plane porte l'ingress-nginx, les workers portent les pods de l'application et de Jaeger :
+
+```mermaid
+---
+title: Cluster KinD du TP3 sur clt-N
+---
+flowchart TB
+  B([Navigateur<br/>depuis Internet])
+
+  subgraph CLT["Machine cliente clt-N"]
+    direction TB
+    C[Caddy<br/>TCP/443]
+    T[ttyd<br/>127.0.0.1:7681]
+    C -->|terminal web| T
+
+    subgraph K["Cluster KinD (conteneurs Docker)"]
+      direction TB
+      CP["control-plane<br/>ingress-nginx"]
+      W1[worker]
+      W2[worker 2]
+      W3[worker 3]
+      P1[frontend 8080]
+      P2[backend 8080]
+      P3[jaeger 16686/4317/4318]
+      W1 --- P1
+      W2 --- P2
+      W2 --- P3
+      CP --> P1
+      CP --> P2
+      CP --> P3
+    end
+  end
+
+  B -->|TCP/8080, Host: app.<INGRESS_HOST>| CP
+  B -->|TCP/8080, Host: jaeger.<INGRESS_HOST>| CP
+```
+
+Le cluster a un nœud control-plane et trois workers : les pods de l'application se répartissent sur les workers, ce qui rend visible la différence entre un pod et une machine.
+
+### Créer le cluster
+
+Copiez les fichiers fournis dans un dossier de travail, puis écrivez la configuration du cluster :
 
 ```bash
 mkdir -p ~/tp03
 cp -r ~/opentelemetry-labs/config/tp03/. ~/tp03/
 cd ~/tp03
-source helpers.sh
+cat > kind-config.yaml <<'EOF'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: tp03
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP
+  - role: worker
+  - role: worker
+  - role: worker
+EOF
+```
+
+Chaque bloc de ce fichier a un rôle précis :
+
+- `kind: Cluster` et `apiVersion` : le format attendu par `kind`, identique à celui des manifestes Kubernetes ;
+- `nodes` : la liste des nœuds. Chaque ligne `- role: worker` ajoute un worker ; trois lignes donnent trois workers ;
+- `kubeadmConfigPatches` : le control-plane reçoit l'étiquette `ingress-ready=true`. L'ingress-nginx s'en servira pour savoir où se placer ;
+- `extraPortMappings` : les ports du conteneur control-plane (80 et 443, ceux du service ingress-nginx) sont publiés sur la machine `clt-N` en 8080 et 8443. Les ports 80 et 443 de la machine sont déjà pris par Caddy, qui publie le terminal web.
+
+Créez le cluster :
+
+```bash
+kind create cluster --config kind-config.yaml
+kubectl wait --for=condition=Ready nodes --all --timeout=180s
 kubectl get nodes
 ```
 
-On obtient deux nœuds, le control-plane et le worker, à l'état `Ready` :
+On obtient quatre nœuds `Ready` :
 
 ```text
 NAME                 STATUS   ROLES           AGE   VERSION
-tp03-control-plane   Ready    control-plane   5m    v1.37.0
-tp03-worker          Ready    <none>          4m    v1.37.0
+tp03-control-plane   Ready    control-plane   2m    v1.37.0
+tp03-worker          Ready    <none>          1m    v1.37.0
+tp03-worker2         Ready    <none>          1m    v1.37.0
+tp03-worker3         Ready    <none>          1m    v1.37.0
 ```
 
-Les fonctions `app` et `jaeger` appellent l'application et l'API de Jaeger par l'ingress. Rechargez-les avec `source ~/tp03/helpers.sh` dans chaque nouveau terminal.
+**NB** : KinD nomme les nœuds d'après le nom du cluster ; sans l'option `name` du fichier, ils s'appelleraient `tp03-control-plane` de toute façon dans un cluster nommé `tp03`, mais les workers seraient numérotés `tp03-worker`, `tp03-worker2`, `tp03-worker3`.
 
-Le dossier contient trois manifestes : `namespaces.yaml` (les espaces de noms `observability` et `demo`), `jaeger.yaml` (Jaeger avec stockage en mémoire) et `demo-app.yaml` (une application Node.js en deux services, `frontend` et `backend`, dont le code est dans un ConfigMap).
+### Installer l'ingress
+
+Le cluster n'a pas d'ingress par défaut. Installez l'ingress-nginx dans sa variante KinD, qui se place sur le nœud étiqueté et utilise ses ports publiés :
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.15.1/deploy/static/provider/kind/deploy.yaml
+kubectl -n ingress-nginx wait --for=condition=Ready pod \
+  --selector=app.kubernetes.io/component=controller --timeout=300s
+```
+
+Sur un cluster récent, le nœud control-plane porte une interdiction (`taint`) qui empêche d'y placer des pods ordinaires. Le contrôleur d'ingress doit pourtant y tourner, puisque c'est lui qui détient les ports 80 et 443 publiés vers la machine. Retirez cette interdiction et forcez le placement du contrôleur sur le nœud étiqueté :
+
+```bash
+kubectl taint nodes tp03-control-plane node-role.kubernetes.io/control-plane:NoSchedule-
+kubectl -n ingress-nginx patch deployment ingress-nginx-controller --type merge \
+  -p '{"spec":{"template":{"spec":{"nodeSelector":{"ingress-ready":"true"}}}}}'
+kubectl -n ingress-nginx rollout status deployment/ingress-nginx-controller
+kubectl -n ingress-nginx get pods -o wide
+```
+
+Le contrôleur apparaît sur `tp03-control-plane`.
+
+### Comprendre `INGRESS_HOST`
+
+Un Ingress route les requêtes selon le nom d'hôte demandé : l'Ingress de l'application ne répond que si la requête porte l'en-tête `Host: app.<INGRESS_HOST>`, et celui de Jaeger seulement pour `Host: jaeger.<INGRESS_HOST>`. Une même adresse IP sert ainsi plusieurs services, séparés par le nom.
+
+Comme le cluster tourne sur `clt-N`, `INGRESS_HOST` doit être un nom qui pointe vers cette machine depuis votre navigateur. Le plus simple est le service `sslip.io`, qui transforme une adresse IP en nom : `178-62-255-117.sslip.io` pointe vers `178.62.255.117`. La fonction d'aide le calcule à partir de l'adresse publique de la machine :
+
+```bash
+source helpers.sh
+echo $INGRESS_HOST
+```
+
+On obtient un nom de la forme :
+
+```text
+178-62-255-117.sslip.io
+```
+
+Les fonctions `app` et `jaeger` de `helpers.sh` s'en servent pour appeler l'ingress par `http://localhost:8080` avec le bon en-tête `Host`, ce qui évite de dépendre de la résolution DNS. Rechargez-les avec `source ~/tp03/helpers.sh` dans chaque nouveau terminal.
+
+### Déployer l'application et Jaeger
+
+Le dossier contient trois manifestes : `namespaces.yaml` (les espaces de noms `observability` et `demo`), `jaeger.yaml` (Jaeger avec stockage en mémoire) et `demo-app.yaml` (une application Node.js en deux services).
+
+L'application est écrite en JavaScript et tient dans un ConfigMap : les pods l'exécutent avec l'image `node:22.23.5-slim`, sans aucune bibliothèque OpenTelemetry dans un premier temps. Chaque service écoute sur le port `8080` dans son pod, derrière un Service Kubernetes sur le port 80.
 
 Les deux manifestes qui déclarent un Ingress contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom avant l'envoi au cluster :
 
@@ -84,11 +210,26 @@ kubectl -n observability rollout status deployment/jaeger
 kubectl -n demo rollout status deployment/frontend deployment/backend
 ```
 
+Regardez où sont les pods ; ils se répartissent sur les workers, pas sur le control-plane :
+
+```bash
+kubectl -n demo get pods -o wide
+kubectl -n observability get pods -o wide
+```
+
+On obtient par exemple :
+
+```text
+NAME                       READY   STATUS    RESTARTS   AGE   IP           NODE
+backend-6bc7bd9b8d-vtlgr   1/1     Running   0          7s    10.244.3.3   tp03-worker2
+frontend-7cd9b8f4d7-wj7pb  1/1     Running   0          7s    10.244.3.4   tp03-worker2
+```
+
 Contrôlez que l'application répond et que Jaeger est vide :
 
 ```bash
 app /api/orders
-jaeger /api/services
+jaeger /api/v3/services
 ```
 
 La première commande affiche une réponse JSON du frontend qui contient celle du backend :
@@ -97,9 +238,26 @@ La première commande affiche une réponse JSON du frontend qui contient celle d
 {"from":"frontend","backend":{"from":"backend","path":"/api/orders"}}
 ```
 
-La seconde affiche un objet dont la liste `data` est vide (ou `null`) : Jaeger répond, mais ne contient encore aucune trace, car l'application n'est pas instrumentée. Ouvrez aussi `http://jaeger.$INGRESS_HOST:8080` dans votre navigateur.
+La seconde affiche un objet dont la liste `services` ne contient que `jaeger` : Jaeger répond, mais ne contient encore aucune trace, car l'application n'est pas instrumentée. Ouvrez aussi `http://jaeger.$INGRESS_HOST:8080` dans votre navigateur.
 
 ## 2. Le collector en mode gateway
+
+Rappelons où se trouve chaque chose. Vous êtes toujours sur `clt-N`, seul poste depuis lequel vous travaillez : c'est là que tournent Docker, le cluster KinD et donc tous les pods. La gateway que vous allez installer sera un pod de l'espace de noms `observability`, sur l'un des workers. Jaeger, le backend, tourne pour l'instant dans le même cluster, dans le même espace de noms.
+
+```mermaid
+---
+title: Gateway dans le cluster, backend dans le cluster
+---
+flowchart LR
+  subgraph CLT["clt-N"]
+    subgraph K["cluster KinD"]
+      A[frontend] --> GW[otel-gateway]
+      GW -->|OTLP/HTTP<br/>jaeger.observability:4318| J[(jaeger)]
+      TG([pod telemetrygen]) --> GW
+    end
+  end
+  B([Navigateur]) -->|TCP/8080<br/>Host: jaeger.INGRESS_HOST| J
+```
 
 Une gateway est un collector central, déployé comme un Deployment, qui reçoit les données de plusieurs sources et les envoie au backend. Vous allez la déployer avec le chart Helm officiel.
 
@@ -262,13 +420,41 @@ k8s.node.name=<nom du worker>
 
 Comparez avec les traces `k8s-gateway` de la partie 2, qui n'ont pas ces attributs : l'enrichissement vient de l'agent.
 
+### Mettre le backend hors du cluster
+
+Jusqu'ici, Jaeger tourne dans le cluster, à côté de la gateway. Dans une vraie installation, le backend est ailleurs : il collecte les données de plusieurs clusters et survit à leur recréation. Le TP1 a justement installé une stack (collector, Jaeger, Prometheus, Grafana) sur `srv-N` ; on peut s'en servir comme backend.
+
+Est-ce que cela passe par l'ingress, des ports publiés ou des règles `iptables` ? Seulement dans un sens. Un pod peut **sortir** librement : ses paquets passent par le réseau Docker de `clt-N`, qui les traduit (NAT) puis par le VPC DigitalOcean. Depuis un pod du cluster, joindre `srv-N` sur son adresse privée fonctionne donc sans aucune règle supplémentaire, comme le montre l'essai ci-dessous (la stack du TP1 doit tourner sur `srv-N`) :
+
+```bash
+kubectl -n demo run nettest --restart=Never --image=curlimages/curl:8.11.0 --command -- sleep 120
+kubectl -n demo wait --for=condition=Ready pod/nettest --timeout=120s
+kubectl -n demo exec nettest -- curl -s -o /dev/null -w '%{http_code}\n' \
+  -X POST http://10.20.0.3:4318/v1/traces -H 'Content-Type: application/json' -d '{}'
+kubectl -n demo delete pod nettest
+```
+
+On obtient `200` : le pod a joint le collector de `srv-N` sur `TCP/4318`, sur le réseau privé du VPC.
+
+L'inverse, faire **entrer** du trafic depuis Internet vers un service du cluster, demande en revanche une publication de port : c'est exactement ce que fait `extraPortMappings` pour l'ingress, en publiant le port 80 du control-plane sur `TCP/8080` de `clt-N`. `iptables` n'est à écrire à la main dans aucun des deux cas : Docker et KinD posent les règles de NAT, et un `NodePort` suffit lorsqu'on veut exposer un service sur la machine sans passer par l'ingress.
+
+Pour brancher la gateway sur le backend externe, remplacez l'endpoint de l'exporter dans `gateway-values.yaml` par l'adresse privée de `srv-N` (obtenue avec `getent hosts $SRV_HOST`), par exemple :
+
+```yaml
+  exporters:
+    otlp_http/backend:
+      endpoint: http://10.20.0.3:4318
+```
+
+puis `helm upgrade --install` avec le nouveau fichier de valeurs. Les traces apparaissent alors dans le Jaeger de `srv-N`, consultable sur `http://$SRV_HOST:16686`.
+
 ## 4. L'Operator et l'auto-instrumentation
 
 L'OpenTelemetry Operator injecte un agent d'instrumentation dans les pods qui portent une annotation, au moment de leur création, sans modifier l'image de l'application.
 
 Pour Node.js, il ajoute un conteneur d'initialisation qui copie la bibliothèque d'instrumentation dans le pod, et il définit les variables d'environnement qui l'activent.
 
-Installez l'Operator. Le chart propose par défaut d'utiliser cert-manager pour les certificats de son webhook, ce qui n'est pas installé ici : les deux options suivantes demandent au chart de générer lui-même un certificat.
+Installez d'abord l'Operator. Le chart propose par défaut d'utiliser cert-manager pour les certificats de son webhook, ce qui n'est pas installé ici : les deux options `admissionWebhooks` demandent au chart de générer lui-même un certificat. L'attente `--wait` rend la main lorsque les pods de l'Operator sont prêts.
 
 ```bash
 helm upgrade --install operator open-telemetry/opentelemetry-operator \
@@ -276,10 +462,26 @@ helm upgrade --install operator open-telemetry/opentelemetry-operator \
   --set admissionWebhooks.certManager.enabled=false \
   --set admissionWebhooks.autoGenerateCert.enabled=true \
   --set manager.image.tag=0.162.0 --wait
+```
+
+Une fois l'Operator installé, contrôlez ce qu'il a ajouté au cluster. Un Operator étend l'API Kubernetes par des types de ressources (`CustomResourceDefinition`, ou CRD) : ici `Instrumentation` et `OpenTelemetryCollector`.
+
+```bash
 kubectl get crd | grep opentelemetry.io
 ```
 
-Les ressources `instrumentations.opentelemetry.io` et `opentelemetrycollectors.opentelemetry.io` apparaissent dans la liste. N'exécutez pas `helm test` sur ce chart : ses pods de test utilisent une image qui n'est pas épinglée.
+On obtient :
+
+```text
+instrumentations.opentelemetry.io          Namespaced   v1alpha1(storage)           2026-11-20T12:35:39Z
+opampbridges.opentelemetry.io              Namespaced   v1alpha1(storage)           2026-11-20T12:35:39Z
+opentelemetrycollectors.opentelemetry.io   Namespaced   v1alpha1,v1beta1(storage)   2026-11-20T12:35:40Z
+targetallocators.opentelemetry.io          Namespaced   v1alpha1(storage)           2026-11-20T12:35:39Z
+```
+
+Tant que l'Operator n'est pas installé, ces types n'existent pas et `kubectl apply` d'une ressource `Instrumentation` échoue sur un type inconnu. C'est pourquoi l'installation précède la suite de cette partie.
+
+**NB** : n'exécutez pas `helm test` sur ce chart, ses pods de test utilisent une image qui n'est pas épinglée.
 
 La ressource `Instrumentation` décrit comment instrumenter : où envoyer les données, quels propagators utiliser, quel échantillonnage appliquer et quelle image d'instrumentation injecter.
 
@@ -306,7 +508,7 @@ spec:
 EOF
 ```
 
-L'argument du sampler est entre guillemets : c'est une chaîne.
+L'argument du sampler est une proportion entre 0 et 1, écrite entre guillemets parce que c'est une chaîne : `"1"` signifie que toutes les traces sont conservées (100 %), `"0.1"` qu'une trace sur dix est échantillonnée. Avec `parentbased_traceidratio`, la décision prise à la racine d'une trace s'applique ensuite à tous ses spans, y compris ceux des services appelés.
 
 Appliquez-la, puis activez l'instrumentation des deux déploiements avec l'annotation `instrumentation.opentelemetry.io/inject-nodejs: "true"`.
 
@@ -380,3 +582,4 @@ Le cluster KinD lui-même peut être conservé : il sert aux TP suivants.
 - Ajoutez au chart de l'agent le preset `logsCollection` et observez les logs des conteneurs arriver dans le pipeline `logs`.
 - Ajoutez dans l'`Instrumentation` un attribut de ressource, par exemple `deployment.environment.name`, avec la section `resource.resourceAttributes`.
 - Déployez le collector avec la ressource `OpenTelemetryCollector` de l'Operator plutôt qu'avec Helm, et comparez les deux approches.
+- Placez le backend hors du cluster : voir l'encadré de la partie 3 sur les échanges entre le cluster et `srv-N`.

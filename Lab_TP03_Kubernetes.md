@@ -139,7 +139,7 @@ Chaque bloc de ce fichier a un rôle précis :
 - `nodes` : la liste des nœuds. Chaque ligne `- role: worker` ajoute un worker ; trois lignes donnent trois workers ;
 - `extraPortMappings` : le port 80 du conteneur control-plane est publié sur la machine `clt-N` en 8080. C'est par là qu'entrera le trafic du navigateur. Les ports 80 et 443 de la machine sont déjà pris par Caddy, qui publie le terminal web.
 
-Le cluster porte toujours le nom `cluster`, quel que soit le TP : une machine n'en héberge qu'un, et les TP Kubernetes suivants réutilisent le même. Affichez le script de lancement, puis exécutez-le :
+Le cluster porte toujours le nom `cluster`, quel que soit le TP : une machine n'en héberge qu'un, et chaque TP Kubernetes le recrée à l'identique. Affichez le script de lancement, puis exécutez-le :
 
 ```bash
 cat ~/opentelemetry-labs/config/cluster/cluster-create.sh
@@ -710,7 +710,16 @@ helm uninstall operator -n opentelemetry-operator-system
 kubectl delete namespace demo observability opentelemetry-operator-system
 ```
 
-Le cluster KinD lui-même peut être conservé : il sert aux TP suivants.
+Supprimez ensuite le cluster, qui rend la mémoire et libère le port `TCP/8080` de `clt-N` :
+
+```bash
+kind delete cluster --name cluster
+kind get clusters
+```
+
+La seconde commande n'affiche plus rien : plus aucun cluster ne tourne sur la machine.
+
+**NB** : le cluster ne se conserve pas d'un TP à l'autre. Un TP qui a besoin de Kubernetes le recrée avec `config/cluster/cluster-create.sh`, qui le reconstruit à l'identique et supprime au passage tout cluster existant. C'est ce qui garantit qu'une machine n'héberge qu'un cluster, et que le port `TCP/8080` reste disponible pour les TP qui n'en utilisent pas, comme le TP5.
 
 ## Extra
 

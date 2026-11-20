@@ -26,16 +26,24 @@
 
 ## Environnement
 
-Ce lab se déroule sur la VM `clt-N` (N est votre numéro de participant). Il n'y a pas de prérequis : aucun lab précédent n'est nécessaire.
+Ce lab se déroule sur la machine serveur `srv-N`, où N est votre numéro de participant.
+
+Il n'y a pas de prérequis : aucun lab précédent n'est nécessaire.
 
 ### Terminal web
 
 L'animateur vous communique en séance deux informations :
 
-- l'adresse de votre terminal web : `https://clt-N.<domaine>`, où `<domaine>` est le domaine de la session et N votre numéro de participant ;
+- l'adresse du terminal web de votre machine serveur, `https://srv-N.<domaine>` (la variable `SRV_HOST` contient ce nom) ;
 - le mot de passe du terminal web.
 
-Ouvrez cette adresse dans votre navigateur : un formulaire demande le nom d'utilisateur (`stagiaire`) et le mot de passe. Vous arrivez ensuite dans un shell directement en root, dans le home `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`. Vous pouvez copier-coller entre votre poste et le terminal web (Ctrl+Maj+C / Ctrl+Maj+V dans Firefox, Ctrl+Shift+C / Ctrl+Shift+V dans Chrome, ou clic droit selon le navigateur).
+Ouvrez cette adresse dans votre navigateur.
+
+Un formulaire demande le nom d'utilisateur `stagiaire` et le mot de passe.
+
+Vous arrivez ensuite dans un shell directement en root, dans le home `/root`. Le dépôt des labs y est déjà cloné, dans `/root/opentelemetry-labs`.
+
+Vous pouvez copier-coller entre votre poste et le terminal web : Ctrl+Maj+C et Ctrl+Maj+V dans Firefox, Ctrl+Shift+C et Ctrl+Shift+V dans Chrome, ou le clic droit selon le navigateur.
 
 ### Variables d'environnement
 
@@ -52,16 +60,20 @@ N clt-N.<domaine> srv-N.<domaine>
 ```
 
 - `LAB_ID` : votre numéro de participant ;
-- `CLT_HOST` : le nom de votre machine `clt-N` (`clt-N.<domaine>`) ;
-- `SRV_HOST` : le nom de la machine cible `srv-N` (`srv-N.<domaine>`).
+- `CLT_HOST` : le nom de la machine cliente, `clt-N.<domaine>` ;
+- `SRV_HOST` : le nom de la machine serveur, `srv-N.<domaine>`.
 
-Vous les utiliserez telles quelles dans les commandes des labs.
+Les deux machines jouent un rôle distinct : `clt-N` est le poste de travail d'où l'on pilote et d'où l'on envoie des requêtes, `srv-N` héberge ce que l'on observe.
+
+Ce TP porte sur le socle de collecte côté serveur : tout s'installe sur `srv-N`, et vous exécuterez toutes les commandes depuis son terminal web.
 
 ### Données de télémétrie
 
-Les données sont produites par `telemetrygen`, un générateur de télémétrie fourni avec le projet OpenTelemetry. Cela permet de se concentrer sur le Collector sans avoir besoin d'une application.
+Les données sont produites par [telemetrygen](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/cmd/telemetrygen), un générateur de télémétrie fourni avec le projet OpenTelemetry.
 
-Versions utilisées, vérifiées le 2026-11-18 :
+Il produit des traces, des métriques et des logs sans qu'il soit besoin d'écrire une application : on se concentre sur le **collector**.
+
+Versions utilisées dans ce lab :
 
 | Composant | Version |
 |---|---|
@@ -73,13 +85,42 @@ Versions utilisées, vérifiées le 2026-11-18 :
 
 **Note** : le tag de l'image du Collector est `0.165.0` alors que celui de `telemetrygen` est `v0.165.0` (avec le `v`).
 
-Les interfaces web sont accessibles depuis votre navigateur, sur votre machine `clt-N` (`$CLT_HOST`) :
+Les interfaces web sont accessibles depuis votre navigateur, sur la machine serveur (`$SRV_HOST`) :
 
-- Jaeger : `http://CLT_HOST:16686`
-- Prometheus : `http://CLT_HOST:9090`
-- Grafana : `http://CLT_HOST:3000` (compte `admin`, mot de passe `formation`)
+- Jaeger : `http://$SRV_HOST:16686` (TCP/16686)
+- Prometheus : `http://$SRV_HOST:9090` (TCP/9090)
+- Grafana : `http://$SRV_HOST:3000` (TCP/3000, compte `admin`, mot de passe `formation`)
 
 ## 1. Démarrer les backends
+
+Le schéma suivant représente cette architecture. Votre navigateur vient d'Internet et atteint directement les ports publiés par la machine serveur ; Jaeger, Prometheus, Grafana et le Collector tournent tous sur `srv-N`, dans des conteneurs reliés par le réseau Docker du compose :
+
+```mermaid
+---
+title: Stack du TP1 sur srv-N
+---
+flowchart LR
+  B([Navigateur<br/>depuis Internet])
+
+  subgraph S["Machine serveur srv-N"]
+    direction TB
+    J[(Jaeger)]
+    P[(Prometheus)]
+    G[(Grafana)]
+    O[[Collector]]
+    T([telemetrygen])
+    O -->|OTLP/HTTP<br/>TCP/4318| J
+    O -->|métriques<br/>TCP/8889| P
+    G -->|PromQL<br/>TCP/9090| P
+    T -->|OTLP/HTTP<br/>TCP/4318| O
+  end
+
+  B -->|TCP/16686| J
+  B -->|TCP/9090| P
+  B -->|TCP/3000| G
+```
+
+Le Collector et `telemetrygen` sont ajoutés [à la partie 2](#2-un-premier-collector) ; la partie 1 ne démarre que les trois backends.
 
 Le dépôt des labs est déjà cloné dans `~/opentelemetry-labs`.
 
@@ -114,24 +155,9 @@ scrape_configs:
 EOF
 ```
 
-Créez ensuite le fichier `compose.yaml`. Il décrit quatre services : Jaeger, Prometheus et Grafana, que vous démarrez maintenant, et le Collector, que vous démarrerez [à la partie 2](#2-un-premier-collector). Le Collector reçoit sa configuration en quatre fichiers, un par section, passés avec quatre options `--config` : il les fusionne en une seule configuration. Ce découpage permet d'ajouter des éléments au fil du lab sans réécrire un fichier entier.
+Créez ensuite le fichier `compose.yaml`. Il décrit quatre services : Jaeger, Prometheus et Grafana, que vous démarrez maintenant, et le Collector, que vous démarrerez [à la partie 2](#2-un-premier-collector).
 
-Le schéma suivant représente cette architecture : les services tournent dans des conteneurs reliés par le réseau Docker du compose, et chacun publie un port sur la machine `clt-N` pour l'accès depuis votre navigateur. Le Collector et le générateur de télémétrie `telemetrygen` sont ajoutés [à la partie 2](#2-un-premier-collector).
-
-```mermaid
----
-title: Stack du TP1
----
-flowchart LR
-  browser([Navigateur]) -->|16686| J[(Jaeger)]
-  browser -->|9090| P[(Prometheus)]
-  browser -->|3000| G[(Grafana)]
-  browser -->|4318| O[[Collector]]
-  O -->|traces, OTLP/HTTP| J
-  O -->|métriques, port 8889| P
-  G -->|requêtes PromQL| P
-  T([telemetrygen]) -->|OTLP/HTTP| O
-```
+Le Collector reçoit sa configuration en quatre fichiers, un par section, passés avec quatre options `--config` : il les fusionne en une seule configuration. Ce découpage permet d'ajouter des éléments au fil du lab sans réécrire un fichier entier.
 
 ```bash
 cat > compose.yaml <<'EOF'
@@ -231,7 +257,11 @@ Ouvrez aussi l'interface de Jaeger dans le navigateur : elle s'affiche avec une 
 
 ## 2. Un premier Collector
 
-Un Collector se décrit en YAML. Les receivers reçoivent les données, les exporters les envoient ailleurs, et la section `service.pipelines` relie les deux pour chaque type de signal. Un composant déclaré mais absent d'un pipeline n'est pas utilisé.
+Un **collector** se décrit en YAML.
+
+Les **receivers** reçoivent les données, les **exporters** les envoient ailleurs, et la section `service.pipelines` relie les deux pour chaque type de signal.
+
+Un composant déclaré mais absent d'un pipeline n'est pas utilisé.
 
 Le schéma suivant, tiré de [la documentation officielle du Collector](https://opentelemetry.io/docs/collector/architecture/), représente un pipeline type : les données entrent par un ou plusieurs receivers, traversent une série de processors, et le dernier processor les copie vers chaque exporter via un fan-out :
 
@@ -254,11 +284,27 @@ flowchart LR
   FO --> EN[[Exporter N]]
 ```
 
-Dans ce lab, le pipeline `traces` que vous allez construire plus loin ne compte qu'un receiver (`otlp`) et deux exporters (`debug` et `otlp_http/jaeger`) ; les processors arrivent [à la partie 3](#3-les-premiers-processors).
+Dans ce lab, le pipeline `traces` que vous allez construire plus loin ne compte qu'un **receiver** (`otlp`) et deux **exporters** (`debug` et `otlp_http/jaeger`) ; les processors arrivent [à la partie 3](#3-les-premiers-processors).
 
-Les quatre fichiers de configuration sont dans le dossier `otelcol/`. Pour retrouver les options de chaque composant, vous pouvez consulter son README dans le dépôt `opentelemetry-collector-contrib` (les exporters `debug` et `otlp_http` sont dans le dépôt `opentelemetry-collector`).
+Voici le pipeline que vous mettez en place dans cette partie : les traces entrent par le receiver `otlp`, puis partent vers deux exporters, l'un qui les écrit dans les logs du collector, l'autre qui les envoie à Jaeger.
 
-**NB** : le Collector tourne dans un conteneur, donc `localhost` désigne le conteneur lui-même et non Jaeger. C'est pourquoi l'exporter vers Jaeger utilise le nom du service du compose, `jaeger`.
+```mermaid
+---
+title: Pipeline traces de la partie 2
+---
+flowchart LR
+  T([telemetrygen]) -->|OTLP/HTTP<br/>TCP/4318| R[receiver otlp]
+  R --> D[exporter debug]
+  R --> J[exporter otlp_http/jaeger]
+  D --> L[(logs du collector)]
+  J -->|OTLP/HTTP<br/>TCP/4318| JA[(Jaeger)]
+```
+
+Les quatre fichiers de configuration sont dans le dossier `otelcol/`.
+
+Pour retrouver les options de chaque composant, consultez son README dans le dépôt [opentelemetry-collector-contrib](https://github.com/open-telemetry/opentelemetry-collector-contrib). Les exporters `debug` et `otlp_http` sont documentés dans le dépôt [opentelemetry-collector](https://github.com/open-telemetry/opentelemetry-collector).
+
+**NB** : le collector tourne dans un conteneur, donc `localhost` désigne le conteneur lui-même et non Jaeger. C'est pourquoi l'exporter vers Jaeger utilise le nom du service du compose, `jaeger`.
 
 Créez d'abord le receiver `otlp`, qui accepte le HTTP (port 4318) sur toutes les interfaces du conteneur :
 
@@ -273,7 +319,11 @@ receivers:
 EOF
 ```
 
-**NB** : ce lab n'utilise que le transport HTTP de l'OTLP. Il est plus facile à déboguer : une simple requête `curl` suffit, comme [dans l'Extra](#extra), et il passe mieux à travers les proxys. Le transport gRPC reste le plus fréquent dans les configurations de production et dans les exemples de la documentation : vous le croiserez souvent (`protocols: grpc` sur le receiver, exporter `otlp_grpc`).
+**NB** : ce lab n'utilise que le transport HTTP de l'OTLP.
+
+Il est plus facile à déboguer : une simple requête `curl` suffit, comme [dans l'Extra](#extra), et il passe mieux à travers les proxys.
+
+Le transport gRPC reste le plus fréquent dans les configurations de production et dans les exemples de la documentation : vous le croiserez souvent (`protocols: grpc` sur le receiver, exporter `otlp_grpc`).
 
 Créez les deux exporters : `debug` avec le niveau de détail `detailed`, qui écrit les données reçues dans les logs du Collector, et `otlp_http/jaeger`, qui envoie vers le service `jaeger`, port 4318, en HTTP sans TLS.
 
@@ -287,7 +337,9 @@ exporters:
 EOF
 ```
 
-**NB** : `otlp_http` est le type actuel de l'exporter, l'ancien nom `otlphttp` n'est conservé que comme alias déprécié. Vous le rencontrerez encore dans beaucoup de configurations trouvées sur Internet. Le nom après la barre oblique (`jaeger`) distingue plusieurs instances d'un même type de composant.
+**NB** : `otlp_http` est le type actuel de l'exporter, l'ancien nom `otlphttp` n'est conservé que comme alias déprécié. Vous le rencontrerez encore dans beaucoup de configurations trouvées sur Internet.
+
+Le nom après la barre oblique (`jaeger`) distingue plusieurs instances d'un même type de composant.
 
 Le fichier des processors reste vide pour l'instant (vous le remplirez [à la partie 3](#3-les-premiers-processors)), mais le Collector attend quand même les quatre fichiers :
 
@@ -397,7 +449,23 @@ EOF
 
 **Note** : les guillemets simples autour de `'EOF'` empêchent le shell de remplacer lui-même `${env:LAB_ID}`, qui est destiné au Collector.
 
-Placez ces processors dans le pipeline `traces`. Le `memory_limiter` passe en premier, pour refuser des données avant de les traiter si la mémoire est saturée, et le `batch` passe en dernier, pour grouper des données déjà traitées (le README du `batch` processor donne cette recommandation) :
+Placez ces processors dans le pipeline `traces`. Le `memory_limiter` passe en premier, pour refuser des données avant de les traiter si la mémoire est saturée, et le `batch` passe en dernier, pour grouper des données déjà traitées (le README du `batch` processor donne cette recommandation).
+
+Le pipeline mis en place dans cette partie comporte donc trois processors entre le receiver et les exporters :
+
+```mermaid
+---
+title: Pipeline traces de la partie 3
+---
+flowchart LR
+  T([telemetrygen]) -->|OTLP/HTTP<br/>TCP/4318| R[receiver otlp]
+  R --> M[processor memory_limiter]
+  M --> Res[processor resource]
+  Res --> B[processor batch]
+  B --> D[exporter debug]
+  B --> J[exporter otlp_http/jaeger]
+  J -->|OTLP/HTTP<br/>TCP/4318| JA[(Jaeger)]
+```
 
 ```bash
 cat > otelcol/service.yaml <<'EOF'
@@ -451,7 +519,11 @@ docker compose restart otelcol
 
 ## 4. Supprimer du bruit avec le filter
 
-Les sondes de santé (`/health`, `/ready`) produisent beaucoup de spans qui n'apportent rien à l'analyse. Le processor `filter` supprime les données qui vérifient une condition écrite en OTTL, le langage de transformation d'OpenTelemetry. Si une des conditions de la liste est vraie, la donnée est supprimée.
+Les sondes de santé (`/health`, `/ready`) produisent beaucoup de spans qui n'apportent rien à l'analyse.
+
+Le processor `filter` supprime les données qui vérifient une condition écrite en OTTL, le langage de transformation d'OpenTelemetry.
+
+Si une des conditions de la liste est vraie, la donnée est supprimée.
 
 **NB** : dans cette version du Collector, le processor `filter` attend une liste `trace_conditions`, et les chemins OTTL commencent par le nom du contexte, par exemple `span.attributes["clé"]`.
 
@@ -509,7 +581,11 @@ On obtient :
 
 ## 5. Masquer et normaliser avec transform et OTTL
 
-Le processor `transform` modifie les données avec des instructions OTTL. Pour chaque signal, il attend une liste d'instructions (`trace_statements` pour les traces) exécutées dans l'ordre. Une instruction peut se terminer par une clause `where`, qui limite son application aux données qui vérifient la condition.
+Le processor `transform` modifie les données avec des instructions OTTL.
+
+Pour chaque signal, il attend une liste d'instructions (`trace_statements` pour les traces) exécutées dans l'ordre.
+
+Une instruction peut se terminer par une clause `where`, qui limite son application aux données qui vérifient la condition.
 
 Envoyez d'abord des données qui contiennent une adresse e-mail et un chemin avec un identifiant :
 
@@ -528,7 +604,11 @@ Ajoutez un processor `transform/normalize` qui règle ces trois points :
 2. remplacer, dans `url.path`, chaque segment numérique par `{id}` ;
 3. renommer les spans appelés `lets-go` en `<méthode> <chemin>`, avec la valeur de `http.request.method` suivie d'une espace et de celle de `url.path`.
 
-Les fonctions utilisées (`replace_pattern`, `set`, `Concat`) sont décrites dans la référence des fonctions OTTL (dépôt `opentelemetry-collector-contrib`, dossier `pkg/ottl/ottlfuncs`). Chaque instruction se termine par une clause `where` qui vérifie que l'attribut utilisé existe (`!= nil`), pour que les données qui ne portent pas ces attributs ne produisent pas d'erreur. L'ordre compte pour la troisième instruction : le nom doit être construit avec le chemin déjà normalisé.
+Les fonctions utilisées (`replace_pattern`, `set`, `Concat`) sont décrites dans [la référence des fonctions OTTL](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/pkg/ottl/ottlfuncs).
+
+Chaque instruction se termine par une clause `where` qui vérifie que l'attribut utilisé existe (`!= nil`), pour que les données qui ne portent pas ces attributs ne produisent pas d'erreur.
+
+L'ordre compte pour la troisième instruction : le nom doit être construit avec le chemin déjà normalisé.
 
 ```bash
 cat >> otelcol/processors.yaml <<'EOF'
@@ -576,7 +656,11 @@ Le span enfant `okey-dokey-0` n'est pas renommé, car la clause `where` ne vise 
 
 ## 6. Les métriques vers Prometheus et Grafana
 
-Le même Collector peut traiter plusieurs types de signaux. Prometheus récupère les métriques en interrogeant un point d'accès, il faut donc que le Collector en expose un. Le fichier `prometheus/prometheus.yml` créé [à la partie 1](#1-démarrer-les-backends) contient déjà un job qui interroge `otelcol:8889`.
+Le même collector peut traiter plusieurs types de signaux.
+
+Prometheus récupère les métriques en interrogeant un point d'accès, il faut donc que le collector en expose un.
+
+Le fichier `prometheus/prometheus.yml` créé [à la partie 1](#1-démarrer-les-backends) contient déjà un job qui interroge `otelcol:8889`.
 
 Ajoutez un exporter `prometheus` à la fin de `exporters.yaml`. Il écoute sur `0.0.0.0:8889` et convertit les attributs de ressource en labels (option `resource_to_telemetry_conversion`) :
 
@@ -613,7 +697,9 @@ Validez et redémarrez le Collector :
 docker compose restart otelcol
 ```
 
-Dans Prometheus, page Status puis Targets (`http://CLT_HOST:9090/targets`), la cible `otelcol:8889` doit être `UP`. Envoyez ensuite des métriques pendant trente secondes :
+Dans Prometheus, page Status puis Targets (`http://$SRV_HOST:9090/targets`), la cible `otelcol:8889` doit être `UP`.
+
+Envoyez ensuite des métriques pendant trente secondes :
 
 ```bash
 ./tg.sh metrics --duration 30s --rate 1 --service billing --otlp-metric-name tp1_demo

@@ -56,21 +56,18 @@ spec:
       port: 4318
       targetPort: otlp-http
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
   name: jaeger
   namespace: observability
 spec:
-  ingressClassName: nginx
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - "jaeger.INGRESS_HOST"
   rules:
-    - host: jaeger.INGRESS_HOST
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: jaeger
-                port:
-                  name: ui
+    - backendRefs:
+        - name: jaeger
+          port: 16686

@@ -2,7 +2,7 @@
 # Supprime toutes les machines ephemeres du TP4 (tous groupes confondus).
 #
 # Usage :
-#   ./tools/tp04-vms-destroy.sh
+#   ./animateur/scripts/tp04-vms-destroy.sh
 #
 # Prerequis : doctl authentifie dans le compte DigitalOcean.
 set -euo pipefail

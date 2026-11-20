@@ -1,11 +1,11 @@
 #!/bin/bash
-# Cree les machines ephemeres TP4 pour chaque groupe d'apprenants.
+# Cree les machines ephemeres TP4 pour chaque groupe de participants.
 #
 # Usage :
-#   ./tools/tp04-vms-create.sh [nombre_de_groupes]
+#   ./animateur/scripts/tp04-vms-create.sh [nombre_de_groupes]
 #
 # Exemple pour 3 groupes (0, 1 et 2) :
-#   ./tools/tp04-vms-create.sh 3
+#   ./animateur/scripts/tp04-vms-create.sh 3
 #
 # Par defaut, cree les machines pour 1 groupe (groupe 0).
 # Prerequis : doctl authentifie dans le compte DigitalOcean.
@@ -31,7 +31,7 @@ if [ -z "$KEY_ID" ]; then
 fi
 echo "Cle SSH detectee (ID : $KEY_ID)."
 
-echo "Creation de 2 machines ephemeres (srv2 et srv3) pour $NB_GROUPES groupe(s)..."
+echo "Creation de 3 machines ephemeres Debian (srv2, srv3, srv4) pour $NB_GROUPES groupe(s)..."
 
 for ((g=0; g<NB_GROUPES; g++)); do
   VPC_NAME="vpc-$g"
@@ -44,11 +44,11 @@ for ((g=0; g<NB_GROUPES; g++)); do
 
   read -r VPC_ID VPC_REGION <<< "$VPC_INFO"
 
-  echo "Groupe $g : creation de srv2-$g et srv3-$g dans $VPC_NAME ($VPC_REGION)..."
-  doctl compute droplet create "srv2-$g" "srv3-$g" \
+  echo "Groupe $g : creation de srv2-$g, srv3-$g et srv4-$g (Debian 13) dans $VPC_NAME ($VPC_REGION)..."
+  doctl compute droplet create "srv2-$g" "srv3-$g" "srv4-$g" \
     --region "$VPC_REGION" \
     --size "s-1vcpu-1gb" \
-    --image "ubuntu-24-04-x64" \
+    --image "debian-13-x64" \
     --vpc-uuid "$VPC_ID" \
     --ssh-keys "$KEY_ID" \
     --tag-names "tp04-ephemere,tp04-groupe-$g" \
@@ -66,4 +66,4 @@ done
 
 echo ""
 echo "Pour supprimer ces machines a la fin du TP :"
-echo "  ./tools/tp04-vms-destroy.sh"
+echo "  ./animateur/scripts/tp04-vms-destroy.sh"

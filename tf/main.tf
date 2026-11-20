@@ -26,7 +26,7 @@ variable "root_password" {
   sensitive = true
 }
 
-# Mot de passe du webshell (ttyd), communiqué aux stagiaires.
+# Mot de passe du webshell (ttyd), communiqué aux participants.
 variable "webshell_password" {
   type      = string
   sensitive = true

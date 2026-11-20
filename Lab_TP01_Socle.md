@@ -1,11 +1,11 @@
-# Lab TP1 : Socle, backends et premier Collector
+# Lab TP1 : Socle, backends et premier collector
 
 # Objectifs
 
 À la fin du lab, vous saurez :
 
 - démarrer une stack de backends (Jaeger, Prometheus, Grafana) avec Docker Compose et vérifier que chaque service répond ;
-- écrire la configuration d'un Collector : un receiver OTLP, un exporter vers Jaeger et un pipeline de traces ;
+- écrire la configuration d'un collector : un receiver OTLP, un exporter vers Jaeger et un pipeline de traces ;
 - ajouter les processors `memory_limiter`, `batch` et `resource`, et expliquer pourquoi leur ordre compte ;
 - supprimer des spans avec le processor `filter`, puis masquer et normaliser des attributs avec le processor `transform` et le langage OTTL ;
 - envoyer des métriques vers Prometheus et les consulter dans Grafana.
@@ -14,7 +14,7 @@
 
 - [Environnement](#environnement)
 - [1. Démarrer les backends](#1-démarrer-les-backends)
-- [2. Un premier Collector](#2-un-premier-collector)
+- [2. Un premier collector](#2-un-premier-collector)
 - [3. Les premiers processors](#3-les-premiers-processors)
 - [4. Supprimer du bruit avec le filter](#4-supprimer-du-bruit-avec-le-filter)
 - [5. Masquer et normaliser avec transform et OTTL](#5-masquer-et-normaliser-avec-transform-et-ottl)
@@ -77,13 +77,13 @@ Versions utilisées dans ce lab :
 
 | Composant | Version |
 |---|---|
-| OpenTelemetry Collector (distribution `otelcol-contrib`) | 0.165.0 |
+| collector OpenTelemetry (distribution `otelcol-contrib`) | 0.165.0 |
 | telemetrygen | v0.165.0 |
 | Jaeger | 2.23.0 |
 | Prometheus | v3.16.0 |
 | Grafana | 13.3.1 |
 
-**Note** : le tag de l'image du Collector est `0.165.0` alors que celui de `telemetrygen` est `v0.165.0` (avec le `v`).
+**Note** : le tag de l'image du collector est `0.165.0` alors que celui de `telemetrygen` est `v0.165.0` (avec le `v`).
 
 Les interfaces web sont accessibles depuis votre navigateur, sur la machine serveur (`$SRV_HOST`) :
 
@@ -93,7 +93,7 @@ Les interfaces web sont accessibles depuis votre navigateur, sur la machine serv
 
 ## 1. Démarrer les backends
 
-Le schéma suivant représente cette architecture. Votre navigateur vient d'Internet et atteint directement les ports publiés par la machine serveur ; Jaeger, Prometheus, Grafana et le Collector tournent tous sur `srv-N`, dans des conteneurs reliés par le réseau Docker du compose :
+Le schéma suivant représente cette architecture. Votre navigateur vient d'Internet et atteint directement les ports publiés par la machine serveur ; Jaeger, Prometheus, Grafana et le collector tournent tous sur `srv-N`, dans des conteneurs reliés par le réseau Docker du compose :
 
 ```mermaid
 ---
@@ -107,7 +107,7 @@ flowchart LR
     J[(Jaeger)]
     P[(Prometheus)]
     G[(Grafana)]
-    O[[Collector]]
+    O[[collector]]
     T([telemetrygen])
     O -->|OTLP/HTTP<br/>TCP/4318| J
     O -->|métriques<br/>TCP/8889| P
@@ -120,7 +120,7 @@ flowchart LR
   B -->|TCP/3000| G
 ```
 
-Le Collector et `telemetrygen` sont ajoutés [à la partie 2](#2-un-premier-collector) ; la partie 1 ne démarre que les trois backends.
+Le collector et `telemetrygen` sont ajoutés [à la partie 2](#2-un-premier-collector) ; la partie 1 ne démarre que les trois backends.
 
 Le dépôt des labs est déjà cloné dans `~/opentelemetry-labs`.
 
@@ -139,7 +139,7 @@ On obtient :
 check.sh  grafana  tg.sh
 ```
 
-Créez le fichier `prometheus/prometheus.yml`. Prometheus va interroger toutes les 5 secondes un point d'accès que le Collector exposera [à la partie 6](#6-les-métriques-vers-prometheus-et-grafana) :
+Créez le fichier `prometheus/prometheus.yml`. Prometheus va interroger toutes les 5 secondes un point d'accès que le collector exposera [à la partie 6](#6-les-métriques-vers-prometheus-et-grafana) :
 
 ```bash
 mkdir -p prometheus
@@ -148,16 +148,16 @@ global:
   scrape_interval: 5s
 
 scrape_configs:
-  # Métriques exposées par l'exporter prometheus du Collector (partie 6).
+  # Métriques exposées par l'exporter prometheus du collector (partie 6).
   - job_name: otelcol-exporter
     static_configs:
       - targets: ["otelcol:8889"]
 EOF
 ```
 
-Créez ensuite le fichier `compose.yaml`. Il décrit quatre services : Jaeger, Prometheus et Grafana, que vous démarrez maintenant, et le Collector, que vous démarrerez [à la partie 2](#2-un-premier-collector).
+Créez ensuite le fichier `compose.yaml`. Il décrit quatre services : Jaeger, Prometheus et Grafana, que vous démarrez maintenant, et le collector, que vous démarrerez [à la partie 2](#2-un-premier-collector).
 
-Le Collector reçoit sa configuration en quatre fichiers, un par section, passés avec quatre options `--config` : il les fusionne en une seule configuration. Ce découpage permet d'ajouter des éléments au fil du lab sans réécrire un fichier entier.
+Le collector reçoit sa configuration en quatre fichiers, un par section, passés avec quatre options `--config` : il les fusionne en une seule configuration. Ce découpage permet d'ajouter des éléments au fil du lab sans réécrire un fichier entier.
 
 ```bash
 cat > compose.yaml <<'EOF'
@@ -255,7 +255,7 @@ Prometheus
 
 Ouvrez aussi l'interface de Jaeger dans le navigateur : elle s'affiche avec une liste de services vide.
 
-## 2. Un premier Collector
+## 2. Un premier collector
 
 Un **collector** se décrit en YAML.
 
@@ -263,7 +263,7 @@ Les **receivers** reçoivent les données, les **exporters** les envoient ailleu
 
 Un composant déclaré mais absent d'un pipeline n'est pas utilisé.
 
-Le schéma suivant, tiré de [la documentation officielle du Collector](https://opentelemetry.io/docs/collector/architecture/), représente un pipeline type : les données entrent par un ou plusieurs receivers, traversent une série de processors, et le dernier processor les copie vers chaque exporter via un fan-out :
+Le schéma suivant, tiré de [la documentation officielle du collector](https://opentelemetry.io/docs/collector/architecture/), représente un pipeline type : les données entrent par un ou plusieurs receivers, traversent une série de processors, et le dernier processor les copie vers chaque exporter via un fan-out :
 
 ```mermaid
 ---
@@ -325,7 +325,7 @@ Il est plus facile à déboguer : une simple requête `curl` suffit, comme [dans
 
 Le transport gRPC reste le plus fréquent dans les configurations de production et dans les exemples de la documentation : vous le croiserez souvent (`protocols: grpc` sur le receiver, exporter `otlp_grpc`).
 
-Créez les deux exporters : `debug` avec le niveau de détail `detailed`, qui écrit les données reçues dans les logs du Collector, et `otlp_http/jaeger`, qui envoie vers le service `jaeger`, port 4318, en HTTP sans TLS.
+Créez les deux exporters : `debug` avec le niveau de détail `detailed`, qui écrit les données reçues dans les logs du collector, et `otlp_http/jaeger`, qui envoie vers le service `jaeger`, port 4318, en HTTP sans TLS.
 
 ```bash
 cat > otelcol/exporters.yaml <<'EOF'
@@ -341,7 +341,7 @@ EOF
 
 Le nom qui suit le `/` (`jaeger`) distingue plusieurs instances d'un même type de composant.
 
-Le fichier des processors reste vide pour l'instant (vous le remplirez [à la partie 3](#3-les-premiers-processors)), mais le Collector attend quand même les quatre fichiers :
+Le fichier des processors reste vide pour l'instant (vous le remplirez [à la partie 3](#3-les-premiers-processors)), mais le collector attend quand même les quatre fichiers :
 
 ```bash
 cat > otelcol/processors.yaml <<'EOF'
@@ -361,7 +361,7 @@ service:
 EOF
 ```
 
-Validez la configuration avant de démarrer. Le script `check.sh` lance la commande `validate` du Collector sur les quatre fichiers :
+Validez la configuration avant de démarrer. Le script `check.sh` lance la commande `validate` du collector sur les quatre fichiers :
 
 ```bash
 ./check.sh
@@ -369,7 +369,7 @@ Validez la configuration avant de démarrer. Le script `check.sh` lance la comma
 
 La commande n'affiche rien et se termine sans erreur si la configuration est correcte. En cas d'erreur, le message cite le fichier et la clé en cause.
 
-Démarrez le Collector et lisez ses logs :
+Démarrez le collector et lisez ses logs :
 
 ```bash
 docker compose up -d otelcol
@@ -382,13 +382,13 @@ Le dernier message doit se terminer par :
 Everything is ready. Begin running and processing data.
 ```
 
-Envoyez cinq traces avec `./tg.sh`, un petit script qui lance `telemetrygen` vers le Collector :
+Envoyez cinq traces avec `./tg.sh`, un petit script qui lance `telemetrygen` vers le collector :
 
 ```bash
 ./tg.sh traces --traces 5 --service demo
 ```
 
-Chaque trace contient deux spans : un span parent `lets-go` et un span enfant `okey-dokey-0`. Le Collector a donc affiché dix spans :
+Chaque trace contient deux spans : un span parent `lets-go` et un span enfant `okey-dokey-0`. Le collector a donc affiché dix spans :
 
 ```bash
 docker compose logs otelcol | grep -c 'Span #'
@@ -415,7 +415,7 @@ On obtient :
 
 Dans l'interface de Jaeger, choisissez le service `demo` puis cliquez sur Find Traces : vous retrouvez les cinq traces.
 
-**Note** : dans la commande `docker compose logs`, une erreur de type `connection refused` vers Jaeger signifie que l'adresse de l'exporter n'utilise pas le nom du service (`jaeger`). Si `telemetrygen` ne se connecte pas, vérifiez que le Collector tourne (`docker compose ps`) et que son receiver écoute sur `0.0.0.0`.
+**Note** : dans la commande `docker compose logs`, une erreur de type `connection refused` vers Jaeger signifie que l'adresse de l'exporter n'utilise pas le nom du service (`jaeger`). Si `telemetrygen` ne se connecte pas, vérifiez que le collector tourne (`docker compose ps`) et que son receiver écoute sur `0.0.0.0`.
 
 ## 3. Les premiers processors
 
@@ -423,8 +423,8 @@ Les processors transforment les données entre le receiver et les exporters. Ils
 
 Réécrivez `processors.yaml` avec trois processors :
 
-- `memory_limiter` protège le Collector d'un dépassement de mémoire : vérification toutes les secondes, limite de 256 MiB, marge de pic de 64 MiB ;
-- `resource` ajoute deux attributs de ressource à toutes les données : `deployment.environment.name` avec la valeur `tp1`, et `lab.id` avec votre numéro. Le compose transmet déjà `LAB_ID` au conteneur : la syntaxe `${env:LAB_ID}` du Collector lit cette variable ;
+- `memory_limiter` protège le collector d'un dépassement de mémoire : vérification toutes les secondes, limite de 256 MiB, marge de pic de 64 MiB ;
+- `resource` ajoute deux attributs de ressource à toutes les données : `deployment.environment.name` avec la valeur `tp1`, et `lab.id` avec votre numéro. Le compose transmet déjà `LAB_ID` au conteneur : la syntaxe `${env:LAB_ID}` du collector lit cette variable ;
 - `batch` regroupe les données avant l'envoi, avec `timeout: 2s`.
 
 ```bash
@@ -447,7 +447,7 @@ processors:
 EOF
 ```
 
-**Note** : les guillemets simples autour de `'EOF'` empêchent le shell de remplacer lui-même `${env:LAB_ID}`, qui est destiné au Collector.
+**Note** : les guillemets simples autour de `'EOF'` empêchent le shell de remplacer lui-même `${env:LAB_ID}`, qui est destiné au collector.
 
 Placez ces processors dans le pipeline `traces`. Le `memory_limiter` passe en premier, pour refuser des données avant de les traiter si la mémoire est saturée, et le `batch` passe en dernier, pour grouper des données déjà traitées (le README du `batch` processor donne cette recommandation).
 
@@ -478,7 +478,7 @@ service:
 EOF
 ```
 
-Validez, redémarrez le Collector et envoyez des traces avec un nouveau nom de service :
+Validez, redémarrez le collector et envoyez des traces avec un nouveau nom de service :
 
 ```bash
 ./check.sh
@@ -499,7 +499,7 @@ On obtient votre numéro de participant, la valeur de `$LAB_ID` (par exemple `3`
 3
 ```
 
-Observez maintenant l'effet du `batch`. Passez `timeout` à `15s` avec `sed`, redémarrez le Collector, puis envoyez trois traces avec le service `shop-delay` :
+Observez maintenant l'effet du `batch`. Passez `timeout` à `15s` avec `sed`, redémarrez le collector, puis envoyez trois traces avec le service `shop-delay` :
 
 ```bash
 sed -i 's/timeout: 2s/timeout: 15s/' otelcol/processors.yaml
@@ -525,7 +525,7 @@ Le processor `filter` supprime les données qui vérifient une condition écrite
 
 Si une des conditions de la liste est vraie, la donnée est supprimée.
 
-**NB** : dans cette version du Collector, le processor `filter` attend une liste `trace_conditions`, et les chemins OTTL commencent par le nom du contexte, par exemple `span.attributes["clé"]`.
+**NB** : dans cette version du collector, le processor `filter` attend une liste `trace_conditions`, et les chemins OTTL commencent par le nom du contexte, par exemple `span.attributes["clé"]`.
 
 Ajoutez un processor `filter/healthchecks` à la fin de `processors.yaml`, sans toucher au reste, avec `>>` à la place de `>`. Les deux espaces devant le nom du processor sont nécessaires : l'entrée doit avoir la même indentation que les processors déjà présents.
 
@@ -552,7 +552,7 @@ service:
 EOF
 ```
 
-Validez, redémarrez le Collector, puis envoyez deux séries de traces, l'une qui doit être filtrée et l'autre non :
+Validez, redémarrez le collector, puis envoyez deux séries de traces, l'une qui doit être filtrée et l'autre non :
 
 ```bash
 ./check.sh
@@ -634,7 +634,7 @@ service:
 EOF
 ```
 
-Validez, redémarrez le Collector et renvoyez la même commande `./tg.sh` que ci-dessus. L'exporter `debug` affiche dans les logs du Collector les spans tels qu'ils sont après le traitement. Dans Jaeger, contrôlez les noms de spans et les attributs :
+Validez, redémarrez le collector et renvoyez la même commande `./tg.sh` que ci-dessus. L'exporter `debug` affiche dans les logs du collector les spans tels qu'ils sont après le traitement. Dans Jaeger, contrôlez les noms de spans et les attributs :
 
 ```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=accounts&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
@@ -690,7 +690,7 @@ service:
 EOF
 ```
 
-Validez et redémarrez le Collector :
+Validez et redémarrez le collector :
 
 ```bash
 ./check.sh
@@ -787,7 +787,7 @@ Dans Jaeger, les spans du service `errdemo` portent l'attribut `slo.violation` �
 
 ### 3. Ajouter le signal logs
 
-Le Collector traite aussi les logs, avec le même receiver et les mêmes processors. Ajoutez un pipeline `logs` au fichier `service.yaml` :
+Le collector traite aussi les logs, avec le même receiver et les mêmes processors. Ajoutez un pipeline `logs` au fichier `service.yaml` :
 
 ```bash
 cat > otelcol/service.yaml <<'EOF'
@@ -816,4 +816,4 @@ docker compose restart otelcol
 ./tg.sh logs --logs 3 --service appli
 ```
 
-L'exporter `debug` affiche trois blocs `LogRecord #` dans les logs du Collector. Aucun backend ne stocke les logs ici : c'est le rôle des TP suivants.
+L'exporter `debug` affiche trois blocs `LogRecord #` dans les logs du collector. Aucun backend ne stocke les logs ici : c'est le rôle des TP suivants.

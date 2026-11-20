@@ -146,6 +146,20 @@ tp03-worker2         Ready    <none>          1m    v1.37.0
 tp03-worker3         Ready    <none>          1m    v1.37.0
 ```
 
+**NB** : une machine n'héberge qu'un seul cluster à la fois. Le port 8080 publié vers la machine est unique, et chaque nœud consomme de la mémoire et des ressources système (les instances `inotify`) ; un second cluster échoue au démarrage ou déstabilise le premier. Si un cluster `tp03` existe déjà, par exemple d'une séance précédente, `kind` refuse de le recréer :
+
+```text
+ERROR: failed to create cluster: node(s) already exist for a cluster with the name "tp03"
+```
+
+Listez les clusters présents avec `kind get clusters`, puis supprimez-le avant de recommencer :
+
+```bash
+kind delete cluster --name tp03
+```
+
+**Attention** : recréer le cluster efface tout ce qu'il contenait, releases Helm, espaces de noms et données comprises. Un cluster neuf se reconstruit en rejouant ce lab depuis le début.
+
 **NB** : KinD préfixe le nom de chaque nœud avec celui du cluster, fixé ici par la ligne `name: tp03` : les nœuds s'appellent donc `tp03-control-plane`, `tp03-worker`, `tp03-worker2` et `tp03-worker3`. Sans cette option, le cluster prendrait le nom par défaut `kind` et les nœuds s'appelleraient `kind-control-plane`, `kind-worker`, etc. Retenez le nom du nœud control-plane : c'est lui qui détient le port publié, et le fichier de valeurs de Traefik le cite.
 
 ### Installer la Gateway API

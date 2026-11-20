@@ -26,7 +26,7 @@
 
 Ce lab se déroule sur deux machines : `clt-N`, la machine cliente qui porte Ansible et les backends, et `srv-N`, la machine serveur où le **collector** est installé (N est votre numéro de participant).
 
-Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`.
+Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`. Sauf mention contraire, toutes les commandes du TP se lancent sur `clt-N` : celles qui visent `srv-N` passent par Ansible, qui s'y connecte en SSH.
 
 Ansible, Docker et SSH sont installés sur `clt-N`. La clé SSH de `root` permet de se joindre à `srv-N` sans mot de passe, et le compte dispose de `sudo` sans mot de passe sur cette machine.
 
@@ -44,6 +44,41 @@ Versions utilisées dans ce lab :
 Les interfaces web sont accessibles depuis votre navigateur, sur `clt-N` (`$CLT_HOST`) : Jaeger sur `http://$CLT_HOST:16686` (TCP/16686) et Prometheus sur `http://$CLT_HOST:9090` (TCP/9090).
 
 ## 1. Préparer le poste de contrôle
+
+Deux machines entrent en jeu, et il faut savoir où se trouve quoi avant de taper la première commande. Le schéma suivant les montre, avec les deux moteurs logiciels : le moteur Ansible, installé sur `clt-N`, qui exécute les playbooks, et le moteur Docker, qui héberge les backends sur `clt-N`.
+
+```mermaid
+---
+title: TP4, où se trouve chaque composant
+---
+flowchart LR
+  subgraph CLT["Machine cliente clt-N"]
+    direction TB
+    AN["Ansible, moteur d'exécution<br/>nœud de contrôle : inventaire,<br/>playbook, template"]
+    DK["Docker, moteur"]
+    J[("Jaeger<br/>TCP/16686 et 4317")]
+    P[("Prometheus<br/>TCP/9090")]
+    DK --- J
+    DK --- P
+  end
+
+  subgraph SRV["Machine serveur srv-N"]
+    direction TB
+    SY["systemd<br/>service otelcol-contrib"]
+    CO["collector<br/>config générée par Jinja2<br/>OTLP 4317 et 4318"]
+    SY --- CO
+  end
+
+  AN ==>|SSH, become| SY
+  CO ==> J
+  CO ==> P
+```
+
+Trois points à retenir de ce schéma :
+
+- **le moteur Ansible ne tourne que sur `clt-N`** : c'est le nœud de contrôle. Il se connecte en SSH à `srv-N` et y exécute les tâches ; aucun playbook n'est lancé sur le serveur, et `srv-N` n'a pas besoin d'Ansible ;
+- **le collector tourne sur `srv-N`**, comme service `otelcol-contrib` géré par systemd. C'est la seule machine qui reçoit le paquet `.deb` et la configuration générée ;
+- **les backends tournent sur `clt-N`**, dans Docker : Jaeger écoute sur `TCP/16686` (interface web) et `TCP/4317` (OTLP des traces), Prometheus sur `TCP/9090`. Le collector de `srv-N` leur envoie ses données par le réseau privé du VPC.
 
 Copiez les fichiers fournis dans un dossier de travail, puis démarrez les deux backends sur `clt-N` :
 
@@ -80,6 +115,8 @@ curl -s http://localhost:9090/-/ready
 La première commande affiche `SUCCESS` et `"ping": "pong"`. La deuxième indique `"ansible_distribution": "Ubuntu"` et la version `24.04`. La troisième affiche `absent` : le **collector** n'est pas encore installé. La dernière affiche `Prometheus Server is Ready.`.
 
 ## 2. Installer le **collector**
+
+Toutes les commandes de cette partie se lancent dans le terminal de `clt-N`, dans `~/tp04`. Les commandes `ansible` et `ansible-playbook` agissent ensuite sur `srv-N` par SSH : c'est là que le paquet est téléchargé, installé, et que le service démarre. Rien n'est tapé sur `srv-N`, qui n'a ni Ansible ni le dépôt des labs.
 
 Écrivez le playbook `playbook.yml`, qui s'exécute sur le groupe `otel` avec les droits administrateur (`become: true`).
 
@@ -223,18 +260,76 @@ service:
 EOF
 ```
 
-Avant de déployer, produisez le rendu en local et vérifiez-le avec la commande `validate` du **collector**, lancée dans un conteneur :
+Avant de déployer, produisez d'abord le rendu du template sur `clt-N`, sans toucher au serveur. Le module `ansible.builtin.template` est exécuté sur `localhost`, avec les variables de `group_vars/all.yml` :
 
 ```bash
 ansible localhost -m ansible.builtin.template \
   -a "src=templates/config.yaml.j2 dest=/tmp/config-preview.yaml" -e @group_vars/all.yml
 cat /tmp/config-preview.yaml
+```
+
+On obtient la configuration telle que le serveur la recevra, sans aucune accolade Jinja2. En tête le commentaire de gestion Ansible, plus bas les attributs produits par la boucle :
+
+```yaml
+#
+# Ansible managed
+#
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  resource:
+    attributes:
+      - key: deployment.environment.name
+        value: "tp4"
+        action: upsert
+      - key: lab.id
+        value: "<votre numéro>"
+        action: upsert
+  batch:
+    timeout: 2s
+
+exporters:
+  otlp_grpc/jaeger:
+    endpoint: <CLT_HOST>:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp_grpc/jaeger]
+```
+
+`<CLT_HOST>` vaut la valeur de la variable `CLT_HOST` de `clt-N` et `<votre numéro>` celle de `LAB_ID`. Avec la valeur par défaut `otelcol_hostmetrics_enabled: false`, le rendu ne contient aucune mention de `hostmetrics`.
+
+Vérifiez maintenant cette configuration avec la commande `validate` du **collector**, dans un conteneur lancé sur `clt-N` :
+
+```bash
 docker run --rm -v /tmp/config-preview.yaml:/config.yaml:ro \
   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0 \
   validate --config=/config.yaml
+echo "code retour : $?"
 ```
 
-Le fichier affiché ne contient aucune accolade Jinja2 et la commande `validate` ne renvoie rien. Avec la valeur par défaut `otelcol_hostmetrics_enabled: false`, le rendu ne contient aucune mention de `hostmetrics`.
+La commande `validate` n'affiche rien, et le code retour vaut 0 :
+
+```text
+code retour : 0
+```
+
+Pas de message veut dire configuration valide. Au premier lancement, Docker montre d'abord le téléchargement de l'image, puis revient au silence. Le conteneur ne sert qu'à valider : il ne tourne pas, et `--rm` le supprime à la sortie.
 
 Complétez maintenant le playbook avec une dernière tâche, ajoutée à la fin du fichier. Elle utilise le module `ansible.builtin.template` avec les paramètres suivants :
 

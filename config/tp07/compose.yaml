@@ -1,0 +1,64 @@
+name: tp07
+
+x-app: &app
+  build: ./app
+  image: tp07-app:local
+  environment:
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otelcol:4318
+    INVENTORY_URL: http://inventory:8081
+  volumes:
+    # Le code est monté depuis le dossier app/ : après une modification,
+    # docker compose restart shop inventory suffit, sans reconstruire l'image.
+    - ./app:/app:ro
+  restart: unless-stopped
+
+services:
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    ports:
+      - "16686:16686"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.7.10
+    restart: unless-stopped
+
+  otelcol:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otelcol:/etc/otelcol:ro
+    depends_on:
+      - jaeger
+      - loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-formation}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - jaeger
+      - loki
+    restart: unless-stopped
+
+  shop:
+    <<: *app
+    command: ["python", "shop.py"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - otelcol
+      - inventory
+
+  inventory:
+    <<: *app
+    command: ["python", "inventory.py"]
+    depends_on:
+      - otelcol

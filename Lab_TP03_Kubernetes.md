@@ -197,6 +197,8 @@ helm install traefik traefik/traefik -n traefik --create-namespace \
   -f traefik-values.yaml --wait
 ```
 
+**NB** : le chart affiche un rappel sur les CRD Gateway API, alors qu'elles viennent d'être installées. C'est un message du chart, sans conséquence ici.
+
 Chaque réglage a son rôle :
 
 - `deployment.kind: DaemonSet` : un pod par nœud, comme une brique d'infrastructure ;

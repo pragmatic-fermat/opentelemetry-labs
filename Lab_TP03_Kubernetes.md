@@ -109,7 +109,7 @@ cd ~/tp03
 cat > kind-config.yaml <<'EOF'
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: tp03
+name: cluster
 nodes:
   - role: control-plane
     extraPortMappings:
@@ -128,39 +128,36 @@ Chaque bloc de ce fichier a un rôle précis :
 - `nodes` : la liste des nœuds. Chaque ligne `- role: worker` ajoute un worker ; trois lignes donnent trois workers ;
 - `extraPortMappings` : le port 80 du conteneur control-plane est publié sur la machine `clt-N` en 8080. C'est par là qu'entrera le trafic du navigateur. Les ports 80 et 443 de la machine sont déjà pris par Caddy, qui publie le terminal web.
 
-Créez le cluster :
+Le cluster s'appelle toujours `cluster`, quel que soit le TP : une machine n'en héberge qu'un, et les TP Kubernetes suivants réutilisent le même. Le dossier contient pour cela `cluster-create.sh`, que vous venez de copier : il supprime le cluster précédent s'il existe, puis crée le nouveau.
 
 ```bash
-kind create cluster --config kind-config.yaml
-kubectl wait --for=condition=Ready nodes --all --timeout=180s
-kubectl get nodes
+cat cluster-create.sh
+bash cluster-create.sh
 ```
+
+Le script tient en trois étapes : `kind get clusters` liste ce qui tourne, `kind delete cluster --name cluster` supprime le cluster s'il est déjà là, et `kind create cluster --config kind-config.yaml` le recrée avec le fichier ci-dessus.
+
+**Attention** : le script efface le cluster précédent, releases Helm, espaces de noms et données comprises. Un cluster neuf se reconstruit en rejouant le TP depuis le début.
 
 On obtient quatre nœuds `Ready` :
 
 ```text
-NAME                 STATUS   ROLES           AGE   VERSION
-tp03-control-plane   Ready    control-plane   2m    v1.37.0
-tp03-worker          Ready    <none>          1m    v1.37.0
-tp03-worker2         Ready    <none>          1m    v1.37.0
-tp03-worker3         Ready    <none>          1m    v1.37.0
+NAME                    STATUS   ROLES           AGE   VERSION
+cluster-control-plane   Ready    control-plane   2m    v1.37.0
+cluster-worker          Ready    <none>          1m    v1.37.0
+cluster-worker2         Ready    <none>          1m    v1.37.0
+cluster-worker3         Ready    <none>          1m    v1.37.0
 ```
 
-**NB** : une machine n'héberge qu'un seul cluster à la fois. Le port 8080 publié vers la machine est unique, et chaque nœud consomme de la mémoire et des ressources système (les instances `inotify`) ; un second cluster échoue au démarrage ou déstabilise le premier. Si un cluster `tp03` existe déjà, par exemple d'une séance précédente, `kind` refuse de le recréer :
+**NB** : une machine n'héberge qu'un seul cluster à la fois. Le port 8080 publié vers la machine est unique, et chaque nœud consomme de la mémoire et des ressources système (les instances `inotify`) ; un second cluster échoue au démarrage ou déstabilise le premier. C'est pourquoi tous les TP Kubernetes utilisent le même nom de cluster, et pourquoi `kind` refuse d'en créer un deuxième avec ce nom :
 
 ```text
-ERROR: failed to create cluster: node(s) already exist for a cluster with the name "tp03"
+ERROR: failed to create cluster: node(s) already exist for a cluster with the name "cluster"
 ```
 
-Listez les clusters présents avec `kind get clusters`, puis supprimez-le avant de recommencer :
+Pour supprimer le cluster à la main : `kind get clusters` pour voir ce qui tourne, puis `kind delete cluster --name cluster`.
 
-```bash
-kind delete cluster --name tp03
-```
-
-**Attention** : recréer le cluster efface tout ce qu'il contenait, releases Helm, espaces de noms et données comprises. Un cluster neuf se reconstruit en rejouant ce lab depuis le début.
-
-**NB** : KinD préfixe le nom de chaque nœud avec celui du cluster, fixé ici par la ligne `name: tp03` : les nœuds s'appellent donc `tp03-control-plane`, `tp03-worker`, `tp03-worker2` et `tp03-worker3`. Sans cette option, le cluster prendrait le nom par défaut `kind` et les nœuds s'appelleraient `kind-control-plane`, `kind-worker`, etc. Retenez le nom du nœud control-plane : c'est lui qui détient le port publié, et le fichier de valeurs de Traefik le cite.
+**NB** : KinD préfixe le nom de chaque nœud avec celui du cluster, fixé ici par la ligne `name: cluster` : les nœuds s'appellent donc `cluster-control-plane`, `cluster-worker`, `cluster-worker2` et `cluster-worker3`. Sans cette option, le cluster prendrait le nom par défaut `kind` et les nœuds s'appelleraient `kind-control-plane`, `kind-worker`, etc. Retenez le nom du nœud control-plane : c'est lui qui détient le port publié, et le fichier de valeurs de Traefik le cite.
 
 ### Installer la Gateway API
 
@@ -229,14 +226,14 @@ kubectl -n traefik get pods -o wide
 kubectl get gatewayclass,gateway -n traefik
 ```
 
-Le DaemonSet a quatre pods, dont un sur `tp03-control-plane` :
+Le DaemonSet a quatre pods, dont un sur `cluster-control-plane` :
 
 ```text
 NAME            READY   STATUS    RESTARTS   AGE   NODE
-traefik-5j8wn   1/1     Running   0          25s   tp03-worker3
-traefik-dmkz8   1/1     Running   0          25s   tp03-worker
-traefik-g2xrf   1/1     Running   0          25s   tp03-control-plane
-traefik-ppmgk   1/1     Running   0          25s   tp03-worker2
+traefik-5j8wn   1/1     Running   0          25s   cluster-worker3
+traefik-dmkz8   1/1     Running   0          25s   cluster-worker
+traefik-g2xrf   1/1     Running   0          25s   cluster-control-plane
+traefik-ppmgk   1/1     Running   0          25s   cluster-worker2
 ```
 
 Le chart a créé la `GatewayClass traefik` et la `Gateway traefik-gateway` :
@@ -297,8 +294,8 @@ On obtient par exemple :
 
 ```text
 NAME                       READY   STATUS    RESTARTS   AGE   IP           NODE
-backend-6bc7bd9b8d-vtlgr   1/1     Running   0          7s    10.244.3.3   tp03-worker2
-frontend-7cd9b8f4d7-wj7pb  1/1     Running   0          7s    10.244.3.4   tp03-worker2
+backend-6bc7bd9b8d-vtlgr   1/1     Running   0          7s    10.244.3.3   cluster-worker2
+frontend-7cd9b8f4d7-wj7pb  1/1     Running   0          7s    10.244.3.4   cluster-worker2
 ```
 
 Contrôlez que l'application répond et que Jaeger est vide :
@@ -499,7 +496,7 @@ La commande affiche notamment :
 
 ```text
 k8s.namespace.name=demo
-k8s.node.name=tp03-worker2
+k8s.node.name=cluster-worker2
 k8s.pod.name=tg-agent
 ```
 

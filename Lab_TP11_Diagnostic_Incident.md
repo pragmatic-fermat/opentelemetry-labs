@@ -40,7 +40,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 À compléter. Points couverts :
 
 - Déployer la Demo à une version épinglée.
-- Repérer les services, le Collector et les backends.
+- Repérer les services, le **collector** et les backends.
 
 ## 2. Premier incident : une panne franche
 

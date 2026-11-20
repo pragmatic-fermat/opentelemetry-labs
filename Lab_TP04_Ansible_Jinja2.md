@@ -1,12 +1,12 @@
-# Lab TP4 : Ansible et Jinja2, déploiement du collector sur VM
+# Lab TP4 : Ansible et Jinja2, déploiement du **collector** sur VM
 
 # Objectifs
 
 À la fin du lab, vous saurez :
 
 - décrire un serveur dans un inventaire Ansible et vérifier la connexion avec un module ad hoc ;
-- écrire un playbook idempotent qui installe le collector à partir d'un paquet `.deb`, dont le téléchargement est vérifié par une somme de contrôle ;
-- générer la configuration du collector avec un template Jinja2 (variables, boucle, condition) ;
+- écrire un playbook idempotent qui installe le **collector** à partir d'un paquet `.deb`, dont le téléchargement est vérifié par une somme de contrôle ;
+- générer la configuration du **collector** avec un template Jinja2 (variables, boucle, condition) ;
 - modifier la configuration par les variables, la comparer avant déploiement avec `--check --diff`, et protéger le service d'une configuration invalide avec le paramètre `validate` ;
 - vérifier que les traces et les métriques de `srv-N` arrivent dans Jaeger et dans Prometheus.
 
@@ -14,7 +14,7 @@
 
 - [Environnement](#environnement)
 - [1. Préparer le poste de contrôle](#1-préparer-le-poste-de-contrôle)
-- [2. Installer le collector](#2-installer-le-collector)
+- [2. Installer le **collector**](#2-installer-le-collector)
 - [3. Générer la configuration avec Jinja2](#3-générer-la-configuration-avec-jinja2)
 - [4. Modifier la configuration](#4-modifier-la-configuration)
 - [Cleanup](#cleanup)
@@ -24,19 +24,19 @@
 
 ## Environnement
 
-Ce lab se déroule sur deux machines : `clt-N`, la machine cliente qui porte Ansible et les backends, et `srv-N`, la machine serveur où le collector est installé (N est votre numéro de participant).
+Ce lab se déroule sur deux machines : `clt-N`, la machine cliente qui porte Ansible et les backends, et `srv-N`, la machine serveur où le **collector** est installé (N est votre numéro de participant).
 
 Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`.
 
 Ansible, Docker et SSH sont installés sur `clt-N`. La clé SSH de `root` permet de se joindre à `srv-N` sans mot de passe, et le compte dispose de `sudo` sans mot de passe sur cette machine.
 
-Le TP1 est conseillé : il présente les **receiver**, **processor** et **exporter** du collector, qui ne sont pas réexpliqués ici. Les commandes utilisent les noms complets des modules (`ansible.builtin.…`), qui fonctionnent avec toutes les versions récentes d'Ansible.
+Le TP1 est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici. Les commandes utilisent les noms complets des modules (`ansible.builtin.…`), qui fonctionnent avec toutes les versions récentes d'Ansible.
 
 Versions utilisées dans ce lab :
 
 | Composant | Version |
 |---|---|
-| collector OpenTelemetry (paquet `otelcol-contrib`) | 0.165.0 |
+| **collector** OpenTelemetry (paquet `otelcol-contrib`) | 0.165.0 |
 | telemetrygen | v0.165.0 |
 | Jaeger | 2.23.0 |
 | Prometheus | v3.16.0 |
@@ -54,7 +54,7 @@ cd ~/tp04
 docker compose up -d
 ```
 
-Lisez `group_vars/all.yml` avec `cat`. Il contient les variables utilisées dans tout le TP : la version du collector, les sommes de contrôle des paquets, l'adresse de `clt-N` (lue dans la variable d'environnement `CLT_HOST` de la machine qui lance Ansible) et les réglages du collector.
+Lisez `group_vars/all.yml` avec `cat`. Il contient les variables utilisées dans tout le TP : la version du **collector**, les sommes de contrôle des paquets, l'adresse de `clt-N` (lue dans la variable d'environnement `CLT_HOST` de la machine qui lance Ansible) et les réglages du **collector**.
 
 Le fichier `ansible.cfg` indique à Ansible où se trouve l'inventaire.
 
@@ -77,9 +77,9 @@ ansible otel -m ansible.builtin.shell -a 'command -v otelcol-contrib || echo abs
 curl -s http://localhost:9090/-/ready
 ```
 
-La première commande affiche `SUCCESS` et `"ping": "pong"`. La deuxième indique `"ansible_distribution": "Ubuntu"` et la version `24.04`. La troisième affiche `absent` : le collector n'est pas encore installé. La dernière affiche `Prometheus Server is Ready.`.
+La première commande affiche `SUCCESS` et `"ping": "pong"`. La deuxième indique `"ansible_distribution": "Ubuntu"` et la version `24.04`. La troisième affiche `absent` : le **collector** n'est pas encore installé. La dernière affiche `Prometheus Server is Ready.`.
 
-## 2. Installer le collector
+## 2. Installer le **collector**
 
 Écrivez le playbook `playbook.yml`, qui s'exécute sur le groupe `otel` avec les droits administrateur (`become: true`).
 
@@ -151,7 +151,7 @@ Jinja2 est le langage de template d'Ansible. Trois constructions suffisent pour 
 
 Ansible supprime le saut de ligne qui suit une balise `{% ... %}` : les balises peuvent donc commencer en colonne 0 sans laisser de ligne vide dans le résultat.
 
-Le template produit une configuration de collector qui contient :
+Le template produit une configuration de **collector** qui contient :
 
 - une première ligne de commentaire `{{ ansible_managed | comment }}`, qui indique que le fichier est géré par Ansible ;
 - un receiver `otlp` (gRPC et HTTP) qui écoute sur toutes les interfaces, ports 4317 et 4318 ;
@@ -223,7 +223,7 @@ service:
 EOF
 ```
 
-Avant de déployer, produisez le rendu en local et vérifiez-le avec la commande `validate` du collector, lancée dans un conteneur :
+Avant de déployer, produisez le rendu en local et vérifiez-le avec la commande `validate` du **collector**, lancée dans un conteneur :
 
 ```bash
 ansible localhost -m ansible.builtin.template \
@@ -259,7 +259,7 @@ cat >> playbook.yml <<'EOF'
 EOF
 ```
 
-Déployez, puis envoyez cinq traces à travers le collector de `srv-N`, avec `telemetrygen` lancé depuis `clt-N` :
+Déployez, puis envoyez cinq traces à travers le **collector** de `srv-N`, avec `telemetrygen` lancé depuis `clt-N` :
 
 ```bash
 ansible-playbook playbook.yml
@@ -330,7 +330,7 @@ Relancez le playbook une troisième fois, et lisez le résumé :
 ansible-playbook playbook.yml | grep -A2 'PLAY RECAP'
 ```
 
-Rien n'a changé (`changed=0`) et le handler n'a pas redémarré le service : un redémarrage inutile aurait interrompu le collector sans raison.
+Rien n'a changé (`changed=0`) et le handler n'a pas redémarré le service : un redémarrage inutile aurait interrompu le **collector** sans raison.
 
 Simulez enfin une erreur de saisie. La valeur de `otelcol_batch_timeout` est invalide, et le paramètre `validate` doit empêcher son déploiement :
 
@@ -342,7 +342,7 @@ EOF
 ansible-playbook playbook.yml
 ```
 
-Le playbook échoue sur la tâche `Déployer la configuration`, avec un message du collector qui cite `timeout` et une durée invalide. Le serveur n'a pas été touché : le service tourne toujours avec la dernière configuration valide.
+Le playbook échoue sur la tâche `Déployer la configuration`, avec un message du **collector** qui cite `timeout` et une durée invalide. Le serveur n'a pas été touché : le service tourne toujours avec la dernière configuration valide.
 
 ```bash
 ansible otel -a 'systemctl is-active otelcol-contrib'
@@ -364,7 +364,7 @@ Le résumé indique `failed=0` et `changed=0` : le fichier déployé correspond 
 
 ## Cleanup
 
-Arrêtez les backends du poste de contrôle, puis désinstallez le collector du serveur :
+Arrêtez les backends du poste de contrôle, puis désinstallez le **collector** du serveur :
 
 ```bash
 cd ~/tp04

@@ -139,7 +139,7 @@ On obtient :
 check.sh  grafana  tg.sh
 ```
 
-Créez le fichier `prometheus/prometheus.yml`. Prometheus va interroger toutes les 5 secondes un point d'accès que le collector exposera [à la partie 6](#6-les-métriques-vers-prometheus-et-grafana) :
+Créez le fichier `prometheus/prometheus.yml`. Prometheus va interroger toutes les 5 secondes un endpoint que le collector exposera [à la partie 6](#6-les-métriques-vers-prometheus-et-grafana) :
 
 ```bash
 mkdir -p prometheus
@@ -587,7 +587,9 @@ Pour chaque signal, il attend une liste d'instructions (`trace_statements` pour 
 
 Une instruction peut se terminer par une clause `where`, qui limite son application aux données qui vérifient la condition.
 
-Envoyez d'abord des données qui contiennent une adresse e-mail et un chemin avec un identifiant :
+### L'état de départ
+
+Envoyez des données qui contiennent une adresse e-mail et un chemin avec un identifiant :
 
 ```bash
 ./tg.sh traces --traces 5 --service accounts \
@@ -596,7 +598,36 @@ Envoyez d'abord des données qui contiennent une adresse e-mail et un chemin ave
   --telemetry-attributes 'user.email="alice@example.com"'
 ```
 
-Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), ouvrez une de ces traces : l'adresse e-mail apparaît en clair, ce qui pose un problème de confidentialité, et chaque identifiant de commande crée un chemin distinct, ce qui rend les regroupements impossibles.
+Contrôlez ce que Jaeger a reçu, avec la même commande que celle qui servira à vérifier le résultat à la fin de cette partie :
+
+```bash
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=accounts&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[].name' \
+  | sort
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=accounts&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[] | .attributes[]? | select(.key=="user.email" or .key=="url.path") | "\(.key)=\(.value.stringValue)"' \
+  | sort -u
+```
+
+La première commande affiche les noms de spans, triés :
+
+```text
+lets-go
+okey-dokey-0
+```
+
+La seconde affiche les attributs qui nous intéressent, sans doublon :
+
+```text
+url.path=/api/orders/48151
+user.email=alice@example.com
+```
+
+Ce sont les données brutes, telles que l'application les a produites.
+
+Deux problèmes apparaissent. L'adresse e-mail est en clair, ce qui pose une question de confidentialité, et chaque identifiant de commande crée un chemin différent (`/api/orders/48151`, puis `/api/orders/48152`), ce qui rend les regroupements impossibles.
+
+### Le processor transform
 
 Ajoutez un processor `transform/normalize` qui règle ces trois points :
 
@@ -604,11 +635,13 @@ Ajoutez un processor `transform/normalize` qui règle ces trois points :
 2. remplacer, dans `url.path`, chaque segment numérique par `{id}` ;
 3. renommer les spans appelés `lets-go` en `<méthode> <chemin>`, avec la valeur de `http.request.method` suivie d'une espace et de celle de `url.path`.
 
-Les fonctions utilisées (`replace_pattern`, `set`, `Concat`) sont décrites dans [la référence des fonctions OTTL](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/pkg/ottl/ottlfuncs).
+Les fonctions utilisées sont documentées dans la référence OTTL : [replace_pattern](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/ottlfuncs/README.md#replace_pattern), [set](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/ottlfuncs/README.md#set) et [Concat](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/ottl/ottlfuncs/README.md#concat).
 
 Chaque instruction se termine par une clause `where` qui vérifie que l'attribut utilisé existe (`!= nil`), pour que les données qui ne portent pas ces attributs ne produisent pas d'erreur.
 
 L'ordre compte pour la troisième instruction : le nom doit être construit avec le chemin déjà normalisé.
+
+La dernière instruction est longue ; elle est coupée sur deux lignes. YAML recolle les deux lignes avec une espace, le collector reçoit donc une seule instruction :
 
 ```bash
 cat >> otelcol/processors.yaml <<'EOF'
@@ -617,7 +650,8 @@ cat >> otelcol/processors.yaml <<'EOF'
     trace_statements:
       - replace_pattern(span.attributes["user.email"], "^[^@]+", "***") where span.attributes["user.email"] != nil
       - replace_pattern(span.attributes["url.path"], "/[0-9]+", "/{id}") where span.attributes["url.path"] != nil
-      - set(span.name, Concat([span.attributes["http.request.method"], span.attributes["url.path"]], " ")) where span.name == "lets-go" and span.attributes["http.request.method"] != nil and span.attributes["url.path"] != nil
+      - set(span.name, Concat([span.attributes["http.request.method"], span.attributes["url.path"]], " "))
+        where span.name == "lets-go" and span.attributes["http.request.method"] != nil and span.attributes["url.path"] != nil
 EOF
 ```
 
@@ -634,33 +668,81 @@ service:
 EOF
 ```
 
-Validez, redémarrez le collector et renvoyez la même commande `./tg.sh` que ci-dessus. L'exporter `debug` affiche dans les logs du collector les spans tels qu'ils sont après le traitement. Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), contrôlez les noms de spans et les attributs :
+### Vérifier le résultat
+
+Validez, redémarrez le collector et renvoyez les mêmes données :
+
+```bash
+./check.sh
+docker compose restart otelcol
+./tg.sh traces --traces 5 --service accounts \
+  --telemetry-attributes 'http.request.method="GET"' \
+  --telemetry-attributes 'url.path="/api/orders/48151"' \
+  --telemetry-attributes 'user.email="alice@example.com"'
+```
+
+L'exporter `debug` affiche dans les logs du collector les spans tels qu'ils sont après le traitement. Contrôlez ce que Jaeger a reçu, avec les mêmes commandes qu'au début de la partie :
 
 ```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=accounts&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
-  | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[].name'
+  | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[].name' \
+  | sort
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=accounts&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
-  | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[] | .attributes[]? | select(.key=="user.email" or .key=="url.path") | "\(.key)=\(.value.stringValue)"'
+  | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[] | .attributes[]? | select(.key=="user.email" or .key=="url.path") | "\(.key)=\(.value.stringValue)"' \
+  | sort -u
 ```
 
-On obtient, dans un ordre quelconque :
+Les noms de spans deviennent :
 
 ```text
-okey-dokey-0
 GET /api/orders/{id}
+okey-dokey-0
+```
+
+Et les attributs :
+
+```text
 url.path=/api/orders/{id}
 user.email=***@example.com
 ```
 
-Le span enfant `okey-dokey-0` n'est pas renommé, car la clause `where` ne vise que les spans appelés `lets-go`.
+Comparé à l'état de départ, on obtient exactement ce qui était visé : l'adresse e-mail est masquée, le chemin porte `{id}` au lieu de l'identifiant réel, et le span racine s'appelle `GET /api/orders/{id}` pour toutes les commandes du même endpoint. Le span enfant `okey-dokey-0` reste inchangé, car la clause `where` ne vise que les spans appelés `lets-go`.
+
+Les deux commandes se terminent par `sort` et `sort -u` parce que Jaeger renvoie les spans et les attributs dans l'ordre où ils ont été reçus, sans garantie de tri : sans ces tris, la même vérification donnerait des lignes dans un ordre différent d'une exécution à l'autre.
 
 ## 6. Les métriques vers Prometheus et Grafana
 
 Le même collector peut traiter plusieurs types de signaux.
 
-Prometheus récupère les métriques en interrogeant un point d'accès, il faut donc que le collector en expose un.
+Prometheus récupère les métriques en interrogeant un endpoint, il faut donc que le collector en expose un.
 
-Le fichier `prometheus/prometheus.yml` créé [à la partie 1](#1-démarrer-les-backends) contient déjà un job qui interroge `otelcol:8889`.
+Le fichier `prometheus/prometheus.yml` créé [à la partie 1](#1-démarrer-les-backends) contient déjà un job qui interroge l'endpoint `otelcol:8889`.
+
+Prometheus tourne donc depuis la partie 1 et tente déjà de récupérer cet endpoint toutes les 5 secondes. Jusqu'ici la cible était simplement `DOWN`, faute d'exporter `prometheus` en face : c'est ce que cette partie ajoute.
+
+Le schéma de cette partie se limite donc au collector et aux deux backends qui échangent avec lui :
+
+```mermaid
+---
+title: Métriques de la partie 6
+---
+flowchart LR
+  B([Navigateur<br/>depuis Internet])
+  T([telemetrygen]) -->|OTLP/HTTP<br/>TCP/4318| RM
+
+  subgraph C["collector"]
+    direction TB
+    RM[receiver otlp] --> ML[processor memory_limiter]
+    ML --> RS[processor resource]
+    RS --> BA[processor batch]
+    BA --> PE[exporter prometheus]
+  end
+
+  PE -->|expose les métriques<br/>TCP/8889| P[(Prometheus)]
+  P -->|PromQL<br/>TCP/9090| G[(Grafana)]
+  B -->|TCP/9090| P
+  B -->|TCP/3000| G
+```
 
 Ajoutez un exporter `prometheus` à la fin de `exporters.yaml`. Il écoute sur `0.0.0.0:8889` et convertit les attributs de ressource en labels (option `resource_to_telemetry_conversion`) :
 
@@ -697,7 +779,9 @@ Validez et redémarrez le collector :
 docker compose restart otelcol
 ```
 
-Dans Prometheus, page Status puis Targets (`http://$SRV_HOST:9090/targets`), la cible `otelcol:8889` doit être `UP`.
+Ouvrez l'interface de Prometheus (`http://$SRV_HOST:9090`), déroulez le menu **Status** en haut de page puis cliquez sur **Targets** (adresse directe : `http://$SRV_HOST:9090/targets`).
+
+La cible `otelcol:8889`, qui était `DOWN` jusqu'ici, doit maintenant être `UP` : Prometheus atteint l'endpoint exposé par le collector.
 
 Envoyez ensuite des métriques pendant trente secondes :
 
@@ -737,7 +821,9 @@ Les traces de Jaeger étant stockées en mémoire, elles disparaissent avec le c
 
 ### 1. Un span sans SDK
 
-Le SDK d'une application ne fait rien d'autre que fabriquer du JSON (ou du Protobuf) et le poster sur le port du receiver. Envoyons un span directement avec `curl`, et vérifions qu'il arrive dans Jaeger :
+Tout ce lab a produit des données avec `telemetrygen`, qui embarque un SDK : il crée les spans, leurs identifiants et leurs horodatages, puis les envoie en OTLP. Une application instrumentée fait exactement la même chose.
+
+Sans SDK, il faut donc fabriquer ce que le SDK fabriquerait : un document JSON conforme au format OTLP, avec un identifiant de trace, un identifiant de span et des horodatages, puis le poster sur le receiver. C'est ce que nous faisons ici avec `curl`, pour voir ce qu'il y a derrière l'instrumentation :
 
 ```bash
 NOW=$(date +%s%N)
@@ -760,7 +846,9 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces
 }'
 ```
 
-On obtient `200`. Retrouvez le span dans l'interface de Jaeger (`http://$SRV_HOST:16686`, service `manuel`, traces sur la dernière heure) : un seul span, sans client, sans instrumentation, seulement un POST JSON.
+On obtient `200`. Retrouvez le span dans l'interface de Jaeger (`http://$SRV_HOST:16686`, service `manuel`, traces sur la dernière heure).
+
+Le span existe pourtant, sans SDK, sans bibliothèque, sans instrumentation : seulement un POST JSON. C'est exactement ce qu'un SDK envoie, à ceci près qu'il le fait pour chaque opération de l'application.
 
 ### 2. Marquer les erreurs en OTTL
 
@@ -775,7 +863,20 @@ cat >> otelcol/processors.yaml <<'EOF'
 EOF
 ```
 
-Ajoutez `transform/slo` dans le pipeline `traces` (après `transform/normalize`), validez, redémarrez, puis envoyez des traces en erreur :
+Ajoutez `transform/slo` dans le pipeline `traces`, après `transform/normalize`. Le fichier est réécrit en entier :
+
+```bash
+cat > otelcol/service.yaml <<'EOF'
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, filter/healthchecks, transform/normalize, transform/slo, batch]
+      exporters: [debug, otlp_http/jaeger]
+EOF
+```
+
+Validez, redémarrez, puis envoyez des traces en erreur :
 
 ```bash
 ./check.sh
@@ -816,4 +917,18 @@ docker compose restart otelcol
 ./tg.sh logs --logs 3 --service appli
 ```
 
-L'exporter `debug` affiche trois blocs `LogRecord #` dans les logs du collector. Aucun backend ne stocke les logs ici : c'est le rôle des TP suivants.
+Affichez les logs du collector pour vérifier que les trois enregistrements sont arrivés :
+
+```bash
+docker compose logs otelcol | grep 'LogRecord #'
+```
+
+On obtient trois lignes, une par log envoyé :
+
+```text
+otelcol-1  | LogRecord #0
+otelcol-1  | LogRecord #1
+otelcol-1  | LogRecord #2
+```
+
+Aucun backend ne stocke les logs ici : c'est le rôle des TP suivants.

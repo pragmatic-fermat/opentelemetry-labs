@@ -115,6 +115,8 @@ nodejs 22.23.5
 
 **NB** : la version est fixée dans `/root/.tool-versions`, le fichier que `asdf` lit. Les dépôts de l'application en contiennent un qui demande Node.js 19.3.0, version qui n'est plus maintenue et que l'auto-instrumentation actuelle refuse : c'est pour cela que la version est fixée au niveau de la machine, avant le clone.
 
+**NB** : pourquoi Node.js 22 plutôt qu'une version plus récente ? Le plancher vient de l'auto-instrumentation, pas de l'application. Les paquets OpenTelemetry actuels exigent Node.js 22.15 ou plus : les versions 18 et 20 ne sont plus prises en charge, et l'injection des bibliothèques n'y est plus garantie. Les versions 22 et 24 sont des versions LTS et conviennent. En revanche les versions impaires (23, 25) ne sont pas LTS, et l'injection, qui s'appuie sur des mécanismes internes de Node (`require-in-the-middle`, `import-in-the-middle`, `diagnostics_channel`), y est prise en charge avec du retard. Une version 22 LTS est donc le choix sûr pour un environnement de formation.
+
 Clonez les trois dépôts, chacun à un commit précis :
 
 ```bash

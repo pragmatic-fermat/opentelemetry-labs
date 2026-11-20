@@ -100,26 +100,37 @@ Le cluster a un nœud control-plane et trois workers : les pods de l'application
 
 ### Créer le cluster
 
-Copiez les fichiers fournis dans un dossier de travail, puis écrivez la configuration du cluster :
+Copiez les fichiers du TP dans un dossier de travail :
 
 ```bash
 mkdir -p ~/tp03
 cp -r ~/opentelemetry-labs/config/tp03/. ~/tp03/
 cd ~/tp03
-cat > kind-config.yaml <<'EOF'
+```
+
+Le cluster, lui, est commun à tous les TP Kubernetes : sa configuration et son script de lancement sont dans `config/cluster/` du dépôt, au même endroit pour chaque TP. Affichez la configuration :
+
+```bash
+cat ~/opentelemetry-labs/config/cluster/kind-config.yaml
+```
+
+```yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+# Nom unique, commun à tous les TP Kubernetes : une machine n'héberge
+# qu'un seul cluster, et cluster-create.sh supprime le précédent.
 name: cluster
 nodes:
   - role: control-plane
     extraPortMappings:
+      # Port 80 du nœud, publié sur la machine en 8080 : c'est par là
+      # qu'entre le trafic du navigateur vers la Gateway API.
       - containerPort: 80
         hostPort: 8080
         protocol: TCP
   - role: worker
   - role: worker
   - role: worker
-EOF
 ```
 
 Chaque bloc de ce fichier a un rôle précis :
@@ -128,14 +139,14 @@ Chaque bloc de ce fichier a un rôle précis :
 - `nodes` : la liste des nœuds. Chaque ligne `- role: worker` ajoute un worker ; trois lignes donnent trois workers ;
 - `extraPortMappings` : le port 80 du conteneur control-plane est publié sur la machine `clt-N` en 8080. C'est par là qu'entrera le trafic du navigateur. Les ports 80 et 443 de la machine sont déjà pris par Caddy, qui publie le terminal web.
 
-Le cluster s'appelle toujours `cluster`, quel que soit le TP : une machine n'en héberge qu'un, et les TP Kubernetes suivants réutilisent le même. Le dossier contient pour cela `cluster-create.sh`, que vous venez de copier : il supprime le cluster précédent s'il existe, puis crée le nouveau.
+Le cluster porte toujours le nom `cluster`, quel que soit le TP : une machine n'en héberge qu'un, et les TP Kubernetes suivants réutilisent le même. Affichez le script de lancement, puis exécutez-le :
 
 ```bash
-cat cluster-create.sh
-bash cluster-create.sh
+cat ~/opentelemetry-labs/config/cluster/cluster-create.sh
+bash ~/opentelemetry-labs/config/cluster/cluster-create.sh
 ```
 
-Le script tient en trois étapes : `kind get clusters` liste ce qui tourne, `kind delete cluster --name <nom>` supprime chaque cluster trouvé, et `kind create cluster --config kind-config.yaml` crée le nouveau avec le fichier ci-dessus. Il supprime tous les clusters présents, et pas seulement celui nommé `cluster` : un cluster laissé sous un autre nom occuperait le port 8080 et ferait échouer la création.
+Le script tient en trois étapes : `kind get clusters` liste ce qui tourne, `kind delete cluster --name <nom>` supprime chaque cluster trouvé, et `kind create cluster --config kind-config.yaml` crée le nouveau avec le fichier ci-dessus, lu dans le même dossier. Il supprime tous les clusters présents, et pas seulement celui nommé `cluster` : un cluster laissé sous un autre nom occuperait le port 8080 et ferait échouer la création.
 
 **Attention** : le script efface les clusters présents, releases Helm, espaces de noms et données comprises. Un cluster neuf se reconstruit en rejouant le TP depuis le début.
 

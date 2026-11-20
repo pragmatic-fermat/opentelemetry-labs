@@ -253,7 +253,9 @@ Jaeger
 Prometheus
 ```
 
-Ouvrez aussi l'interface de Jaeger dans le navigateur (`http://$SRV_HOST:16686`) : elle s'affiche avec une liste de services vide.
+Ouvrez aussi l'interface de Jaeger dans le navigateur (`http://$SRV_HOST:16686`). Le sélecteur de service ne propose que `jaeger` lui-même, et aucune trace n'existe encore :
+
+![Interface de Jaeger au démarrage, le sélecteur de service ne propose que jaeger](img/tp01-jaeger-vide.png)
 
 ## 2. Un premier collector
 
@@ -413,7 +415,9 @@ On obtient :
 5
 ```
 
-Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), choisissez le service `demo` puis cliquez sur Find Traces : vous retrouvez les cinq traces.
+Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), choisissez le service `demo` puis cliquez sur **Find Traces** : vous retrouvez les cinq traces, chacune avec ses deux spans (`lets-go` et `okey-dokey-0`) :
+
+![Cinq traces du service demo dans Jaeger](img/tp01-jaeger-demo.png)
 
 **Note** : dans la commande `docker compose logs`, une erreur de type `connection refused` vers Jaeger signifie que l'adresse de l'exporter n'utilise pas le nom du service (`jaeger`). Si `telemetrygen` ne se connecte pas, vérifiez que le collector tourne (`docker compose ps`) et que son receiver écoute sur `0.0.0.0`.
 
@@ -486,7 +490,11 @@ docker compose restart otelcol
 ./tg.sh traces --traces 5 --service shop
 ```
 
-Les attributs de ressource apparaissent dans Jaeger, sur chaque trace du service `shop`, dans la section Process des détails d'un span. En ligne de commande :
+Les attributs de ressource apparaissent dans Jaeger, sur chaque trace du service `shop`, dans la section **Resource** des détails d'un span (cliquez sur un span pour l'ouvrir) :
+
+![Attributs de ressource du service shop dans le détail d'un span](img/tp01-jaeger-span-process.png)
+
+En ligne de commande :
 
 ```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
@@ -627,6 +635,10 @@ Ce sont les données brutes, telles que l'application les a produites.
 
 Deux problèmes apparaissent. L'adresse e-mail est en clair, ce qui pose une question de confidentialité, et chaque identifiant de commande crée un chemin différent (`/api/orders/48151`, puis `/api/orders/48152`), ce qui rend les regroupements impossibles.
 
+Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), le détail du span montre ces valeurs brutes :
+
+![Attributs bruts du span accounts, adresse e-mail en clair et chemin avec identifiant](img/tp01-transform-avant.png)
+
 ### Le processor transform
 
 Ajoutez un processor `transform/normalize` qui règle ces trois points :
@@ -710,6 +722,10 @@ Comparé à l'état de départ, on obtient exactement ce qui était visé : l'ad
 
 Les deux commandes se terminent par `sort` et `sort -u` parce que Jaeger renvoie les spans et les attributs dans l'ordre où ils ont été reçus, sans garantie de tri : sans ces tris, la même vérification donnerait des lignes dans un ordre différent d'une exécution à l'autre.
 
+Dans l'interface de Jaeger, le même span porte maintenant un nom lisible et des attributs masqués :
+
+![Attributs du span après transform, adresse e-mail masquée et chemin normalisé](img/tp01-transform-apres.png)
+
 ## 6. Les métriques vers Prometheus et Grafana
 
 Le même collector peut traiter plusieurs types de signaux.
@@ -779,9 +795,11 @@ Validez et redémarrez le collector :
 docker compose restart otelcol
 ```
 
-Ouvrez l'interface de Prometheus (`http://$SRV_HOST:9090`), déroulez le menu **Status** en haut de page puis cliquez sur **Targets** (adresse directe : `http://$SRV_HOST:9090/targets`).
+Ouvrez l'interface de Prometheus (`http://$SRV_HOST:9090`), déroulez le menu **Status** en haut de page puis cliquez sur **Target health** (adresse directe : `http://$SRV_HOST:9090/targets`).
 
-La cible `otelcol:8889`, qui était `DOWN` jusqu'ici, doit maintenant être `UP` : Prometheus atteint l'endpoint exposé par le collector.
+La cible `otelcol:8889` du job `otelcol-exporter`, qui était `DOWN` jusqu'ici, doit maintenant être `UP` : Prometheus atteint l'endpoint exposé par le collector.
+
+![Cible otelcol:8889 en état UP dans Prometheus](img/tp01-prometheus-targets.png)
 
 Envoyez ensuite des métriques pendant trente secondes :
 
@@ -802,7 +820,15 @@ On obtient `billing` suivi de votre numéro de participant (par exemple `3` pour
 billing 3
 ```
 
-**Note** : le nom de la métrique peut porter un suffixe ajouté par le convertisseur selon l'unité, d'où l'expression régulière. Retrouvez la même série dans Grafana, via Explore et la source de données Prometheus.
+La page **Query** de Prometheus (`http://$SRV_HOST:9090/query`) affiche la même série, avec ses labels issus des attributs de ressource (`lab_id`, `deployment_environment_name`, `service_name`) :
+
+![Résultat de la requête tp1_demo dans Prometheus](img/tp01-prometheus-requete.png)
+
+**Note** : le nom de la métrique peut porter un suffixe ajouté par le convertisseur selon l'unité, d'où l'expression régulière.
+
+Retrouvez la même série dans Grafana (`http://$SRV_HOST:3000`), via Explore et la source de données Prometheus :
+
+![Série tp1_demo dans Grafana Explore](img/tp01-grafana-explore.png)
 
 ## Cleanup
 

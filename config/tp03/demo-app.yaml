@@ -1,0 +1,167 @@
+# Application de démonstration : deux services Node.js (frontend et backend).
+# Le code tient dans un ConfigMap et s'exécute avec l'image node officielle,
+# sans aucune bibliothèque OpenTelemetry : l'instrumentation sera injectée
+# par l'Operator à la partie 4.
+# Le texte INGRESS_HOST est remplacé par sed avant l'application (voir l'énoncé).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-server
+  namespace: demo
+data:
+  server.js: |
+    const http = require('http');
+    const name = process.env.APP_NAME || 'app';
+    const backend = process.env.BACKEND_URL;
+    const port = process.env.PORT || 8080;
+
+    function reply(res, payload) {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(payload));
+    }
+
+    http.createServer((req, res) => {
+      if (backend && req.url.startsWith('/api')) {
+        http.get(backend + req.url, (upstream) => {
+          let body = '';
+          upstream.on('data', (chunk) => { body += chunk; });
+          upstream.on('end', () => reply(res, { from: name, backend: JSON.parse(body) }));
+        }).on('error', (err) => {
+          res.statusCode = 502;
+          reply(res, { from: name, error: err.message });
+        });
+        return;
+      }
+      setTimeout(() => reply(res, { from: name, path: req.url }), 20 + Math.random() * 80);
+    }).listen(port, () => console.log(name + ' listening on ' + port));
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: demo
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: node:22.23.5-slim
+          command: ["node", "/app/server.js"]
+          env:
+            - name: APP_NAME
+              value: backend
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+          volumeMounts:
+            - name: code
+              mountPath: /app
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: code
+          configMap:
+            name: demo-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: demo
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: demo
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: node:22.23.5-slim
+          command: ["node", "/app/server.js"]
+          env:
+            - name: APP_NAME
+              value: frontend
+            - name: BACKEND_URL
+              value: http://backend.demo.svc.cluster.local
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+          volumeMounts:
+            - name: code
+              mountPath: /app
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: code
+          configMap:
+            name: demo-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: demo
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend
+  namespace: demo
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: app.INGRESS_HOST
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

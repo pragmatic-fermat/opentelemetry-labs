@@ -332,7 +332,8 @@ Contrôlez le pod et le nombre de traces reçues par Jaeger :
 
 ```bash
 kubectl -n observability get pods -l app.kubernetes.io/instance=otel-gateway
-jaeger '/api/traces?service=k8s-gateway&limit=20' | jq '.data | length'
+jaeger "/api/v3/traces?query.service_name=k8s-gateway&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+  | jq '[.result.resourceSpans[].scopeSpans[].spans[].traceId] | unique | length'
 ```
 
 La première commande affiche un pod `otel-gateway-...` à l'état `Running`, la seconde affiche :
@@ -340,6 +341,8 @@ La première commande affiche un pod `otel-gateway-...` à l'état `Running`, la
 ```text
 5
 ```
+
+**NB** : Jaeger 2.x n'a plus l'API v1 (`/api/traces`, `/api/services`) : seule l'API v3 (`/api/v3/...`) répond, et sa recherche de traces exige une fenêtre temporelle explicite (`startTimeMin` et `startTimeMax`).
 
 ## 3. Le collector en mode agent
 
@@ -406,16 +409,16 @@ kubectl -n demo run tg-agent --restart=Never --rm -i \
 Les traces portent maintenant des attributs Kubernetes que `telemetrygen` ne connaît pas :
 
 ```bash
-jaeger '/api/traces?service=k8s-agent&limit=1' \
-  | jq -r '.data[0].processes[].tags[] | select(.key | startswith("k8s.")) | "\(.key)=\(.value)"'
+jaeger "/api/v3/traces?query.service_name=k8s-agent&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+  | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key | startswith("k8s.")) | "\(.key)=\(.value.stringValue)"] | unique | .[]'
 ```
 
 La commande affiche notamment :
 
 ```text
-k8s.pod.name=tg-agent
 k8s.namespace.name=demo
-k8s.node.name=<nom du worker>
+k8s.node.name=tp03-worker2
+k8s.pod.name=tg-agent
 ```
 
 Comparez avec les traces `k8s-gateway` de la partie 2, qui n'ont pas ces attributs : l'enrichissement vient de l'agent.
@@ -589,15 +592,16 @@ OTEL_RESOURCE_ATTRIBUTES=k8s.container.name=frontend,k8s.deployment.name=fronten
 Dans Jaeger, les services `frontend` et `backend` sont apparus :
 
 ```bash
-jaeger '/api/services' | jq -c '.data'
-jaeger '/api/traces?service=frontend&limit=1' \
-  | jq -c '[.data[0].processes[].serviceName] | unique'
+jaeger '/api/v3/services' | jq -c '.services'
+jaeger "/api/v3/traces?query.service_name=frontend&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+  | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key=="service.name") | .value.stringValue] | unique | .[]'
 ```
 
 La première commande contient `frontend` et `backend`, la seconde affiche :
 
 ```text
-["backend","frontend"]
+"backend"
+"frontend"
 ```
 
 Une même trace traverse donc les deux services. Ouvrez-la dans l'interface de Jaeger (`http://jaeger.$INGRESS_HOST:8080`) : vous voyez le span serveur du frontend, le span client de son appel au backend, puis le span serveur du backend. Le lien entre les deux services repose sur le propagator `tracecontext`.

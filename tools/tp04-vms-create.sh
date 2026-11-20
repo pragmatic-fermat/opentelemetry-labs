@@ -23,9 +23,10 @@ echo "Recherche de la cle SSH '$KEY_NAME'..."
 KEY_ID=$(doctl compute ssh-key list --format ID,Name --no-header | awk -v k="$KEY_NAME" '$2==k {print $1; exit}')
 
 if [ -z "$KEY_ID" ]; then
-  echo "Erreur : la cle SSH '$KEY_NAME' n'a pas ete trouvee dans DigitalOcean." >&2
-  echo "Importez-la d'abord avec :" >&2
-  echo "  doctl compute ssh-key import $KEY_NAME --public-key-file <chemin>" >&2
+  echo "Erreur fatale : la cle SSH '$KEY_NAME' est introuvable dans ce compte DigitalOcean." >&2
+  echo "Cela signifie que vous n'etes probablement pas sur le bon profil doctl." >&2
+  echo "Verifiez votre profil actif avec : doctl auth list" >&2
+  echo "Basculez sur le bon profil avec : doctl auth switch --context <nom_du_profil>" >&2
   exit 1
 fi
 echo "Cle SSH detectee (ID : $KEY_ID)."

@@ -6,7 +6,7 @@ Ce dossier décrit les machines des labs sur DigitalOcean. Il est prévu pour ê
 
 Pour chaque numéro N de 0 à `group_count - 1` (le numéro 0 est celui du formateur) :
 
-- un droplet `clt-N` (poste de travail, Docker et Compose, Ansible, kubectl, helm, kind) et un droplet `srv-N` (serveur cible minimal, sans Docker), initialisés par les fichiers `cloud-init-clt.yaml` et `cloud-init-srv.yaml` ;
+- un droplet `clt-N` (machine cliente : Docker et Compose, Ansible, kubectl, helm, kind) et un droplet `srv-N` (machine serveur : Docker et Compose, jq, sans les outils Kubernetes), initialisés par les fichiers `cloud-init-clt.yaml` et `cloud-init-srv.yaml` ;
 - un VPC `vpc-N` (plage `10.20.N.0/24`, découpée depuis `vpc_base_range`) dans lequel sont placés les deux droplets du groupe : les machines d'un même groupe se voient sur le réseau privé, les groupes restent cloisonnés entre eux ;
 - deux enregistrements DNS `clt-N` et `srv-N` dans la zone `domain_name` ;
 - un tag commun (`tag_name`) et un projet DigitalOcean `training` qui regroupe les droplets (les VPC ne sont pas assignables à un projet, ils restent en dehors).

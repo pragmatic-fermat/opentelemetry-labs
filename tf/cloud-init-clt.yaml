@@ -1,5 +1,5 @@
 #cloud-config
-# Machine clt-N : poste de travail des labs OpenTelemetry.
+# Machine clt-N : machine cliente des labs OpenTelemetry.
 # Ubuntu 24.04, Docker et Compose v2, Ansible, outils Kubernetes clients
 # (kubectl, helm, kind), terminal web (ttyd derrière Caddy).
 #

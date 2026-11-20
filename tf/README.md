@@ -24,7 +24,6 @@ Créez un workspace relié à ce dépôt (workflow par gestion de versions) et i
 | `webshell_password` | Terraform, sensible | Mot de passe du webshell (ttyd), communiqué aux stagiaires |
 | `github_deploy_key` | Terraform, sensible | Clé de déploiement GitHub (lecture seule) pour cloner le dépôt tant qu'il est privé ; vide quand le dépôt est public |
 | `domain_name` | Terraform | Zone DNS DigitalOcean qui reçoit les enregistrements |
-| `prefix` | Terraform | Préfixe de nommage des droplets (déclaré, à renseigner) |
 | `tag_name` | Terraform | Nom du tag appliqué aux droplets |
 | `group_count` | Terraform | Nombre d'environnements, formateur compris |
 

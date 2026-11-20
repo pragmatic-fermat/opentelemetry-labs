@@ -265,11 +265,11 @@ Les **receivers** reçoivent les données, les **exporters** les envoient ailleu
 
 Un composant déclaré mais absent d'un pipeline n'est pas utilisé.
 
-Le schéma suivant, tiré de [la documentation officielle du collector](https://opentelemetry.io/docs/collector/architecture/), représente un pipeline type : les données entrent par un ou plusieurs receivers, traversent une série de processors, et le dernier processor les copie vers chaque exporter via un fan-out :
+Le schéma suivant, tiré de [la documentation officielle du collector](https://opentelemetry.io/docs/collector/architecture/), représente un pipeline générique : les données entrent par un ou plusieurs receivers, traversent une série de processors, et le dernier processor les copie vers chaque exporter via un fan-out :
 
 ```mermaid
 ---
-title: Pipeline
+title: Pipeline générique
 ---
 flowchart LR
   R1(Receiver 1) --> P1[Processor 1]

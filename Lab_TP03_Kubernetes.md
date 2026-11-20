@@ -135,9 +135,9 @@ cat cluster-create.sh
 bash cluster-create.sh
 ```
 
-Le script tient en trois étapes : `kind get clusters` liste ce qui tourne, `kind delete cluster --name cluster` supprime le cluster s'il est déjà là, et `kind create cluster --config kind-config.yaml` le recrée avec le fichier ci-dessus.
+Le script tient en trois étapes : `kind get clusters` liste ce qui tourne, `kind delete cluster --name <nom>` supprime chaque cluster trouvé, et `kind create cluster --config kind-config.yaml` crée le nouveau avec le fichier ci-dessus. Il supprime tous les clusters présents, et pas seulement celui nommé `cluster` : un cluster laissé sous un autre nom occuperait le port 8080 et ferait échouer la création.
 
-**Attention** : le script efface le cluster précédent, releases Helm, espaces de noms et données comprises. Un cluster neuf se reconstruit en rejouant le TP depuis le début.
+**Attention** : le script efface les clusters présents, releases Helm, espaces de noms et données comprises. Un cluster neuf se reconstruit en rejouant le TP depuis le début.
 
 On obtient quatre nœuds `Ready` :
 

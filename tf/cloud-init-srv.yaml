@@ -1,7 +1,7 @@
 #cloud-config
-# Machine srv-N : serveur cible des labs OpenTelemetry.
-# Ubuntu 24.04 minimal, sans Docker. Cible des déploiements Ansible et des
-# auto-instrumentations sur hôte. Terminal web (ttyd derrière Caddy).
+# Machine srv-N : machine serveur des labs OpenTelemetry.
+# Ubuntu 24.04, Docker et Compose v2 (les labs y déploient leur stack),
+# git, jq et curl. Terminal web (ttyd derrière Caddy).
 #
 # Versions épinglées et vérifiées le 2026-11-19 (voir README.md).
 package_update: true
@@ -10,6 +10,7 @@ packages:
   - ca-certificates
   - curl
   - git
+  - jq
   - python3
 users:
   # Le terminal web ouvre des sessions directement en root (machines
@@ -81,6 +82,14 @@ runcmd:
   - grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
   - grep -q '^PasswordAuthentication yes' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
   - systemctl restart ssh
+  # Docker Engine et Compose v2 depuis le dépôt officiel Docker : les labs
+  # déploient leur stack sur la machine serveur.
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  - chmod a+r /etc/apt/keyrings/docker.asc
+  - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   # Caddy depuis le dépôt officiel. Le fichier de dépôt Cloudsmith référence
   # la clé au format binaire .gpg : il faut déblinder la clé téléchargée.
   # Le Caddyfile est écrit après l'installation du paquet : écrit avant, il

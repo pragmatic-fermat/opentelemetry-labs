@@ -238,7 +238,11 @@ La première commande affiche une réponse JSON du frontend qui contient celle d
 {"from":"frontend","backend":{"from":"backend","path":"/api/orders"}}
 ```
 
-La seconde affiche un objet dont la liste `services` ne contient que `jaeger` : Jaeger répond, mais ne contient encore aucune trace, car l'application n'est pas instrumentée. Ouvrez aussi `http://jaeger.$INGRESS_HOST:8080` dans votre navigateur.
+La seconde affiche un objet dont la liste `services` est vide, ou ne contient que `jaeger` selon que le service interne a déjà eu le temps de s'enregistrer : Jaeger répond, mais ne contient encore aucune trace de votre application, car elle n'est pas instrumentée.
+
+La manipulation attendue tient en deux temps. Dans le terminal, les deux commandes ci-dessus. Dans le navigateur ensuite, ouvrez `http://jaeger.$INGRESS_HOST:8080` : sur la page Search, le sélecteur de service ne propose aucun de vos services et le bouton Find Traces ne renvoie rien. C'est l'état de départ du TP : les parties suivantes font apparaître `frontend` et `backend` au fur et à mesure de l'instrumentation.
+
+![Interface de Jaeger au démarrage, le sélecteur de service ne propose que jaeger](img/tp03-jaeger-vide.png)
 
 ## 2. Le collector en mode gateway
 

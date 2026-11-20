@@ -53,6 +53,24 @@ write_files:
       fs.inotify.max_user_instances = 512
       fs.inotify.max_user_watches = 524288
     path: /etc/sysctl.d/90-inotify.conf
+  # Clé SSH dédiée aux machines du lab (non personnelle, éphémère).
+  # Permet à clt-N et srv-N de se joindre mutuellement sans mot de passe,
+  # ainsi qu'aux machines éphémères du TP4 (srv2, srv3).
+  - content: |
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+      QyNTUxOQAAACAtscZ0UBIa27E0+idVtm3WoeBnHMGRN3eXdZmmdp/rtwAAAKjz4n0l8+J9
+      JQAAAAtzc2gtZWQyNTUxOQAAACAtscZ0UBIa27E0+idVtm3WoeBnHMGRN3eXdZmmdp/rtw
+      AAAECH5Th5XrgV+WsLz37DFYtE1DkQKCCNA6AcQfRdE2rKGi2xxnRQEhrbsTT6J1W2bdah
+      4GccwZE3d5d1maZ2n+u3AAAAJGxhYi1pbnRlci12bUBvcGVudGVsZW1ldHJ5LWZvcm1hdG
+      lvbgE=
+      -----END OPENSSH PRIVATE KEY-----
+    path: /root/.ssh/id_ed25519
+    permissions: "0600"
+  - content: |
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2xxnRQEhrbsTT6J1W2bdah4GccwZE3d5d1maZ2n+u3 lab-inter-vm@opentelemetry-formation
+    path: /root/.ssh/id_ed25519.pub
+    permissions: "0644"
   # Variables d'environnement des labs, disponibles dans tous les terminaux.
   - content: |
       export LAB_ID="${lab_id}"
@@ -97,6 +115,9 @@ runcmd:
   - grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
   - grep -q '^PasswordAuthentication yes' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
   - systemctl restart ssh
+  # Autorise la clé SSH inter-machines du lab.
+  - grep -q 'lab-inter-vm@opentelemetry-formation' /root/.ssh/authorized_keys 2>/dev/null || echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2xxnRQEhrbsTT6J1W2bdah4GccwZE3d5d1maZ2n+u3 lab-inter-vm@opentelemetry-formation' >> /root/.ssh/authorized_keys
+  - chmod 600 /root/.ssh/authorized_keys
   # Swap 2G, utile pour le cluster KinD des TP suivants (idempotent).
   - swapoff /swapfile 2>/dev/null || true
   - rm -f /swapfile

@@ -230,10 +230,10 @@ Le DaemonSet a quatre pods, dont un sur `cluster-control-plane` :
 
 ```text
 NAME            READY   STATUS    RESTARTS   AGE   NODE
-traefik-5j8wn   1/1     Running   0          25s   cluster-worker3
-traefik-dmkz8   1/1     Running   0          25s   cluster-worker
-traefik-g2xrf   1/1     Running   0          25s   cluster-control-plane
-traefik-ppmgk   1/1     Running   0          25s   cluster-worker2
+traefik-42l42   1/1     Running   0          19s   cluster-control-plane
+traefik-85pkg   1/1     Running   0          19s   cluster-worker
+traefik-khs6m   1/1     Running   0          19s   cluster-worker3
+traefik-rl52k   1/1     Running   0          19s   cluster-worker2
 ```
 
 Le chart a créé la `GatewayClass traefik` et la `Gateway traefik-gateway` :
@@ -294,8 +294,8 @@ On obtient par exemple :
 
 ```text
 NAME                       READY   STATUS    RESTARTS   AGE   IP           NODE
-backend-6bc7bd9b8d-vtlgr   1/1     Running   0          7s    10.244.3.3   cluster-worker2
-frontend-7cd9b8f4d7-wj7pb  1/1     Running   0          7s    10.244.3.4   cluster-worker2
+backend-6bc7bd9b8d-4ftph    1/1     Running   0          8s    10.244.2.3   cluster-worker
+frontend-7cd9b8f4d7-dwpp6   1/1     Running   0          8s    10.244.3.3   cluster-worker2
 ```
 
 Contrôlez que l'application répond et que Jaeger est vide :

@@ -1,0 +1,24 @@
+# Backends du TP4, sur clt-N : Jaeger reçoit les traces et Prometheus les métriques
+# envoyées par le Collector installé sur srv-N.
+name: tp04
+
+services:
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # Accepte les métriques envoyées en OTLP sur /api/v1/otlp/v1/metrics
+      - --web.enable-otlp-receiver
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped

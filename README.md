@@ -10,7 +10,7 @@ TPs à concevoir et rédiger : 1, 3, 4, 5, 6, 7, 10 et 11 (numérotation d'origi
 |---|---|---|---|
 | [TP1](Lab_TP01_Socle.md) | Socle | Backend Jaeger/Grafana, premier Collector, processors (batch, filtrage, OTTL) | 1/4 j |
 | [TP3](Lab_TP03_Kubernetes.md) | Kubernetes | Collector en agent et gateway (Helm), OTel Operator et auto-instrumentation par annotation | 1/4 j |
-| [TP4](tp04-ansible/) | Ansible + Jinja2 | Déploiement du Collector sur VM Linux, puis modification de la configuration | 1/4 j |
+| [TP4](Lab_TP04_Ansible_Jinja2.md) | Ansible + Jinja2 | Déploiement du Collector sur VM Linux, puis modification de la configuration | 1/4 j |
 | [TP5](tp05-nodejs-nginx/) | Node.js + Nginx | Auto-instrumentation, export OTLP vers Jaeger, trace de bout en bout | 1/4 j |
 | [TP6](tp06-java-python-dotnet/) | Java, Python et .NET | Auto-instrumentation sur Linux | 1/4 j |
 | [TP7](Lab_TP07_Instrumentation_Manuelle.md) | Instrumentation manuelle | Spans et attributs custom, propagation, corrélation logs/traces | 1/4 j |

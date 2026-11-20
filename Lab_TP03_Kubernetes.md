@@ -181,7 +181,7 @@ La Gateway API se compose de deux objets principaux :
 
 L'API ne fait rien par elle-même : il faut une implémentation. Nous utilisons Traefik, qui sait tourner en DaemonSet et occuper directement le port 80 des nœuds, ce qui se combine bien avec le port publié par KinD.
 
-Installez d'abord les types de ressources de la Gateway API. Les implémentations ne les fournissent pas : sans elles, toute installation de Gateway échoue sur un type inconnu.
+Installez d'abord les types de ressources de la Gateway API. Les implémentations ne les fournissent pas : sans elles, toute installation de `Gateway` échoue sur un type inconnu.
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.7.0/standard-install.yaml
@@ -227,7 +227,7 @@ Chaque réglage a son rôle :
 - `ports.web.hostPort: 80` : le pod prend le port 80 du nœud directement, dans le conteneur. Côté machine, ce port 80 est celui que KinD publie sur `TCP/8080` ;
 - `providers.kubernetesGateway.enabled` : Traefik lit les ressources `Gateway` et `HTTPRoute` ;
 - `gateway.enabled` : le chart crée lui-même une ressource `Gateway` et sa `GatewayClass`, au lieu de vous demander de les écrire ;
-- `namespacePolicy.from: All` : par défaut, une Gateway n'accepte que les routes de son propre espace de noms. Sans ce réglage, les routes de `demo` et d'`observability` seraient ignorées ;
+- `namespacePolicy.from: All` : par défaut, une `Gateway` n'accepte que les routes de son propre espace de noms. Sans ce réglage, les routes de `demo` et d'`observability` seraient ignorées ;
 - `tolerations` : le nœud control-plane porte une interdiction (`taint`) qui écarte les pods ordinaires. Or c'est lui qui détient le port publié vers la machine : le pod Traefik doit donc y être toléré.
 
 Vérifiez le résultat :
@@ -276,7 +276,7 @@ On obtient un nom de la forme :
 178-62-255-117.sslip.io
 ```
 
-Les fonctions `app` et `jaeger` de `helpers.sh` s'en servent pour appeler la Gateway par `http://localhost:8080` avec le bon en-tête `Host`, ce qui évite de dépendre de la résolution DNS. Rechargez-les avec `source ~/tp03/helpers.sh` dans chaque nouveau terminal.
+Les fonctions `app` et `jaeger` de `helpers.sh` s'en servent pour appeler la `Gateway` par `http://localhost:8080` avec le bon en-tête `Host`, ce qui évite de dépendre de la résolution DNS. Rechargez-les avec `source ~/tp03/helpers.sh` dans chaque nouveau terminal.
 
 ### Déployer l'application et Jaeger
 
@@ -517,7 +517,7 @@ Comparez avec les traces `k8s-gateway` de la partie 2, qui n'ont pas ces attribu
 
 Jusqu'ici, Jaeger tourne dans le cluster, à côté de la **gateway**. Dans une vraie installation, le backend est ailleurs : il collecte les données de plusieurs clusters et survit à leur recréation. Le TP1 a justement installé une stack (**collector**, Jaeger, Prometheus, Grafana) sur `srv-N` ; on peut s'en servir comme backend.
 
-Est-ce que cela passe par la Gateway, des ports publiés ou des règles `iptables` ? Seulement dans un sens. Un pod peut **sortir** librement : ses paquets passent par le réseau Docker de `clt-N`, qui les traduit (NAT) puis par le VPC DigitalOcean. Depuis un pod du cluster, joindre `srv-N` sur son adresse privée fonctionne donc sans aucune règle supplémentaire, comme le montre l'essai ci-dessous (la stack du TP1 doit tourner sur `srv-N`) :
+Est-ce que cela passe par la `Gateway`, des ports publiés ou des règles `iptables` ? Seulement dans un sens. Un pod peut **sortir** librement : ses paquets passent par le réseau Docker de `clt-N`, qui les traduit (NAT) puis par le VPC DigitalOcean. Depuis un pod du cluster, joindre `srv-N` sur son adresse privée fonctionne donc sans aucune règle supplémentaire, comme le montre l'essai ci-dessous (la stack du TP1 doit tourner sur `srv-N`) :
 
 ```bash
 kubectl -n demo run nettest --restart=Never --image=curlimages/curl:8.11.0 --command -- sleep 120
@@ -529,7 +529,7 @@ kubectl -n demo delete pod nettest
 
 On obtient `200` : le pod a joint le **collector** de `srv-N` sur `TCP/4318`, sur le réseau privé du VPC.
 
-L'inverse, faire **entrer** du trafic depuis Internet vers un service du cluster, demande en revanche une publication de port : c'est exactement ce que fait `extraPortMappings` pour la Gateway, en publiant le port 80 du control-plane sur `TCP/8080` de `clt-N`. `iptables` n'est à écrire à la main dans aucun des deux cas : Docker et KinD posent les règles de NAT, et un `NodePort` suffit lorsqu'on veut exposer un service sur la machine sans passer par la Gateway.
+L'inverse, faire **entrer** du trafic depuis Internet vers un service du cluster, demande en revanche une publication de port : c'est exactement ce que fait `extraPortMappings` pour la `Gateway`, en publiant le port 80 du control-plane sur `TCP/8080` de `clt-N`. `iptables` n'est à écrire à la main dans aucun des deux cas : Docker et KinD posent les règles de NAT, et un `NodePort` suffit lorsqu'on veut exposer un service sur la machine sans passer par la Gateway.
 
 Pour brancher la **gateway** sur le backend externe, remplacez l'endpoint de l'exporter dans `gateway-values.yaml` par l'adresse privée de `srv-N` (obtenue avec `getent hosts $SRV_HOST`), par exemple :
 

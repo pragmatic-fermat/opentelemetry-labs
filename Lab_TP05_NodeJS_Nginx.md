@@ -37,8 +37,9 @@ Versions utilisées dans ce lab :
 
 | Composant | Version |
 |---|---|
-| Node.js | v22.23.5 |
+| Node.js (installé par asdf pendant le TP) | v22.23.5 |
 | npm | 10.9.9 |
+| asdf | v0.16.7 |
 | `@opentelemetry/sdk-node` | 0.301.2 |
 | `@opentelemetry/auto-instrumentations-node` | 0.83.1 |
 | `@opentelemetry/exporter-trace-otlp-proto` | 0.301.2 |
@@ -77,26 +78,42 @@ flowchart LR
 
 Le message suit ces étapes : une requête HTTP arrive sur `messenger`, qui écrit dans sa base et publie un événement dans RabbitMQ ; `notifier` consomme l'événement, écrit dans sa propre base et simule l'envoi d'un SMS. Sans télémétrie, il faut lire les logs de deux processus dans deux terminaux.
 
-Installez d'abord Node.js. Le paquet distribué par Ubuntu est ancien et ne convient pas à l'auto-instrumentation actuelle : prenez la version officielle, épinglée.
+Installez d'abord Node.js, avec le gestionnaire de versions `asdf`, comme pour l'application d'origine : la machine ne fournit pas de Node.js, et il faut une version récente pour l'auto-instrumentation actuelle. Le paquet distribué par Ubuntu est trop ancien.
 
 ```bash
-cd /opt
-curl -fsSL https://nodejs.org/dist/v22.23.5/node-v22.23.5-linux-x64.tar.xz -o node.tar.xz
-tar -xJf node.tar.xz
-ln -sf /opt/node-v22.23.5-linux-x64/bin/node /usr/local/bin/node
-ln -sf /opt/node-v22.23.5-linux-x64/bin/npm /usr/local/bin/npm
-ln -sf /opt/node-v22.23.5-linux-x64/bin/npx /usr/local/bin/npx
-rm node.tar.xz
+git clone https://github.com/asdf-vm/asdf.git /root/.asdf --branch v0.16.7
+. /root/.asdf/asdf.sh
+asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
+asdf install nodejs 22.23.5
+asdf global nodejs 22.23.5
+```
+
+`asdf` télécharge la version demandée et la rend disponible par des raccourcis (`shims`) placés en tête du `PATH`. Rendez ce `PATH` permanent, pour que les terminaux suivants, et les commandes lancées par les outils, retrouvent Node.js :
+
+```bash
+echo '. /root/.asdf/asdf.sh' >> /root/.bashrc
+cat > /etc/profile.d/asdf.sh <<'EOF'
+. /root/.asdf/asdf.sh
+EOF
+```
+
+Vérifiez dans un nouveau terminal, puis contrôlez les versions :
+
+```bash
+which node
 node --version
 npm --version
+cat /root/.tool-versions
 ```
-
-On obtient :
 
 ```text
+/root/.asdf/shims/node
 v22.23.5
 10.9.9
+nodejs 22.23.5
 ```
+
+**NB** : la version est fixée dans `/root/.tool-versions`, le fichier que `asdf` lit. Les dépôts de l'application en contiennent un qui demande Node.js 19.3.0, version qui n'est plus maintenue et que l'auto-instrumentation actuelle refuse : c'est pour cela que la version est fixée au niveau de la machine, avant le clone.
 
 Clonez les trois dépôts, chacun à un commit précis :
 

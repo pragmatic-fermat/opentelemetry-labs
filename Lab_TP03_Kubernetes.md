@@ -151,7 +151,7 @@ tp03-worker2         Ready    <none>          1m    v1.37.0
 tp03-worker3         Ready    <none>          1m    v1.37.0
 ```
 
-**NB** : KinD nomme les nœuds d'après le nom du cluster ; sans l'option `name` du fichier, ils s'appelleraient `tp03-control-plane` de toute façon dans un cluster nommé `tp03`, mais les workers seraient numérotés `tp03-worker`, `tp03-worker2`, `tp03-worker3`.
+**NB** : KinD préfixe le nom de chaque nœud avec celui du cluster, fixé ici par la ligne `name: tp03` : les nœuds s'appellent donc `tp03-control-plane`, `tp03-worker`, `tp03-worker2` et `tp03-worker3`. Sans cette option, le cluster prendrait le nom par défaut `kind` et les nœuds s'appelleraient `kind-control-plane`, `kind-worker`, etc. Retenez le nom du nœud control-plane : une commande de la partie suivante le cite pour retirer la `taint`.
 
 ### Installer l'ingress
 

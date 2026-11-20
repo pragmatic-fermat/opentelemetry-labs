@@ -1,5 +1,5 @@
 # Valeurs par défaut communes aux groupes. Les secrets (do_token,
-# root_password) et les variables par groupe (domain_name, prefix, tag_name,
+# root_password) et les variables par groupe (domain_name, tag_name,
 # group_count) se saisissent dans le workspace Terraform Cloud, jamais ici.
 #
 # Image Ubuntu 24.04 LTS (gabarit vérifié le 2026-11-19).

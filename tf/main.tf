@@ -13,10 +13,6 @@ variable "srv_size" {
 variable "droplet_image" {
   type = string
 }
-variable "prefix" {
-  type = string
-}
-
 variable "tag_name" {
   type = string
 }
@@ -63,7 +59,7 @@ resource "digitalocean_tag" "tag" {
 # /24 découpé depuis vpc_base_range (256 groupes au maximum).
 resource "digitalocean_vpc" "group" {
   count    = var.group_count
-  name     = "${var.prefix}vpc-${count.index}"
+  name     = "vpc-${count.index}"
   region   = var.region_name
   ip_range = cidrsubnet(var.vpc_base_range, 8, count.index)
 }
@@ -73,7 +69,7 @@ resource "digitalocean_vpc" "group" {
 resource "digitalocean_droplet" "clt" {
   count      = var.group_count
   image      = var.droplet_image
-  name       = "${var.prefix}clt-${count.index}"
+  name       = "clt-${count.index}"
   region     = var.region_name
   size       = var.clt_size
   tags       = [digitalocean_tag.tag.id]
@@ -86,8 +82,8 @@ resource "digitalocean_droplet" "clt" {
     github_deploy_key_b64 = base64encode(var.github_deploy_key)
     lab_id                = count.index
     lab_domain            = var.domain_name
-    clt_machine           = "${var.prefix}clt-${count.index}"
-    srv_machine           = "${var.prefix}srv-${count.index}"
+    clt_machine           = "clt-${count.index}"
+    srv_machine           = "srv-${count.index}"
   })
 }
 
@@ -95,7 +91,7 @@ resource "digitalocean_droplet" "clt" {
 resource "digitalocean_droplet" "srv" {
   count      = var.group_count
   image      = var.droplet_image
-  name       = "${var.prefix}srv-${count.index}"
+  name       = "srv-${count.index}"
   region     = var.region_name
   size       = var.srv_size
   tags       = [digitalocean_tag.tag.id]
@@ -108,8 +104,8 @@ resource "digitalocean_droplet" "srv" {
     github_deploy_key_b64 = base64encode(var.github_deploy_key)
     lab_id                = count.index
     lab_domain            = var.domain_name
-    clt_machine           = "${var.prefix}clt-${count.index}"
-    srv_machine           = "${var.prefix}srv-${count.index}"
+    clt_machine           = "clt-${count.index}"
+    srv_machine           = "srv-${count.index}"
   })
 }
 
@@ -117,7 +113,7 @@ resource "digitalocean_record" "clt_dns" {
   count  = var.group_count
   domain = var.domain_name
   type   = "A"
-  name   = "${var.prefix}clt-${count.index}"
+  name   = "clt-${count.index}"
   value  = digitalocean_droplet.clt[count.index].ipv4_address
   # TTL court : les machines sont éphémères.
   ttl = 60
@@ -127,7 +123,7 @@ resource "digitalocean_record" "srv_dns" {
   count  = var.group_count
   domain = var.domain_name
   type   = "A"
-  name   = "${var.prefix}srv-${count.index}"
+  name   = "srv-${count.index}"
   value  = digitalocean_droplet.srv[count.index].ipv4_address
   # TTL court : les machines sont éphémères.
   ttl = 60
@@ -146,9 +142,9 @@ resource "digitalocean_project" "training" {
 }
 
 output "clt_hosts" {
-  value = [for i in range(var.group_count) : "${var.prefix}clt-${i}.${var.domain_name}"]
+  value = [for i in range(var.group_count) : "clt-${i}.${var.domain_name}"]
 }
 
 output "srv_hosts" {
-  value = [for i in range(var.group_count) : "${var.prefix}srv-${i}.${var.domain_name}"]
+  value = [for i in range(var.group_count) : "srv-${i}.${var.domain_name}"]
 }

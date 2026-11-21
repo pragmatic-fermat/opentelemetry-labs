@@ -495,6 +495,8 @@ host.name=srv-N.monlab.top
 os.type=linux
 ```
 
+Selon la configuration de la machine, `host.name` peut n'afficher que `srv-N` : dans les deux cas, c'est le nom du serveur qui fait tourner le **collector**, pas celui de `clt-N`, et aucune variable ne l'a fourni.
+
 > [!NOTE]
 >
 > Si le comptage vaut 0, attendez quelques secondes et relancez la requête. Le premier export après un redémarrage du service peut prendre quelques instants (la connexion vers Jaeger doit s'établir, et le processor `batch` attend son timeout de 2 s avant d'envoyer).

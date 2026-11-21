@@ -46,10 +46,10 @@ Versions utilisées dans ce lab :
 | `@opentelemetry/resources` | 3.1.1 |
 | `@opentelemetry/semantic-conventions` | 1.45.0 |
 | Jaeger | 2.23.0 |
-| RabbitMQ | 3.11.4-management-alpine |
-| PostgreSQL | 15 |
-| Nginx | 1.23.1 |
-| Module OpenTelemetry pour Nginx | webserver/v1.0.3 |
+| `amqplib` (mis à jour pour RabbitMQ 4) | 0.10.9 |
+| RabbitMQ | 4.4.1-management-alpine |
+| PostgreSQL | 17.12 |
+| Nginx (image officielle avec module OTel) | 1.30.7-otel |
 | **collector** OpenTelemetry (partie 6) | 0.165.0 |
 
 Les interfaces web passent par les ports ouverts de `clt-N` : Jaeger sur `http://$CLT_HOST:16686`, l'application sur `http://$CLT_HOST:8080`.
@@ -165,7 +165,7 @@ services:
       - mm_network
 
   rabbitmq:
-    image: rabbitmq:3.11.4-management-alpine
+    image: rabbitmq:4.4.1-management-alpine
     container_name: rabbitmq
     hostname: microservices_march
     ports:
@@ -185,7 +185,7 @@ services:
       - mm_network
 
   messenger-db:
-    image: postgres:15
+    image: postgres:17.12
     container_name: messenger-db
     environment:
       POSTGRES_USER: postgres
@@ -200,7 +200,7 @@ services:
       - mm_network
 
   notifier-db:
-    image: postgres:15
+    image: postgres:17.12
     container_name: notifier-db
     environment:
       POSTGRES_USER: postgres
@@ -244,12 +244,14 @@ notifier-db      Up
 rabbitmq         Up
 ```
 
-Installez les dépendances des deux applications :
+Installez les dépendances des deux applications, et mettez à jour `amqplib` vers `0.10.9` :
 
 ```bash
-cd ~/tp05/messenger/app && npm install
-cd ~/tp05/notifier/app && npm install
+cd ~/tp05/messenger/app && npm install && npm install --save-exact amqplib@0.10.9
+cd ~/tp05/notifier/app && npm install && npm install --save-exact amqplib@0.10.9
 ```
+
+**NB** : RabbitMQ 4 impose une taille minimale de trame AMQP (`frame_max`) de 8192 octets, alors que la version `0.10.3` de `amqplib` épinglée dans les dépôts de 2023 négociait 4096 octets et provoquait une fermeture immédiate de la connexion. Le passage à `0.10.9` corrige ce point tout en restant compatible avec l'auto-instrumentation.
 
 Initialisez les deux bases. Chaque service crée sa base, son schéma et un jeu de données de démonstration :
 
@@ -348,6 +350,7 @@ const sdk = new NodeSDK({
 });
 
 sdk.start();
+EOF
 ```
 
 Relancez le messenger avec le fichier d'instrumentation :
@@ -357,6 +360,8 @@ node --import ./tracing.mjs index.mjs
 ```
 
 Rejouez une requête, puis regardez Jaeger dans votre navigateur, sur `http://$CLT_HOST:16686` : le service `messenger` apparaît, avec une trace par requête HTTP.
+
+![Traces du service messenger dans Jaeger](img/tp05-jaeger-messenger.png)
 
 **NB** : l'exporteur pointe vers `http://localhost:4318/v1/traces`, le port OTLP/HTTP de Jaeger. Le contexte est chargé avant le module de l'application : c'est le rôle de `--import`. L'ordre est important, un `import` placé dans `index.mjs` serait trop tardif pour intercepter les bibliothèques.
 
@@ -389,6 +394,7 @@ const sdk = new NodeSDK({
 });
 
 sdk.start();
+EOF
 ```
 
 Relancez le messenger :
@@ -444,6 +450,7 @@ const sdk = new NodeSDK({
 });
 
 sdk.start();
+EOF
 ```
 
 Relancez le notifier :
@@ -460,67 +467,61 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
   http://localhost:8080/conversations/1/messages
 ```
 
+![Waterfall d'une trace unique traversant messenger, RabbitMQ et notifier dans Jaeger](img/tp05-jaeger-trace-waterfall.png)
+
 **NB** : la trace unique s'explique par la composition du bundle. `@opentelemetry/auto-instrumentations-node` embarque l'instrumentation de `amqplib` : à la publication, le messenger pose un span `publish <default>` et écrit le contexte dans les en-têtes du message ; à la consommation, le notifier lit ces en-têtes et continue la trace avec son span `chat_queue process`. Sans cette instrumentation, par exemple avec un `amqplib` brut, l'en-tête ne serait pas posé et le notifier apparaîtrait dans une trace séparée. Retenez pour l'instant qu'une trace séparée signifie une propagation manquante, pas une collecte en panne.
 
 ## 5. Nginx devant l'application
 
-Jusqu'ici, les traces commencent au messenger. Nginx, le point d'entrée réel, est invisible. Le module OpenTelemetry pour Nginx ajoute un span par requête et possède le contexte de trace, à condition qu'il propage les en-têtes vers l'amont.
+Jusqu'ici, les traces commencent au messenger. Nginx, le point d'entrée réel, est invisible. L'image officielle `nginx:1.30.7-otel` embarque directement le module OpenTelemetry natif (`ngx_otel_module.so`) : il crée un span par requête et propage les en-têtes W3C Trace Context vers l'amont.
 
-Remplacez le `Dockerfile` du proxy par une version qui installe le module :
+Remplacez le `Dockerfile` du proxy pour utiliser cette image et charger le module :
 
 ```bash
 cd ~/tp05/platform/ingress
 cat > Dockerfile <<'EOF'
-FROM nginx:1.23.1
+FROM nginx:1.30.7-otel
 
 ENV NGINX_UPSTREAM=localhost
 
-ARG OPENTELEMETRY_CPP_VERSION=1.0.3
+RUN sed -i "1i load_module modules/ngx_otel_module.so;" /etc/nginx/nginx.conf
 
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/opentelemetry-webserver-sdk/sdk_lib/lib
-
-ADD https://github.com/open-telemetry/opentelemetry-cpp-contrib/releases/download/webserver%2Fv${OPENTELEMETRY_CPP_VERSION}/opentelemetry-webserver-sdk-x64-linux.tgz /tmp
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates unzip \
-  && tar xvfz /tmp/opentelemetry-webserver-sdk-x64-linux.tgz -C /opt \
-  && rm -rf /tmp/opentelemetry-webserver-sdk-x64-linux.tgz \
-  && /opt/opentelemetry-webserver-sdk/install.sh \
-  && echo "load_module /opt/opentelemetry-webserver-sdk/WebServerModule/Nginx/1.23.1/ngx_http_opentelemetry_module.so;\n$(cat /etc/nginx/nginx.conf)" > /etc/nginx/nginx.conf
-
+COPY opentelemetry_module.conf /etc/nginx/conf.d/00-opentelemetry.conf
 COPY default.conf.template /etc/nginx/templates/default.conf.template
-COPY opentelemetry_module.conf /etc/nginx/conf.d/opentelemetry_module.conf
 
 EXPOSE 80
+EOF
 ```
 
-Écrivez la configuration du module. L'exporteur OTLP pointe vers Jaeger par son nom de conteneur, sur le réseau Compose :
+Écrivez la configuration du module. L'exporteur OTLP pointe vers Jaeger par son nom de conteneur sur le réseau Compose, et `otel_trace_context propagate` transmet le contexte de trace au messenger :
 
 ```bash
 cd ~/tp05/platform/ingress
 cat > opentelemetry_module.conf <<'EOF'
-NginxModuleEnabled ON;
-NginxModuleOtelSpanExporter otlp;
-NginxModuleOtelExporterEndpoint jaeger:4317;
-NginxModuleServiceName messenger-lb;
-NginxModuleServiceNamespace MicroservicesMarchDemoArchitecture;
-NginxModuleServiceInstanceId DemoInstanceId;
-NginxModuleResolveBackends ON;
-NginxModuleTraceAsError ON;
+otel_exporter {
+    endpoint jaeger:4317;
+}
+otel_service_name messenger-lb;
+otel_trace on;
+otel_trace_context propagate;
 EOF
 ```
 
-Reconstruisez et relancez le proxy, puis rejouez une requête :
+Reconstruisez et relancez le proxy, puis envoyez un message :
 
 ```bash
 cd ~/tp05
 docker compose -f compose.yaml up -d --build ingress
-curl -s http://localhost:8080/health
+curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
+  -d '{"content": "Trace de bout en bout avec Nginx"}' \
+  http://localhost:8080/conversations/1/messages
 ```
 
-Dans Jaeger, un nouveau service `messenger-lb` apparaît. Ouvrez une trace : le span de Nginx est la racine, il porte l'en-tête propagé vers le messenger, et les spans du messenger s'y rattachent.
+Dans Jaeger, un nouveau service `messenger-lb` apparaît. Ouvrez la trace : le span de Nginx est la racine (en bleu), les spans du messenger s'y rattachent (en orange), puis ceux du notifier à travers RabbitMQ (en violet). La trace complète traverse désormais les trois services.
 
-**NB** : `NginxModuleResolveBackends ON` demande au module de résoudre le nom de l'amont et d'injecter le contexte. Sans cette ligne, Nginx produit un span isolé et le lien avec le messenger est perdu, exactement comme pour RabbitMQ à la partie 4.
+![Trace de bout en bout traversant Nginx (messenger-lb), messenger et notifier dans Jaeger](img/tp05-jaeger-nginx.png)
+
+**NB** : la directive `otel_trace_context propagate;` demande au module d'injecter l'en-tête `traceparent` dans la requête transmise au messenger. Sans elle (ou avec `ignore`), Nginx produit un span isolé et le lien avec le messenger est perdu.
 
 ## 6. Données applicatives et masquage
 
@@ -535,7 +536,7 @@ import { trace, SpanStatusCode } from "@opentelemetry/api";
 
 export function logRequestBody(req) {
   const span = trace.getActiveSpan();
-  if (!span || !req.body) {
+  if (!span || !req.body || Object.keys(req.body).length === 0) {
     return;
   }
   span.addEvent("request.body", { "http.request.body": JSON.stringify(req.body) });
@@ -544,18 +545,18 @@ export function logRequestBody(req) {
 EOF
 ```
 
-Branchez-le sur le routeur de l'application, par un middleware qui s'exécute sur toutes les requêtes :
+Branchez-le sur l'application juste après `express.json()`, par un middleware qui s'exécute sur toutes les requêtes une fois le corps JSON analysé :
 
 ```bash
 cd ~/tp05/messenger/app
-sed -i '14a import { logRequestBody } from "./request-logger.mjs";' index.mjs
-sed -i '0,/^const router = Router();$/s//const router = Router();\nrouter.use((req, _res, next) => {\n  logRequestBody(req);\n  next();\n});/' index.mjs
+sed -i '/import { dispatchEvent/a import { logRequestBody } from "./request-logger.mjs";' index.mjs
+sed -i '/app.use(express.json());/a app.use((req, _res, next) => { logRequestBody(req); next(); });' index.mjs
 grep -n "logRequestBody" index.mjs
 ```
 
 ```text
 15:import { logRequestBody } from "./request-logger.mjs";
-24:  logRequestBody(req);
+19:app.use((req, _res, next) => { logRequestBody(req); next(); });
 ```
 
 Arrêtez le messenger s'il tourne, relancez-le avec l'instrumentation, et envoyez un message qui contient une donnée personnelle :
@@ -570,10 +571,10 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
   http://localhost:8080/conversations/1/messages
 ```
 
-Dans Jaeger, l'événement `request.body` du dernier span contient le numéro en clair :
+Dans Jaeger, ouvrez la dernière trace puis cliquez sur le span `middleware - <anonymous>` et dépliez la section **Events (1)** : l'événement `request.body` contient le numéro en clair :
 
 ```json
-{"content": "Appelez-moi au 0612345678"}
+{"content":"Appelez-moi au 0612345678"}
 ```
 
 Le masquage ne se fait pas dans le code applicatif, mais dans le **collector** : les applications envoient la donnée brute, et la politique de rétention s'applique au point de passage. Écrivez d'abord sa configuration, un **collector** qui reçoit en OTLP sur `TCP/4319`, masque, puis transmet à Jaeger :
@@ -622,7 +623,7 @@ Faites pointer le messenger vers le **collector** au lieu de Jaeger, puis rejoue
 ```bash
 cd ~/tp05/messenger/app
 sed -i 's|http://localhost:4318/v1/traces|http://localhost:4319/v1/traces|' tracing.mjs
-pkill -f "index.mjs" || true
+fuser -k 4000/tcp 2>/dev/null || true
 node --import ./tracing.mjs index.mjs
 ```
 
@@ -632,10 +633,24 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
   http://localhost:8080/conversations/1/messages
 ```
 
-Dans Jaeger, l'événement affiche désormais :
+Dans Jaeger, sur le span `middleware - <anonymous>` de la nouvelle trace, l'événement `request.body` affiche désormais :
 
 ```json
-{"content": "Appelez-moi au [numero masque]"}
+{"content":"Appelez-moi au [numero masque]"}
+```
+
+Vous pouvez aussi vérifier les deux événements (avant et après masquage) directement depuis le terminal via l'API v3 de Jaeger :
+
+```bash
+MIN=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+MAX=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)
+curl -s "http://localhost:16686/api/v3/traces?query.service_name=messenger&query.startTimeMin=$MIN&query.startTimeMax=$MAX" \
+  | jq -r '.result.resourceSpans[].scopeSpans[].spans[].events[]? | select(.name=="request.body") | .attributes[] | select(.key=="http.request.body") | .value.stringValue'
+```
+
+```text
+{"content":"Appelez-moi au [numero masque]"}
+{"content":"Appelez-moi au 0612345678"}
 ```
 
 **NB** : le masquage par le **collector** protège le stockage et l'accès aux traces, pas les logs applicatifs. Une donnée personnelle ne doit pas être écrite dans un span à la source : la bonne pratique est de ne jamais l'y mettre, et le masquage au **collector** n'est qu'un filet de sécurité.

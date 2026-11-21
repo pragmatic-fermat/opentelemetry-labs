@@ -606,6 +606,50 @@ puis `helm upgrade --install` avec le nouveau fichier de valeurs. Les traces app
 
 ## 4. Les logs des pods, de l'**agent** à VictoriaLogs
 
+Les logs suivent un chemin en trois étapes, chacune portée par un composant différent. Le schéma suivant le montre, avec le nom de l'exporter à chaque saut :
+
+```mermaid
+---
+title: Chemin d'un log, du fichier du pod à VictoriaLogs
+---
+flowchart LR
+  subgraph N["Nœud Kubernetes"]
+    direction TB
+    F["/var/log/pods<br/>fichiers écrits par le runtime"]
+    subgraph AG["pod otel-agent (DaemonSet)"]
+      direction TB
+      FL["receiver file_log"]
+      KA["processor k8s_attributes<br/>k8s.pod.name, k8s.namespace.name"]
+      FL --> KA
+    end
+    F --> FL
+  end
+
+  subgraph GW["pod otel-gateway (Deployment)"]
+    direction TB
+    OR["receiver otlp"]
+    PR["processors<br/>memory_limiter, batch"]
+    OR --> PR
+  end
+
+  subgraph VL["pod victoria-logs"]
+    direction TB
+    IN["ingestion OTLP<br/>/insert/opentelemetry/v1/logs"]
+    UI["interface vmui<br/>/select/vmui/"]
+  end
+
+  KA -->|"exporter otlp_grpc/gateway<br/>TCP/4317"| OR
+  PR -->|"exporter otlp_http/victorialogs<br/>TCP/9428"| IN
+  IN --> UI
+  B([Navigateur]) -->|TCP/8080| UI
+```
+
+Trois points se lisent sur ce schéma :
+
+- le log est **lu sur le disque du nœud**, par le pod de l'**agent** qui tourne sur ce nœud : c'est ce qui impose un DaemonSet, et pourquoi une **gateway** centralisée ne peut pas faire ce travail ;
+- l'**agent** ajoute les attributs Kubernetes, puis envoie à la **gateway** en OTLP/gRPC, sur le même canal que les traces ;
+- la **gateway** réexporte en OTLP/HTTP vers VictoriaLogs, dont l'endpoint d'ingestion est `/insert/opentelemetry/v1/logs` et qui n'accepte que le protobuf. L'interface `vmui` lit ensuite les données stockées.
+
 Le pipeline `logs` mis en place aux parties 2 et 3 tourne, mais rien ne l'a encore vérifié : il faut générer des logs, puis les lire.
 
 Commencez par produire du trafic applicatif, qui écrit dans les logs des pods `frontend` et `backend` :
@@ -630,6 +674,10 @@ On obtient des lignes JSON, une par entrée de log :
 Trois champs méritent l'attention : `_msg` (le message), `_time`, et `_stream`, qui regroupe les étiquettes identifiant la source. Les autres champs viennent des attributs de ressource que l'**agent** a ajoutés avec `k8s_attributes` : c'est ce qui rend les logs exploitables, sans quoi il ne resterait que des chemins de fichiers.
 
 Ouvrez maintenant l'interface dans le navigateur, sur `http://vlogs.$INGRESS_HOST:8080`. Elle s'appelle `vmui` et sert à la fois à écrire les requêtes et à lire les résultats, avec trois modes d'affichage (`Group`, `Table`, `JSON`).
+
+![Interface vmui de VictoriaLogs, requête sur le namespace demo et champs Kubernetes disponibles](img/tp03-vlogs-logsql.png)
+
+La colonne de gauche liste les champs disponibles, avec le nombre de valeurs distinctes : ce sont les attributs de ressource posés par l'**agent**, ce qui permet de construire les requêtes sans les deviner.
 
 Dans le champ de requête, saisissez successivement les requêtes suivantes. Le langage s'appelle **LogsQL** ; il s'écrit comme une suite de filtres sur des champs, séparés par des espaces, et les valeurs contenant des caractères spéciaux vont entre guillemets.
 

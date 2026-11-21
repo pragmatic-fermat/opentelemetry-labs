@@ -550,6 +550,15 @@ kubectl -n observability get pods -l app.kubernetes.io/instance=otel-agent \
 
 La présence de `/var/log/pods` confirme que le preset a fait son travail. Sans ce montage, le receiver `file_log` n'aurait rien à lire et le pipeline `logs` resterait vide.
 
+**NB** : le receiver `file_log` du preset démarre avec `start_at: end`, c'est-à-dire qu'il lit les fichiers à partir du moment où il démarre. Les lignes écrites avant l'installation de l'**agent** ne seront donc jamais collectées, et un pod démarré avant lui n'apparaîtra pas. C'est le comportement attendu, et non une panne. Si la partie 4 ne montre aucun log, redémarrez les déploiements pour qu'ils réécrivent leurs lignes d'initialisation :
+
+```bash
+kubectl -n demo rollout restart deployment/frontend deployment/backend
+kubectl -n demo rollout status deployment/frontend deployment/backend
+```
+
+Chaque redémarrage produit aussi une nouvelle valeur dans `k8s.pod.name`, ce qui est visible dans les logs et dans les traces.
+
 Envoyez des traces de test à l'**agent**, cette fois, et non à la **gateway** :
 
 ```bash
@@ -652,7 +661,7 @@ Trois points se lisent sur ce schéma :
 
 Le pipeline `logs` mis en place aux parties 2 et 3 tourne, mais rien ne l'a encore vérifié : il faut générer des logs, puis les lire.
 
-Commencez par produire du trafic applicatif, qui écrit dans les logs des pods `frontend` et `backend` :
+Commencez par produire du trafic applicatif, qui écrit dans les logs des pods `frontend` et `backend`. Si vous arrivez directement ici, redémarrez d'abord les deux déploiements : le receiver `file_log` ne lit que ce qui est écrit après son démarrage (voir le NB de [la partie 3](#3-le-collector-en-mode-agent)) :
 
 ```bash
 for i in $(seq 20); do app /api/orders > /dev/null; done

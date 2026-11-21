@@ -983,4 +983,4 @@ otelcol-1  | LogRecord #1
 otelcol-1  | LogRecord #2
 ```
 
-Aucun backend ne stocke les logs ici : c'est le rôle des TP suivants.
+Aucun backend ne stocke les logs ici : la collecte des logs des pods est traitée [au TP3](Lab_TP03_Kubernetes.md), et leur émission par le SDK [au TP7](Lab_TP07_Instrumentation_Manuelle.md).

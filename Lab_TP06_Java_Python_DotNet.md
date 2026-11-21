@@ -1,4 +1,4 @@
-# Lab TP6 : Java, Python et .NET, auto-instrumentation sur Linux
+# Lab TP6 : Java, Python, .NET et PHP, auto-instrumentation sur Linux
 
 # Objectifs
 
@@ -7,8 +7,9 @@
 - activer l'auto-instrumentation d'une application Java avec l'**agent** Java, sans modifier son code ;
 - faire de même pour une application Python avec `opentelemetry-instrument` ;
 - faire de même pour une application .NET sur Linux ;
-- régler les trois uniquement par des variables `OTEL_*` (nom de service, adresse du **collector**, attributs de ressource) ;
-- obtenir une trace unique qui traverse les trois services et comparer ce que chaque **agent** produit.
+- faire de même pour une application PHP, avec l'extension `opentelemetry` et les paquets Composer ;
+- régler les quatre uniquement par des variables `OTEL_*` (nom de service, adresse du **collector**, attributs de ressource) ;
+- obtenir une trace unique qui traverse les quatre services et comparer ce que chaque **agent** produit.
 
 # Contenu
 
@@ -17,7 +18,8 @@
 - [2. Java](#2-java)
 - [3. Python](#3-python)
 - [4. .NET](#4-net)
-- [5. Trace multi-langages et comparaison](#5-trace-multi-langages-et-comparaison)
+- [5. PHP](#5-php)
+- [6. Trace multi-langages et comparaison](#6-trace-multi-langages-et-comparaison)
 - [Cleanup](#cleanup)
 - [Extra](#extra)
 
@@ -25,11 +27,11 @@
 
 ## Environnement
 
-Le lab se déroule sur deux machines : `srv-N` héberge les trois applications et leurs **agents**, `clt-N` porte le **collector** et Jaeger, qui reçoivent les données. Vous travaillez depuis le terminal de `clt-N`, et les commandes destinées au serveur passent par SSH.
+Le lab se déroule sur deux machines : `srv-N` héberge les quatre applications et leurs **agents**, `clt-N` porte le **collector** et Jaeger, qui reçoivent les données. Vous travaillez depuis le terminal de `clt-N`, et les commandes destinées au serveur passent par SSH.
 
 Prérequis : TP1 recommandé. La stack du TP1 (Jaeger et un **collector** qui reçoit en OTLP) doit tourner sur `clt-N`.
 
-Les trois applications sont fournies dans le dépôt et recopiées sur `srv-N`. Chacune est volontairement minimale : un endpoint HTTP, un appel au service suivant, aucune bibliothèque OpenTelemetry.
+Les quatre applications sont fournies dans le dépôt et recopiées sur `srv-N`. Chacune est volontairement minimale : un endpoint HTTP, un appel au service suivant, aucune bibliothèque OpenTelemetry.
 
 Versions utilisées dans ce lab :
 
@@ -41,15 +43,20 @@ Versions utilisées dans ce lab :
 | Flask | 3.1.3 |
 | requests | 2.34.2 |
 | Auto-instrumentation .NET | 1.20.0 |
+| PHP | 8.3 (paquet `php8.3-cli`) |
+| Extension PECL `opentelemetry` | 1.1.0 |
+| SDK PHP (`open-telemetry/sdk`) | 1.7 |
+| Exporter OTLP PHP (`open-telemetry/exporter-otlp`) | 1.2 |
+| Slim (`slim/slim`) | 4.14 |
 | OpenJDK | 21 (paquet `openjdk-21-jre-headless`) |
 | .NET | 8.0 (runtime ASP.NET Core) |
 | Jaeger | 2.23.0 |
 
-Le schéma suivant montre la chaîne : une requête entre par le service Java, qui appelle le service Python, qui appelle le service .NET. Les trois **agents** envoient au même **collector**.
+Le schéma suivant montre la chaîne : une requête entre par le service Java, qui appelle le service Python, qui appelle le service .NET, qui appelle le service PHP. Les quatre **agents** envoient au même **collector**.
 
 ```mermaid
 ---
-title: TP6, chaîne des trois services
+title: TP6, chaîne des quatre services
 ---
 flowchart LR
   C([curl]) -->|TCP/8081| J["checkout<br/>Java, agent 2.34.0"]
@@ -76,7 +83,7 @@ curl -s -o /dev/null -w 'collector OTLP : %{http_code}\n' \
 collector OTLP : 200
 ```
 
-Recopiez les trois applications sur le serveur :
+Recopiez les quatre applications sur le serveur :
 
 ```bash
 ssh $SRV_HOST 'mkdir -p ~/tp06'
@@ -85,16 +92,17 @@ ssh $SRV_HOST 'ls ~/tp06'
 ```
 
 ```text
-checkout.java  inventory.py  pricing
+checkout.java  inventory.py  pricing  shipping
 ```
 
 `pricing` est un projet .NET (`pricing.csproj` et `Program.cs`), compilé à la partie 4.
 
-Les trois applications s'appellent en cascade. Voici leur comportement, pour comprendre les traces que vous verrez ensuite :
+Les quatre applications s'appellent en cascade. Voici leur comportement, pour comprendre les traces que vous verrez ensuite :
 
 - `checkout` (Java, `TCP/8081`) répond à `GET /order` et appelle `inventory` ;
 - `inventory` (Python, `TCP/8080`) répond à `GET /stock` et appelle `pricing` ;
-- `pricing` (.NET, `TCP/8082`) répond à `GET /price` et ne dépend de rien.
+- `pricing` (.NET, `TCP/8082`) répond à `GET /price` et appelle `shipping` ;
+- `shipping` (PHP, `TCP/8083`) répond à `GET /ship` et ne dépend de rien.
 
 Sans instrumentation, une requête produit trois lignes de log séparées et aucune trace.
 
@@ -258,11 +266,73 @@ curl -s "http://localhost:16686/api/v3/services" | jq -c '.services'
 ```
 
 ```json
-{"orders":"1 mug","inventory":{"sku":"1 mug","price":{"currency":"EUR","amount":12.5}}}
+{"orders":"1 mug","inventory":{"sku":"1 mug","price":{"currency":"EUR","amount":12.5,"shipping":{"error":"HttpRequestException"}}}}
 {"services":["checkout","inventory","jaeger","pricing"]}
 ```
 
-## 5. Trace multi-langages et comparaison
+L'appel vers `shipping` échoue encore : le service PHP est l'objet de la partie suivante.
+
+## 5. PHP
+
+Installez PHP, l'extension `opentelemetry` et Composer :
+
+```bash
+ssh $SRV_HOST 'apt-get install -y -qq php8.3-cli php8.3-curl php8.3-xml php8.3-mbstring unzip composer'
+ssh $SRV_HOST 'pecl install opentelemetry-1.1.0'
+ssh $SRV_HOST 'echo "extension=opentelemetry.so" > /etc/php/8.3/cli/conf.d/20-opentelemetry.ini; php -m | grep opentelemetry'
+```
+
+```text
+opentelemetry
+```
+
+L'extension seule ne fait rien : elle fournit les points d'accroche, et les paquets Composer décident de ce qui est instrumenté. Installez l'application et ses dépendances :
+
+```bash
+ssh $SRV_HOST 'cd ~/tp06/shipping && composer install --no-interaction --no-progress 2>&1 | tail -3'
+ssh $SRV_HOST 'ls ~/tp06/shipping/vendor/open-telemetry'
+```
+
+```text
+exporter-otlp  opentelemetry-auto-slim  sdk
+```
+
+Lancez le service avec les mêmes variables `OTEL_*`, plus celle qui active le chargement automatique :
+
+```bash
+ssh $SRV_HOST "cd ~/tp06/shipping && \
+  OTEL_PHP_AUTOLOAD_ENABLED=true \
+  OTEL_SERVICE_NAME=shipping \
+  OTEL_EXPORTER_OTLP_ENDPOINT=http://$CLT_HOST:4318 \
+  OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
+  OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=tp6,lab.id=$LAB_ID \
+  nohup php -S 0.0.0.0:8083 -t public > /tmp/shipping.log 2>&1 &"
+sleep 4
+ssh $SRV_HOST 'tail -2 /tmp/shipping.log'
+```
+
+```text
+[Fri Nov 21 ...] PHP 8.3.x Development Server (http://0.0.0.0:8083) started
+```
+
+**NB** : en PHP, l'activation tient à deux éléments, et il faut les deux. L'extension `opentelemetry` fournit les hooks au niveau du moteur, et `OTEL_PHP_AUTOLOAD_ENABLED=true` demande au SDK de s'enregistrer à chaque requête. Sans l'extension, les paquets Composer s'installent mais ne produisent aucun span ; sans la variable, l'extension est chargée mais ne s'enregistre pas.
+
+Vérifiez la chaîne complète, désormais sur quatre langages :
+
+```bash
+curl -s http://$SRV_HOST:8081/order
+sleep 5
+curl -s "http://localhost:16686/api/v3/services" | jq -c '.services'
+```
+
+```json
+{"orders":"1 mug","inventory":{"sku":"1 mug","price":{"currency":"EUR","amount":12.5,"shipping":{"carrier":"colissimo","eta_days":2}}}}
+{"services":["checkout","inventory","jaeger","pricing","shipping"]}
+```
+
+**NB** : l'exemple de la documentation PHP est souvent un script unique servi par le serveur intégré. Cela fonctionne pour l'export, mais pas pour l'instrumentation automatique de l'entrée HTTP : il n'y a pas de framework à intercepter. C'est pourquoi le service utilise Slim, dont l'instrumentation est fournie par `opentelemetry-auto-slim`. Pour reprendre l'esprit de l'application PHP de démonstration du lab d'origine, c'est la même mécanique qui s'appliquerait, avec un framework plutôt qu'avec un script nu.
+
+## 6. Trace multi-langages et comparaison
 
 Envoyez quelques requêtes, puis ouvrez Jaeger et cherchez le service `checkout`. Une requête produit une trace unique à travers les trois langages, grâce au propagator W3C `tracecontext`, actif par défaut dans les trois **agents**.
 
@@ -276,11 +346,14 @@ curl -s "http://localhost:16686/api/v3/traces?query.service_name=checkout&query.
 ```text
 1 GET
 2 GET /order
+2 GET /price
+2 GET /ship
 2 GET /stock
+3 GET
 3 GET
 ```
 
-Les kinds se lisent ainsi : `2` est un span serveur, `3` un span client. Vous voyez donc le span serveur de `checkout`, son client vers `inventory`, le serveur et le client de `inventory`, et le serveur de `pricing`.
+Les kinds se lisent ainsi : `2` est un span serveur, `3` un span client. Vous voyez les quatre spans serveur, un par langage, et les trois spans client qui les relient. Une seule trace, quatre services, quatre **agents** différents.
 
 Comparez maintenant les attributs produits par chaque **agent** :
 
@@ -299,9 +372,9 @@ telemetry.sdk.version=...
 
 Trois différences valent la discussion en séance :
 
-- **`telemetry.sdk.language`** vaut `java`, `python` ou `dotnet` selon le service, et c'est le seul attribut qui trahit le langage : le reste de la trace est homogène ;
-- **les noms de spans** varient : Java produit `GET /order`, Python `GET /stock`, .NET `GET /price`, parce que chaque instrumentation applique sa propre convention de nommage ;
-- **les métriques de runtime** ne sont pas identiques : Java expose la mémoire de la JVM, Python le compteur du ramasse-miettes, .NET le pool de threads. Elles arriveraient dans Prometheus, comme au TP1, si le pipeline `metrics` était exporté.
+- **`telemetry.sdk.language`** vaut `java`, `python`, `dotnet` ou `php` selon le service, et c'est le seul attribut qui trahit le langage : le reste de la trace est homogène ;
+- **les noms de spans** varient : Java produit `GET /order`, Python `GET /stock`, .NET `GET /price`, PHP `GET /ship`, parce que chaque instrumentation applique sa propre convention de nommage, et que PHP passe par le middleware PSR-15 de Slim ;
+- **les métriques de runtime** ne sont pas identiques, et PHP n'en produit aucune par défaut : Java expose la mémoire de la JVM, Python le compteur du ramasse-miettes, .NET le pool de threads. Elles arriveraient dans Prometheus, comme au TP1, si le pipeline `metrics` était exporté.
 
 **NB** : la propagation entre langages ne demande aucune configuration supplémentaire parce que les trois **agents** utilisent `tracecontext` par défaut. Si un service n'apparaissait pas dans la trace, la première vérification est l'en-tête `traceparent` sur l'appel sortant, et la seconde le propagator configuré par `OTEL_PROPAGATORS`.
 
@@ -310,15 +383,16 @@ Trois différences valent la discussion en séance :
 Arrêtez les trois services sur le serveur, puis supprimez les fichiers installés :
 
 ```bash
-ssh $SRV_HOST 'pkill -f checkout.java; pkill -f inventory.py; pkill -f pricing.dll'
+ssh $SRV_HOST 'pkill -f checkout.java; pkill -f inventory.py; pkill -f pricing.dll; pkill -f "php -S"'
 ssh $SRV_HOST 'rm -rf ~/tp06 /usr/share/dotnet /usr/local/bin/dotnet'
-ssh $SRV_HOST 'apt-get purge -y openjdk-21-jre-headless python3-venv'
+ssh $SRV_HOST 'pecl uninstall opentelemetry; rm -f /etc/php/8.3/cli/conf.d/20-opentelemetry.ini'
+ssh $SRV_HOST 'apt-get purge -y openjdk-21-jre-headless python3-venv php8.3-cli php8.3-curl php8.3-xml php8.3-mbstring composer'
 ```
 
 Les services étaient lancés en `nohup`, sans service systemd : `pkill` suffit, et la vérification suivante ne doit plus rien renvoyer :
 
 ```bash
-ssh $SRV_HOST 'pgrep -af "checkout.java|inventory.py|pricing.dll" || echo "aucun service"'
+ssh $SRV_HOST 'pgrep -af "checkout.java|inventory.py|pricing.dll|php -S" || echo "aucun service"'
 ```
 
 ```text

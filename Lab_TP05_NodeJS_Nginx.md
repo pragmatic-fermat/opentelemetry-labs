@@ -113,7 +113,7 @@ v22.23.5
 nodejs 22.23.5
 ```
 
-**NB** : la version est fixée dans `/root/.tool-versions`, le fichier que `asdf` lit. Les dépôts de l'application en contiennent un qui demande Node.js 19.3.0, version qui n'est plus maintenue et que l'auto-instrumentation actuelle refuse : c'est pour cela que la version est fixée au niveau de la machine, avant le clone.
+**NB** : `asdf` choisit la version dans l'ordre suivant : le `.tool-versions` du dossier courant, puis celui du parent, puis la version globale de `/root/.tool-versions`. C'est pourquoi la version est fixée à la fois globalement, pour les commandes lancées hors des dépôts, et localement dans chaque application, pour l'emporter sur le fichier du dépôt.
 
 **NB** : pourquoi Node.js 22 plutôt qu'une version plus récente ? Le plancher vient de l'auto-instrumentation, pas de l'application. Les paquets OpenTelemetry actuels exigent Node.js 22.15 ou plus : les versions 18 et 20 ne sont plus prises en charge, et l'injection des bibliothèques n'y est plus garantie. Les versions 22 et 24 sont des versions LTS et conviennent. En revanche les versions impaires (23, 25) ne sont pas LTS, et l'injection, qui s'appuie sur des mécanismes internes de Node (`require-in-the-middle`, `import-in-the-middle`, `diagnostics_channel`), y est prise en charge avec du retard. Une version 22 LTS est donc le choix sûr pour un environnement de formation.
 
@@ -129,6 +129,20 @@ git -C messenger checkout d20437aa3873
 git -C notifier checkout 0c27d64993be
 git -C platform checkout 56aa89e35eff
 ```
+
+Chaque dépôt contient un fichier `.tool-versions` qui demande Node.js 19.3.0. `asdf` lit ce fichier en priorité sur la version globale, et refuse alors de fournir `node`. Fixez la version dans chaque application, ce qui écrit un `.tool-versions` local qui l'emporte :
+
+```bash
+cd ~/tp05/messenger/app && asdf local nodejs 22.23.5
+cd ~/tp05/notifier/app && asdf local nodejs 22.23.5
+cd ~/tp05/messenger/app && node --version
+```
+
+```text
+v22.23.5
+```
+
+**NB** : ce TP utilise le port `TCP/8080` de `clt-N`. Si un cluster KinD d'un TP précédent tourne encore, il occupe ce port : contrôlez avec `kind get clusters` et supprimez-le avec `kind delete cluster --name cluster`. Le cleanup du TP3 le fait déjà, mais un cluster laissé de côté bloquerait le démarrage du proxy.
 
 Écrivez le fichier Compose qui démarre l'infrastructure et le proxy. Il reprend celui du dépôt `platform`, avec deux différences : les services Node.js n'y figurent pas, vous les lancerez vous-mêmes dans des terminaux, et Jaeger est la version 2.
 
@@ -213,6 +227,8 @@ EOF
 docker compose -f compose.yaml up -d --build
 ```
 
+**NB** : la pile démarre son propre Jaeger, neuf, et ne réutilise rien d'un TP précédent. Si un conteneur d'un TP antérieur tourne encore et occupe `TCP/4317` ou `TCP/4318`, le démarrage échoue sur `port is already allocated` : listez les conteneurs avec `docker ps`, puis arrêtez la pile concernée avec `docker compose down` depuis son dossier.
+
 Démarrez l'infrastructure, puis vérifiez l'état des conteneurs :
 
 ```bash
@@ -273,13 +289,19 @@ curl -s -X POST -H 'Content-Type: application/json' \
 ```
 
 ```json
-{"conversation_id":1,"participant_ids":[1,2]}
+{"conversation":{"id":"1","inserted_at":"2026-11-21T07:09:32.000Z"}}
 ```
 
 ```bash
 curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
   -d '{"content": "This is the first message"}' \
   http://localhost:8080/conversations/1/messages
+```
+
+Le message est créé et renvoyé :
+
+```json
+{"message":{"id":"1","content":"This is the first message","index":1,"user_id":1,"username":"James Blanderphone","conversation_id":1,"inserted_at":"2026-11-21T07:09:32.000Z"}}
 ```
 
 Dans le terminal du notifier, l'événement est arrivé :
@@ -381,11 +403,13 @@ Envoyez une requête, puis ouvrez la trace dans Jaeger et dépliez-la. Vous voye
 curl -s http://localhost:8080/health
 ```
 
+Dans la trace dépliée, les spans portent des noms parlants : `middleware - query`, `middleware - corsMiddleware`, `middleware - jsonParser` pour Express, `router - /conversations` pour la route, et `pg-pool.connect`, `pg.query:SELECT messenger_dev` pour le client PostgreSQL. La hiérarchie (indentation) montre quel span a appelé lequel.
+
 **NB** : `LAB_ID` est une variable d'environnement de la machine, définie par le terminal web. Contrôlez avec `echo $LAB_ID` : sa valeur apparaît dans les attributs de la ressource, ce qui permet de trier les traces d'un participant parmi celles des autres.
 
 ## 4. Instrumenter notifier
 
-Le notifier consomme RabbitMQ : il n'a pas de requête HTTP entrante. Son span racine est donc créé par le client RabbitMQ, et le lien avec le messenger dépend de la propagation du contexte dans les en-têtes du message.
+Le notifier consomme RabbitMQ : il n'a pas de requête HTTP entrante. Ses spans ne naissent donc pas d'un span serveur HTTP, mais du consommateur de la file : ils se rattacheront à la trace d'origine si le contexte a été propagé dans les en-têtes du message, ce que le bundle d'auto-instrumentation fait ici.
 
 Arrêtez le notifier (Ctrl+C), puis installez les mêmes paquets :
 
@@ -428,7 +452,7 @@ Relancez le notifier :
 node --import ./tracing.mjs index.mjs
 ```
 
-Envoyez un nouveau message, puis observez Jaeger : le service `notifier` apparaît, mais dans une trace **séparée** de celle du messenger.
+Envoyez un nouveau message, puis observez Jaeger : le service `notifier` apparaît, et ses spans **dans la même trace** que ceux du messenger. La trace unique traverse les deux services : le span `publish <default>` du messenger, puis le span `chat_queue process` du notifier, suivi de ses requêtes PostgreSQL.
 
 ```bash
 curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
@@ -436,7 +460,7 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
   http://localhost:8080/conversations/1/messages
 ```
 
-**NB** : c'est le résultat attendu avec l'auto-instrumentation seule. `amqplib` n'est pas instrumenté nativement, donc l'en-tête qui porte le contexte de trace n'est pas posé à la publication, et le consommateur ne peut pas rattacher ses spans à la trace d'origine. Le lien entre les deux services demande une instrumentation manuelle du producteur et du consommateur : c'est l'objet du TP7. Retenez pour l'instant que deux traces séparées signifient une propagation manquante, pas une collecte en panne.
+**NB** : la trace unique s'explique par la composition du bundle. `@opentelemetry/auto-instrumentations-node` embarque l'instrumentation de `amqplib` : à la publication, le messenger pose un span `publish <default>` et écrit le contexte dans les en-têtes du message ; à la consommation, le notifier lit ces en-têtes et continue la trace avec son span `chat_queue process`. Sans cette instrumentation, par exemple avec un `amqplib` brut, l'en-tête ne serait pas posé et le notifier apparaîtrait dans une trace séparée. Retenez pour l'instant qu'une trace séparée signifie une propagation manquante, pas une collecte en panne.
 
 ## 5. Nginx devant l'application
 

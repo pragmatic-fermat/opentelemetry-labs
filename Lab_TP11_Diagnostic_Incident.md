@@ -76,4 +76,4 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## Extra
 
-À compléter. Idée : écrire une règle d'alerte qui aurait détecté le premier incident.
+À compléter. Idée : rejouer l'incident avec les logs du SDK (`OTEL_LOG_LEVEL=debug`) puis revenir au niveau `info`, et comparer ce que chacun apporte au diagnostic.

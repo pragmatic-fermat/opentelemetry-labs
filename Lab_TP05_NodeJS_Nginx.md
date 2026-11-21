@@ -433,6 +433,12 @@ Dans la trace dépliée, les spans portent des noms parlants : `middleware - que
 >
 > `LAB_ID` est une variable d'environnement de la machine, définie par le terminal web. Contrôlez avec `echo $LAB_ID` : sa valeur apparaît dans les attributs de la ressource, ce qui permet de trier les traces d'un participant parmi celles des autres.
 
+Les attributs du span `router - /conversations` s'appellent `http.request.method`, `http.response.status_code` et `url.path`. Ce sont les noms des conventions sémantiques stables d'OpenTelemetry. Les parcs instrumentés avec des versions plus anciennes, et parfois une instrumentation écrite à la main, portent encore les noms précédents (`http.method`, `http.status_code`, `http.target`) : c'est la raison pour laquelle une recherche sur `http.method` peut ne rien renvoyer alors que la donnée existe. [Le TP7](Lab_TP07_Instrumentation_Manuelle.md) vous fera écrire ces attributs à la main, avec les noms actuels.
+
+> [!NOTE]
+>
+> Le volume de l'auto-instrumentation se règle aussi sans code : `OTEL_NODE_DISABLED_INSTRUMENTATIONS=net,dns` retire des instrumentations de la liste, par leur nom court et séparés par des virgules, et l'équivalent en code est `getNodeAutoInstrumentations({ "@opentelemetry/instrumentation-net": { enabled: false } })`. C'est le premier levier quand une trace se remplit de spans de bas niveau ; le second est le filtrage dans le **collector**, vu au [TP1](Lab_TP01_Socle.md).
+
 ## 4. Instrumenter notifier
 
 Le notifier consomme RabbitMQ : il n'a pas de requête HTTP entrante. Ses spans ne naissent donc pas d'un span serveur HTTP, mais du consommateur de la file : ils se rattacheront à la trace d'origine si le contexte a été propagé dans les en-têtes du message, ce que le bundle d'auto-instrumentation fait ici.

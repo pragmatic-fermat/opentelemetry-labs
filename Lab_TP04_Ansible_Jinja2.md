@@ -255,12 +255,19 @@ Le template produit une configuration de **collector** qui contient :
 - une première ligne de commentaire `{{ ansible_managed | comment }}`, qui indique que le fichier est géré par Ansible ;
 - un receiver `otlp` (gRPC et HTTP) qui écoute sur toutes les interfaces, ports 4317 et 4318 ;
 - si la variable `otelcol_hostmetrics_enabled` est vraie, un receiver `hostmetrics` avec `collection_interval: 30s` et les scrapers `cpu`, `load` et `memory` (écrits `cpu: {}`, etc.) ;
-- les processors `memory_limiter` (1 s, 256 MiB, marge de 64 MiB), `resource` et `batch`. Le processor `resource` reçoit, par une boucle sur le dictionnaire `otelcol_resource_attributes`, une entrée `upsert` par attribut (clé `key`, valeur écrite avec le filtre `to_json`, qui ajoute les guillemets nécessaires à une chaîne YAML). Le `batch` utilise la valeur de `otelcol_batch_timeout` ;
+- les processors `memory_limiter` (1 s, 256 MiB, marge de 64 MiB), `resourcedetection`, `resource` et `batch`. Le processor `resourcedetection` interroge la machine elle-même (détecteur `system` : nom d'hôte, système, identifiant machine) et complète la ressource avec ce qu'il trouve. Le processor `resource` reçoit, par une boucle sur le dictionnaire `otelcol_resource_attributes`, une entrée `upsert` par attribut (clé `key`, valeur écrite avec le filtre `to_json`, qui ajoute les guillemets nécessaires à une chaîne YAML). Le `batch` utilise la valeur de `otelcol_batch_timeout` ;
 - l'exporter `otlp_grpc/jaeger`, vers `otelcol_backend_host` sur le port 4317 sans TLS ;
 - si `otelcol_hostmetrics_enabled` est vraie, un exporter `otlp_http/prometheus` dont le paramètre `metrics_endpoint` vaut `http://<otelcol_backend_host>:9090/api/v1/otlp/v1/metrics` ;
-- un pipeline `traces` (receiver `otlp`, processors `memory_limiter`, `resource` puis `batch`, exporter `otlp_grpc/jaeger`) et, si `otelcol_hostmetrics_enabled` est vraie, un pipeline `metrics` (receiver `hostmetrics`, mêmes processors, exporter `otlp_http/prometheus`).
+- un pipeline `traces` (receiver `otlp`, processors `memory_limiter`, `resourcedetection`, `resource` puis `batch`, exporter `otlp_grpc/jaeger`) et, si `otelcol_hostmetrics_enabled` est vraie, un pipeline `metrics` (receiver `hostmetrics`, mêmes processors, exporter `otlp_http/prometheus`).
 
 La structure reprend celle des TP précédents. Seules changent les valeurs, qui viennent désormais des variables, et les blocs conditionnels.
+
+Le processor `resourcedetection` mérite un mot avant d'écrire le template. Deux façons de renseigner la ressource se complètent ici :
+
+- `resource` pose ce que vous décidez : `deployment.environment.name`, `lab.id`, un attribut de parc commun à tous les serveurs ;
+- `resourcedetection` lit ce que la machine sait d'elle-même : son nom, son système, son identifiant. Rien à déclarer, et chaque serveur reçoit sa propre valeur.
+
+C'est ce qui rendra la partie 5 lisible : le même template déployé sur quatre serveurs produira quatre `host.name` différents, sans une variable de plus. Le réglage `override: false` laisse la priorité aux attributs déjà posés, par `resource` ou par l'application : la détection complète la ressource, elle ne l'écrase pas. Le détecteur `env` existe aussi et lit `OTEL_RESOURCE_ATTRIBUTES` dans l'environnement du service ; il n'est pas utilisé ici, pour ne pas multiplier les mécanismes dans ce lab.
 
 ```bash
 mkdir -p templates
@@ -287,6 +294,10 @@ processors:
     check_interval: 1s
     limit_mib: 256
     spike_limit_mib: 64
+  resourcedetection:
+    detectors: [system]
+    timeout: 2s
+    override: false
   resource:
     attributes:
 {% for key, value in otelcol_resource_attributes.items() %}
@@ -311,12 +322,12 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
+      processors: [memory_limiter, resourcedetection, resource, batch]
       exporters: [otlp_grpc/jaeger]
 {% if otelcol_hostmetrics_enabled %}
     metrics:
       receivers: [hostmetrics]
-      processors: [memory_limiter, resource, batch]
+      processors: [memory_limiter, resourcedetection, resource, batch]
       exporters: [otlp_http/prometheus]
 {% endif %}
 EOF
@@ -349,6 +360,10 @@ processors:
     check_interval: 1s
     limit_mib: 256
     spike_limit_mib: 64
+  resourcedetection:
+    detectors: [system]
+    timeout: 2s
+    override: false
   resource:
     attributes:
       - key: deployment.environment.name
@@ -370,7 +385,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
+      processors: [memory_limiter, resourcedetection, resource, batch]
       exporters: [otlp_grpc/jaeger]
 ```
 
@@ -468,6 +483,18 @@ deployment.environment.name=tp4
 lab.id=<votre numéro>
 ```
 
+La même requête, filtrée sur `host.name`, montre ce qu'aucune variable n'a fourni : le nom de la machine, détecté par `resourcedetection`. Les traces sont celles du **collector** de `srv-N`, donc le nom est celui du serveur, pas celui de `clt-N` :
+
+```bash
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq -r '.result.resourceSpans[].resource.attributes[] | select(.key=="host.name" or .key=="os.type") | "\(.key)=\(.value.stringValue)"' | sort -u
+```
+
+```text
+host.name=srv-N.monlab.top
+os.type=linux
+```
+
 > [!NOTE]
 >
 > Si le comptage vaut 0, attendez quelques secondes et relancez la requête. Le premier export après un redémarrage du service peut prendre quelques instants (la connexion vers Jaeger doit s'établir, et le processor `batch` attend son timeout de 2 s avant d'envoyer).
@@ -510,7 +537,7 @@ Le diff montre les lignes que le template ajouterait à la configuration du serv
 @@ -37,3 +45,7 @@
 +    metrics:
 +      receivers: [hostmetrics]
-+      processors: [memory_limiter, resource, batch]
++      processors: [memory_limiter, resourcedetection, resource, batch]
 +      exporters: [otlp_http/prometheus]
 ```
 

@@ -173,7 +173,7 @@ Consultez d'abord sa version de départ avec `cat app/shop_handler.py`, puis ré
 
 1. extraie le contexte éventuel des en-têtes de la requête (`opentelemetry.propagate.extract`) : si l'appelant envoie un en-tête `traceparent`, le span rejoint sa trace ;
 2. crée avec `start_as_current_span` un span nommé `POST /orders`, de type `SpanKind.SERVER`, dont le parent est ce contexte ;
-3. y ajoute les attributs `http.request.method`, `http.route`, `order.sku`, `order.qty` et `customer.id` ;
+3. y ajoute les attributs `http.request.method`, `http.route`, `order.sku`, `order.qty`, `customer.id` et `enduser.id` ;
 4. appelle `orders.create_order(payload)`, qui renvoie le corps de la réponse et le code HTTP ;
 5. ajoute l'attribut `http.response.status_code` ;
 6. pour un code 201, ajoute l'attribut `order.total` ;
@@ -201,6 +201,7 @@ def create_order(payload, headers):
         span.set_attribute("order.sku", str(payload.get("sku")))
         span.set_attribute("order.qty", int(payload.get("qty", 1)))
         span.set_attribute("customer.id", payload.get("customer", "anonymous"))
+        span.set_attribute("enduser.id", payload.get("customer", "anonymous"))
 
         body, status = orders.create_order(payload)
 
@@ -259,6 +260,63 @@ done
 ```
 
 La commande affiche `stock.insufficient`.
+
+### Hacher l'identité avant l'export
+
+L'attribut `enduser.id` désigne une personne. Une valeur en clair, conservée des mois dans un backend, est une donnée personnelle exposée. Le masquage du [TP1](Lab_TP01_Socle.md) remplace la valeur par `***` ; ici, vous gardez la corrélation en la remplaçant par l'empreinte de sa valeur : deux commandes du même client portent la même empreinte, sans que son identité apparaisse.
+
+Le **collector** de la pile lit `otelcol/config.yaml`. Ajoutez-lui un second fichier, que le **collector** fusionne avec le premier : les dictionnaires se complètent, et une liste, comme celle des processors d'un pipeline, est remplacée par la dernière lue.
+
+```bash
+cat > otelcol/anonymize.yaml <<'EOF'
+processors:
+  transform/anonymize:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["enduser.id"], Substring(SHA256(attributes["enduser.id"]), 0, 8)) where attributes["enduser.id"] != nil
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform/anonymize, batch]
+      exporters: [otlp_grpc/jaeger, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http/loki, debug]
+EOF
+```
+
+Trois points sur cette instruction :
+
+- `SHA256` calcule l'empreinte de la valeur en hexadécimal, et `Substring(..., 0, 8)` n'en garde que huit caractères : assez pour corréler, trop peu pour remonter au nom ;
+- la clause `where` limite le calcul aux spans qui portent l'attribut, et `error_mode: ignore` laisse passer le span si l'expression échoue ;
+- le pipeline `logs` est répété à l'identique, parce que la liste des pipelines du second fichier remplace celle du premier. Oubliez-le, et les logs cessent d'arriver dans Loki.
+
+Déclarez le second fichier dans le compose, puis recréez le **collector** :
+
+```bash
+sed -i 's|command: \["--config=/etc/otelcol/config.yaml"\]|command: ["--config=/etc/otelcol/config.yaml", "--config=/etc/otelcol/anonymize.yaml"]|' compose.yaml
+docker compose up -d otelcol
+```
+
+Passez une commande, puis lisez les deux attributs sur le span :
+
+```bash
+./order.sh coffee 2 alice
+Q='http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z'
+curl -s "$Q" | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[0].attributes[] | select(.key=="customer.id" or .key=="enduser.id") | "\(.key)=\(.value.stringValue)"'
+```
+
+```text
+enduser.id=2bd806c9
+customer.id=alice
+```
+
+L'identité est toujours là, sous forme d'empreinte, et `customer.id` rappelle qui a commandé. En production, la même instruction s'applique à toute donnée personnelle que vous devez conserver sans l'exposer : adresse électronique, numéro de téléphone, identifiant de session.
 
 ## 4. Propager le contexte entre les services
 

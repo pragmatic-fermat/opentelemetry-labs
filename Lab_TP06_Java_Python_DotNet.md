@@ -206,8 +206,8 @@ ssh $SRV_HOST 'cd ~/tp06 && \
   OTEL_EXPORTER_OTLP_ENDPOINT=http://'"$CLT_HOST"':4318 \
   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
   OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=tp6,lab.id='"$LAB_ID"' \
-  nohup java -javaagent:./java/opentelemetry-javaagent.jar -cp . checkout \
-  > /tmp/checkout.log 2>&1 &'
+  setsid nohup java -javaagent:./java/opentelemetry-javaagent.jar -cp . checkout \
+  > /tmp/checkout.log 2>&1 < /dev/null &'
 sleep 4
 ssh $SRV_HOST 'tail -2 /tmp/checkout.log'
 ```
@@ -216,7 +216,7 @@ ssh $SRV_HOST 'tail -2 /tmp/checkout.log'
 checkout listening on 8081
 ```
 
-**NB** : trois pièges sur ce lancement. D'abord, le mode source-file (`java checkout.java`, qui compile à la volée) ne convient pas : il charge le compilateur en mémoire, l'**agent** détecte un outil JDK et se désactive avec le message `JDK tool detected, agent will not be started`. Ensuite, le mode source-file demande le JDK et non le JRE : sans le module `jdk.compiler`, il retombe en mode classe et échoue avec `ClassNotFoundException`. Enfin, `-javaagent` doit précéder `-cp` et la classe, l'**agent** devant s'attacher avant le chargement des classes. Il instrumente les bibliothèques du JDK et les clients HTTP sans qu'on les déclare, ce qui explique que le span client vers `inventory` apparaîtra sans code dédié.
+**NB** : trois pièges sur ce lancement. D'abord, le mode source-file (`java checkout.java`, qui compile à la volée) ne convient pas : il charge le compilateur en mémoire, l'**agent** détecte un outil JDK et se désactive avec le message `JDK tool detected, agent will not be started`. Ensuite, `-javaagent` doit précéder `-cp` et la classe, l'**agent** devant s'attacher avant le chargement des classes. Enfin, `setsid` détache le service de la session SSH : un service lancé par SSH et détaché avec `nohup` seul peut être tué à la fermeture de la session, ce qui s'est produit avec le service .NET ; `setsid` le rend indépendant de la session tout entière, et `< /dev/null` lui évite de lire le terminal. Les quatre lancements de ce lab suivent le même schéma. L'**agent** instrumente les bibliothèques du JDK et les clients HTTP sans qu'on les déclare, ce qui explique que le span client vers `inventory` apparaîtra sans code dédié.
 
 Appelez le service et vérifiez qu'il répond, puis regardez Jaeger :
 
@@ -256,8 +256,8 @@ ssh $SRV_HOST 'cd ~/tp06 && \
   OTEL_EXPORTER_OTLP_ENDPOINT=http://'"$CLT_HOST"':4318 \
   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
   OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=tp6,lab.id='"$LAB_ID"' \
-  nohup ~/tp06/venv/bin/opentelemetry-instrument \
-  ~/tp06/venv/bin/python inventory.py > /tmp/inventory.log 2>&1 &'
+  setsid nohup ~/tp06/venv/bin/opentelemetry-instrument \
+  ~/tp06/venv/bin/python inventory.py > /tmp/inventory.log 2>&1 < /dev/null &'
 sleep 4
 ssh $SRV_HOST 'tail -2 /tmp/inventory.log'
 ```
@@ -325,8 +325,8 @@ ssh $SRV_HOST 'cd ~/tp06 && \
   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
   OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=tp6,lab.id='"$LAB_ID"' \
   OTEL_DOTNET_AUTO_HOME=~/tp06/dotnet \
-  nohup sh ~/tp06/dotnet/instrument.sh dotnet ~/tp06/pricing/out/pricing.dll \
-  > /tmp/pricing.log 2>&1 &'
+  setsid nohup sh ~/tp06/dotnet/instrument.sh dotnet ~/tp06/pricing/out/pricing.dll \
+  > /tmp/pricing.log 2>&1 < /dev/null &'
 sleep 5
 ssh $SRV_HOST 'tail -3 /tmp/pricing.log'
 ```
@@ -390,7 +390,7 @@ ssh $SRV_HOST "cd ~/tp06/shipping && \
   OTEL_EXPORTER_OTLP_ENDPOINT=http://$CLT_HOST:4318 \
   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
   OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=tp6,lab.id=$LAB_ID \
-  nohup php -S 0.0.0.0:8083 -t public > /tmp/shipping.log 2>&1 &"
+  setsid nohup php -S 0.0.0.0:8083 -t public > /tmp/shipping.log 2>&1 < /dev/null &"
 sleep 4
 ssh $SRV_HOST 'tail -2 /tmp/shipping.log'
 ```

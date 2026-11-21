@@ -6,7 +6,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 À la fin du lab, vous saurez :
 
-- comparer l'échantillonnage en tête (head) et en queue (tail) et configurer un tail sampling sur la **gateway** ;
+- comparer l'échantillonnage (sampling) en tête et en queue, puis configurer un tail sampling sur la **gateway** ;
 - expliquer les contraintes du tail sampling sur plusieurs répliques de **gateway** et les choix de répartition qui en découlent ;
 - sécuriser le lien entre l'**agent** et la **gateway** avec TLS puis mTLS ;
 - ajouter une authentification sur le receiver de la **gateway** ;

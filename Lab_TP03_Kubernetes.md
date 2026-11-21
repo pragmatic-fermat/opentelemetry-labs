@@ -177,7 +177,7 @@ Chaque bloc de ce fichier a un rôle précis :
 
 > [!NOTE]
 >
-> `apiVersion: kind.x-k8s.io/v1alpha4` n'a pas de version stable. Le projet `kind` a repris la convention de Kubernetes pour versionner son fichier de configuration, mais n'a jamais promu cette API au-delà de sa première version alpha : `v1alpha4` est la seule acceptée par les versions récentes, et son format n'a pas changé depuis 2020. L'étiquette `alpha` ne signifie donc pas que le format est instable, seulement qu'il n'offre aucune garantie de compatibilité à long terme : une future version de `kind` peut introduire `v1alpha5`, et c'est pourquoi la version figure explicitement dans le fichier, comme dans un manifeste Kubernetes.
+> `apiVersion: kind.x-k8s.io/v1alpha4` n'a pas de version stable. Le projet `kind` a repris la convention de Kubernetes pour versionner son fichier de configuration, mais n'a jamais promu cette API au-delà de sa première version alpha : `v1alpha4` est la seule acceptée par les versions récentes, et son format n'a pas changé depuis 2020. Le label `alpha` ne signifie donc pas que le format est instable, seulement qu'il n'offre aucune garantie de compatibilité à long terme : une future version de `kind` peut introduire `v1alpha5`, et c'est pourquoi la version figure explicitement dans le fichier, comme dans un manifeste Kubernetes.
 
 Le cluster porte toujours le nom `cluster`, quel que soit le TP : chaque TP Kubernetes le recrée à l'identique. Affichez le script de lancement, puis exécutez-le :
 
@@ -842,17 +842,17 @@ On obtient des lignes JSON, une par entrée de log :
 {"_msg":"GET /api/orders","_time":"2026-11-21T18:16:02Z","k8s.container.name":"frontend","k8s.namespace.name":"application-b","k8s.node.name":"cluster-worker2","k8s.pod.name":"frontend-84d7c6f9b5-xl2mq",...}
 ```
 
-Trois champs méritent l'attention : `_msg`, qui porte la ligne applicative, `_time`, et les champs `k8s.*` posés par Fluent Bit. Ce sont des attributs de l'enregistrement de log, et non des étiquettes de flux : VictoriaLogs les indexe de la même façon, sans imposer de liste d'étiquettes à configurer.
+Trois champs méritent l'attention : `_msg`, qui porte la ligne applicative, `_time`, et les champs `k8s.*` posés par Fluent Bit. Ce sont des attributs de l'enregistrement de log, et non des labels de flux (stream) : VictoriaLogs les indexe de la même façon, sans imposer de liste de labels à configurer.
 
 > [!NOTE]
 >
-> Les autres métadonnées du filtre `kubernetes` (identifiant du conteneur, image, étiquettes, adresse IP du pod) restent dans l'enregistrement, préfixées par `kubernetes.` : seules les quatre clés renommées par `modify` portent le format `k8s.*`. Ces champs apparaissent dans la liste de vmui et ne gênent pas les requêtes.
+> Les autres métadonnées du filtre `kubernetes` (identifiant du conteneur, image, labels, adresse IP du pod) restent dans l'enregistrement, préfixées par `kubernetes.` : seules les quatre clés renommées par `modify` portent le format `k8s.*`. Ces champs apparaissent dans la liste de vmui et ne gênent pas les requêtes.
 
 Ouvrez maintenant l'interface dans le navigateur, sur `http://$SRV_HOST:9428`. Elle s'appelle `vmui` et sert à la fois à écrire les requêtes et à lire les résultats, avec trois modes d'affichage (`Group`, `Table`, `JSON`).
 
 ![Interface vmui de VictoriaLogs, requête sur les deux namespaces d'application](img/tp03-vlogs-logsql.png)
 
-Le panneau **Stream fields** de gauche reste vide : Fluent Bit n'envoie aucun attribut de ressource, donc VictoriaLogs n'a aucune étiquette de flux à proposer. C'est une différence avec Loki, où les étiquettes forment le point d'entrée de chaque requête. Ici, les champs `k8s.*` sont des attributs d'enregistrement : ils s'interrogent en les nommant, comme dans les requêtes suivantes.
+Le panneau **Stream fields** de gauche reste vide : Fluent Bit n'envoie aucun attribut de ressource, donc VictoriaLogs n'a aucun label de flux à proposer. C'est une différence avec Loki, où les labels forment le point d'entrée de chaque requête. Ici, les champs `k8s.*` sont des attributs d'enregistrement : ils s'interrogent en les nommant, comme dans les requêtes suivantes.
 
 Dans le champ de requête, saisissez successivement les requêtes suivantes. Le langage s'appelle **LogsQL** ; il s'écrit comme une suite de filtres sur des champs, séparés par des espaces, et les valeurs contenant des caractères spéciaux vont entre guillemets.
 
@@ -915,7 +915,7 @@ Cette dernière requête ne renvoie rien, et c'est normal : Fluent Bit ne devine
 
 > [!NOTE]
 >
-> LogsQL et LogQL, le langage de Loki, se ressemblent par leurs filtres, mais ne cherchent pas au même endroit. En LogQL, on part d'un sélecteur d'étiquettes, comme `{service_name="shop"}`, puis on filtre le texte avec `|=` pour une chaîne et `|~` pour une expression régulière. En LogsQL, un mot seul ne cherche que dans le message : `orders` trouve les lignes dont `_msg` contient ce mot, mais ne fouille pas les attributs, et il faut les nommer pour les interroger, comme `k8s.pod.name:"..."`. LogQL est employé [au TP7](Lab_TP07_Instrumentation_Manuelle.md), avec Loki et Grafana.
+> LogsQL et LogQL, le langage de Loki, se ressemblent par leurs filtres, mais ne cherchent pas au même endroit. En LogQL, on part d'un sélecteur de labels, comme `{service_name="shop"}`, puis on filtre le texte avec `|=` pour une chaîne et `|~` pour une expression régulière. En LogsQL, un mot seul ne cherche que dans le message : `orders` trouve les lignes dont `_msg` contient ce mot, mais ne fouille pas les attributs, et il faut les nommer pour les interroger, comme `k8s.pod.name:"..."`. LogQL est employé [au TP7](Lab_TP07_Instrumentation_Manuelle.md), avec Loki et Grafana.
 
 Comparez enfin ce que vous voyez avec [la partie 3](#3-le-collector-en-mode-agent) : les traces portaient `k8s.pod.name`, les logs portent le même champ, avec la même valeur. C'est ce qui permet, dans un outil qui gère les deux signaux, de passer d'une ligne de log au pod qui l'a produite, puis à ses traces. [Le TP7](Lab_TP07_Instrumentation_Manuelle.md) montre ce lien dans Grafana ; ici, vous l'observez à la main, ce qui rend le mécanisme plus visible.
 
@@ -1011,7 +1011,7 @@ kubectl get endpoints -n opentelemetry-operator-system \
 
 Tant que la colonne `ENDPOINTS` est vide, le webhook n'est pas joignable. Comptez quelques secondes, dix au plus.
 
-La ressource `Instrumentation` décrit comment instrumenter : où envoyer les données, quels propagators utiliser, quel échantillonnage appliquer et quelle image d'instrumentation injecter.
+La ressource `Instrumentation` décrit comment instrumenter : où envoyer les données, quels propagators utiliser, quel échantillonnage (sampling) appliquer et quelle image d'instrumentation injecter.
 
 L'`Instrumentation` est un objet d'espace de noms : il en faut une par application. Créez la même dans `application-a` et dans `application-b`, avec `sed` plutôt qu'à la main. L'exporter vise l'**agent** en OTLP HTTP (`http://otel-agent.observability.svc.cluster.local:4318`), protocole par défaut du SDK Node.js :
 

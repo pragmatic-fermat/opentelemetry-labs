@@ -784,7 +784,7 @@ Le cas d'usage est celui d'une équipe qui exploite deux environnements, `prepro
 
 - la production doit être vue vite : lots courts (1 seconde) et métriques système collectées, parce que la capacité de ces serveurs compte ;
 - la préproduction peut attendre : lots longs (10 secondes), pas de métriques système, pour ne pas payer le coût d'une collecte dont personne ne se sert ;
-- les deux flux doivent rester **séparés et identifiables** : ports différents, donc règles de pare-feu différentes, et un attribut `tenant` qui permet de retrouver l'origine de chaque donnée dans le backend.
+- les deux flux (streams) doivent rester **séparés et identifiables** : ports différents, donc règles de pare-feu différentes, et un attribut `tenant` qui permet de retrouver l'origine de chaque donnée dans le backend.
 
 C'est exactement ce qu'un template Jinja2 rend confortable : on décrit les deux environnements une fois, et le reste est généré. Sans boucle, il faudrait recopier six blocs de configuration à la main, avec le risque d'en oublier un.
 
@@ -885,7 +885,7 @@ Quatre constructions se combinent ici :
 - l'accès `{{ t.port_grpc }}` et `{{ t.batch_timeout }}` lit les champs de l'élément en cours d'itération ;
 - le suffixe `{{ t.name }}` garantit l'unicité des noms de composants, exigée par le **collector**.
 
-L'attribut `service.instance.id` mérite une explication : c'est lui qui devient l'étiquette `instance` dans Prometheus. Sans lui, les séries de métriques arrivent sans étiquette et deviennent impossibles à attribuer à un environnement.
+L'attribut `service.instance.id` mérite une explication : c'est lui qui devient le label `instance` dans Prometheus. Sans lui, les séries de métriques arrivent sans label et deviennent impossibles à attribuer à un environnement.
 
 Rendez le template sur `clt-N` et validez-le avant de déployer :
 
@@ -986,7 +986,7 @@ instance=otelcol-prod : 12 series
 
 > [!NOTE]
 >
-> Ce modèle a une limite bien réelle, à connaître avant de le déployer en production. Les deux environnements partagent le même processus et donc le même `memory_limiter` : si la préproduction sature son endpoint, le limiteur peut rejeter aussi les données de production. C'est le problème du voisin bruyant, et c'est pourquoi certains parcs isolent la production sur un **collector** distinct. [Le TP9](Lab_TP09_Gateway_Production.md) traite ces questions de passerelle de production.
+> Ce modèle a une limite bien réelle, à connaître avant de le déployer en production. Les deux environnements partagent le même processus et donc le même `memory_limiter` : si la préproduction sature son endpoint, le limiteur peut rejeter aussi les données de production. C'est le problème du voisin bruyant, et c'est pourquoi certains parcs isolent la production sur un **collector** distinct. [Le TP9](Lab_TP09_Gateway_Production.md) traite ces questions de **gateway** de production.
 
 Revenez à la configuration du TP avant de continuer :
 

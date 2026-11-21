@@ -1,6 +1,6 @@
 # Lab TP11 : diagnostic d'incident sur l'OpenTelemetry Demo
 
-Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédiger.
+Statut : objectifs, contenu et concepts rédigés. Les commandes et les résultats attendus restent à écrire.
 
 # Objectifs
 
@@ -35,40 +35,51 @@ Durée prévue : 1/4 j (environ 2 heures de manipulation).
 
 Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 
+## Ce que ce TP introduit, suppose et laisse
+
+- Introduit : une méthode de diagnostic sur une application que l'on n'a pas écrite, le croisement des trois signaux, et la rédaction d'un compte rendu d'incident.
+- Suppose vu : la lecture d'une trace et d'un log relié à sa trace. Aucun TP n'est exigé : la Demo embarque sa propre pile de collecte et de backends.
+- Laisse : l'instrumentation, la collecte et la corrélation, déjà traitées ([TP5](Lab_TP05_NodeJS_Nginx.md) à [TP7](Lab_TP07_Instrumentation_Manuelle.md), [TP10](Lab_TP10_Exploitation.md)). Ce TP les utilise, il ne les réexplique pas.
+
 ## 1. Déployer la Demo et se repérer
 
-À compléter. Points couverts :
+Concepts : une architecture inconnue et instrumentée ; la distinction entre ce que la télémétrie montre et ce que l'on suppose ; la lecture d'une carte de services à partir des traces et des métriques.
 
-- Déployer la Demo à une version épinglée.
-- Repérer les services, le **collector** et les backends.
+Démonstration : la Demo tourne et se visite ; le participant cartographie ses services, son **collector** et ses backends, puis vérifie cette carte par une première requête suivie de bout en bout.
+
+Hors périmètre : modifier la Demo, son image ou son instrumentation.
 
 ## 2. Premier incident : une panne franche
 
-À compléter. Points couverts :
+Concepts : symptôme, hypothèse, preuve ; le chemin d'une erreur visible côté utilisateur vers le service fautif ; le rôle des logs reliés à la trace pour nommer la cause.
 
-- Activer le feature flag correspondant.
-- Remonter des métriques aux traces, puis aux logs, jusqu'à la cause.
+Démonstration : activer un feature flag qui provoque des erreurs, constater le symptôme, remonter des métriques aux traces puis aux logs, et nommer la cause sans aide.
+
+Hors périmètre : corriger le code de la Demo ; le feature flag est le seul levier d'injection.
 
 ## 3. Deuxième incident : une dégradation
 
-À compléter. Points couverts :
+Concepts : l'absence d'erreur comme symptôme ; lenteur, saturation et consommation de ressources ; la comparaison entre un service sain et un service dégradé ; le choix du signal le plus rapide à lire selon la question posée.
 
-- Activer le feature flag correspondant.
-- Identifier le service responsable par les latences et les métriques de ressources.
+Démonstration : activer un flag qui dégrade les performances, identifier le service responsable par les latences et les métriques de ressources, puis confirmer par une trace et un log.
+
+Hors périmètre : l'optimisation de la Demo ; on cherche la cause, pas le correctif.
 
 ## 4. Troisième incident : cas libre
 
-À compléter. Points couverts :
+Concepts : transposer la méthode sans guide ; choisir soi-même ses preuves et l'ordre de lecture ; assumer un diagnostic incomplet et dire ce qui manque.
 
-- Choisir un feature flag dans la liste de la version retenue, à vérifier à la rédaction.
-- Rédiger le compte rendu sans aide.
+Démonstration : choisir un scénario parmi ceux de la version retenue, le résoudre seul et rédiger le compte rendu sans aide.
+
+Hors périmètre : la liste des scénarios, à vérifier avec la version de la Demo au moment de la rédaction.
 
 ## 5. Synthèse : la méthode
 
-À compléter. Points couverts :
+Concepts : une démarche réutilisable (symptôme, périmètre, preuve, cause, correctif proposé) ; ses limites, notamment les trous de collecte et l'échantillonnage (sampling), qui peuvent faire disparaître la preuve attendue.
 
-- Comparer les chemins suivis.
-- Formaliser une méthode de diagnostic en quelques étapes.
+Démonstration : comparer les chemins suivis par les participants, formaliser la méthode en quelques étapes, et la confronter à un cas où la télémétrie manque.
+
+Hors périmètre : la mise en place d'alertes ou de tableaux de bord, qui relèvent du backend.
 
 ## Cleanup
 

@@ -539,4 +539,4 @@ Le dossier `~/tp07` peut être conservé : les modules écrits servent de point 
 
 - Ajoutez à `shop_handler.py` un compteur de commandes avec l'API des métriques (`get_meter`, `create_counter`) et un `MeterProvider` dans `telemetry.py`.
 - Envoyez une requête avec votre propre en-tête `traceparent` (`curl -H 'traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01'`) et retrouvez dans Jaeger la trace `0af7651916cd43dd8448eb211c80319c`.
-- Réglez l'échantillonnage à 10 % avec la variable `OTEL_TRACES_SAMPLER=parentbased_traceidratio` et `OTEL_TRACES_SAMPLER_ARG=0.1` dans `compose.yaml`, et observez ce qui change dans Jaeger et dans la corrélation avec les logs.
+- Réglez l'échantillonnage (sampling) à 10 % avec la variable `OTEL_TRACES_SAMPLER=parentbased_traceidratio` et `OTEL_TRACES_SAMPLER_ARG=0.1` dans `compose.yaml`, et observez ce qui change dans Jaeger et dans la corrélation avec les logs.

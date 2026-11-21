@@ -6,4 +6,9 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: demo
+  name: application-a
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: application-b

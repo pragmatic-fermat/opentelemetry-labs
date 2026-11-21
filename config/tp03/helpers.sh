@@ -1,6 +1,7 @@
 # Fonctions d'aide pour le TP3. À charger dans chaque terminal : source ~/tp03/helpers.sh
 #
-#   app /api/orders            appelle le frontend de l'application via la Gateway
+#   appA /api/orders           appelle application-a via la Gateway
+#   appB /api/orders           appelle application-b via la Gateway
 #   jaeger '/api/v3/services'  appelle l'API de Jaeger via la Gateway
 #   vlogs '/select/logsql/query?query=...'  interroge VictoriaLogs via la Gateway
 #
@@ -11,6 +12,7 @@
 : "${INGRESS_HOST:=$(curl -s https://api.ipify.org | tr '.' '-').sslip.io}"
 export INGRESS_HOST
 
-app() { curl -s -H "Host: app.${INGRESS_HOST}" "http://localhost:8080$1"; }
+appA() { curl -s -H "Host: app-a.${INGRESS_HOST}" "http://localhost:8080$1"; }
+appB() { curl -s -H "Host: app-b.${INGRESS_HOST}" "http://localhost:8080$1"; }
 jaeger() { curl -s -H "Host: jaeger.${INGRESS_HOST}" "http://localhost:8080$1"; }
 vlogs() { curl -s -H "Host: vlogs.${INGRESS_HOST}" "http://localhost:8080$1"; }

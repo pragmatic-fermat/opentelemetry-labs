@@ -104,7 +104,7 @@ Les quatre applications s'appellent en cascade. Voici leur comportement, pour co
 - `pricing` (.NET, `TCP/8082`) répond à `GET /price` et appelle `shipping` ;
 - `shipping` (PHP, `TCP/8083`) répond à `GET /ship` et ne dépend de rien.
 
-Sans instrumentation, une requête produit trois lignes de log séparées et aucune trace.
+Sans instrumentation, une requête produit quatre lignes de log séparées et aucune trace.
 
 ## 2. Java
 
@@ -255,7 +255,7 @@ ssh $SRV_HOST 'tail -3 /tmp/pricing.log'
 pricing listening on 8082
 ```
 
-**NB** : sur .NET, l'activation passe par le profileur CLR (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`), que le script `instrument.sh` exporte. C'est la mécanique la plus intrusive des trois, et la seule qui demande un script fourni par le projet.
+**NB** : sur .NET, l'activation passe par le profileur CLR (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`), que le script `instrument.sh` exporte. C'est la mécanique la plus intrusive des quatre, et la seule qui demande un script fourni par le projet.
 
 Vérifiez la chaîne complète :
 
@@ -334,7 +334,7 @@ curl -s "http://localhost:16686/api/v3/services" | jq -c '.services'
 
 ## 6. Trace multi-langages et comparaison
 
-Envoyez quelques requêtes, puis ouvrez Jaeger et cherchez le service `checkout`. Une requête produit une trace unique à travers les trois langages, grâce au propagator W3C `tracecontext`, actif par défaut dans les trois **agents**.
+Envoyez quelques requêtes, puis ouvrez Jaeger et cherchez le service `checkout`. Une requête produit une trace unique à travers les quatre langages, grâce au propagator W3C `tracecontext`, actif par défaut dans les quatre **agents**.
 
 ```bash
 for i in $(seq 5); do curl -s http://$SRV_HOST:8081/order > /dev/null; done
@@ -376,11 +376,11 @@ Trois différences valent la discussion en séance :
 - **les noms de spans** varient : Java produit `GET /order`, Python `GET /stock`, .NET `GET /price`, PHP `GET /ship`, parce que chaque instrumentation applique sa propre convention de nommage, et que PHP passe par le middleware PSR-15 de Slim ;
 - **les métriques de runtime** ne sont pas identiques, et PHP n'en produit aucune par défaut : Java expose la mémoire de la JVM, Python le compteur du ramasse-miettes, .NET le pool de threads. Elles arriveraient dans Prometheus, comme au TP1, si le pipeline `metrics` était exporté.
 
-**NB** : la propagation entre langages ne demande aucune configuration supplémentaire parce que les trois **agents** utilisent `tracecontext` par défaut. Si un service n'apparaissait pas dans la trace, la première vérification est l'en-tête `traceparent` sur l'appel sortant, et la seconde le propagator configuré par `OTEL_PROPAGATORS`.
+**NB** : la propagation entre langages ne demande aucune configuration supplémentaire parce que les quatre **agents** utilisent `tracecontext` par défaut. Si un service n'apparaissait pas dans la trace, la première vérification est l'en-tête `traceparent` sur l'appel sortant, et la seconde le propagator configuré par `OTEL_PROPAGATORS`.
 
 ## Cleanup
 
-Arrêtez les trois services sur le serveur, puis supprimez les fichiers installés :
+Arrêtez les quatre services sur le serveur, puis supprimez les fichiers installés :
 
 ```bash
 ssh $SRV_HOST 'pkill -f checkout.java; pkill -f inventory.py; pkill -f pricing.dll; pkill -f "php -S"'

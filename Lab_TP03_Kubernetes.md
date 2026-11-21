@@ -368,6 +368,8 @@ Les deux commandes affichent la même réponse JSON, une fois par application :
 
 Ce sont exactement ces deux `curl` que les fonctions `appA` et `appB` de `helpers.sh` exécutent ; la suite du lab les emploie pour abréger. Rien ne collecte encore cette activité : les backends arrivent [à la partie 2](#2-les-backends-sur-srv-n-et-la-gateway), et l'instrumentation [à la partie 5](#5-loperator-et-lauto-instrumentation).
 
+**NB** : si la première requête répond `no available server`, c'est que Traefik n'a pas encore vu la `HTTPRoute` : comptez quelques secondes et relancez la commande.
+
 ## 2. Les backends sur srv-N et la **gateway**
 
 Dans une installation réelle, les backends ne vivent pas dans le cluster qu'ils observent : ils collectent les données de plusieurs clusters et survivent à leur recréation. Vous les installez donc sur `srv-N`, avec Docker Compose, et le cluster les joint par le réseau. Le schéma suivant montre ce chemin, avec la **gateway** dans le cluster et les deux backends sur la machine serveur :
@@ -706,7 +708,7 @@ Trois points se lisent sur ce schéma :
 
 ### Installer Fluent Bit
 
-Le chart officiel de Fluent Bit lit déjà `/var/log/containers/*.log` et applique le filtre `kubernetes`, qui retrouve l'espace de noms, le pod, le conteneur et le nœud à partir du nom du fichier. Il reste à renommer ces champs au format des conventions OpenTelemetry (`k8s.*`) et à déclarer l'export OTLP.
+Le chart officiel de Fluent Bit lit déjà `/var/log/containers/*.log` et applique le filtre `kubernetes`, qui retrouve l'espace de noms, le pod, le conteneur et le nœud à partir du nom du fichier. Il reste à restreindre la collecte aux deux applications, à renommer ces champs au format des conventions OpenTelemetry (`k8s.*`) et à déclarer l'export OTLP.
 
 Créez le fichier de valeurs :
 
@@ -719,6 +721,15 @@ image:
   repository: cr.fluentbit.io/fluent/fluent-bit
   tag: "5.1.3"
 config:
+  inputs: |
+    [INPUT]
+        Name tail
+        Path /var/log/containers/*_application-*_*.log
+        multiline.parser docker, cri
+        Tag kube.*
+        Mem_Buf_Limit 5MB
+        Skip_Long_Lines On
+
   filters: |
     [FILTER]
         Name kubernetes
@@ -761,6 +772,8 @@ Les filtres s'enchaînent dans cet ordre :
 - `kubernetes` ajoute un dictionnaire `kubernetes` au message, avec les métadonnées du conteneur ;
 - `nest` fait remonter les clés de ce dictionnaire à la racine du message, préfixées par `kubernetes.` : Fluent Bit ne sait renommer que des clés de premier niveau ;
 - `modify` renomme ces clés au format `k8s.*` attendu par la suite du pipeline.
+
+L'input `tail` ne lit que les fichiers dont le nom contient `_application-`, c'est-à-dire les pods de `application-a` et d'`application-b`. Sans cette restriction, Fluent Bit collecterait aussi ses propres logs : chaque ligne qu'il écrit serait relue, renvoyée, puis relue encore, et les messages des applications se perdraient dans ce bruit.
 
 Dans l'output, `logs_body_key log` place la ligne applicative dans le corps de l'enregistrement OTLP, ce qui donne un message lisible dans VictoriaLogs, et `logs_body_key_attributes true` conserve les autres champs comme attributs.
 
@@ -811,11 +824,13 @@ On obtient des lignes JSON, une par entrée de log :
 
 Trois champs méritent l'attention : `_msg`, qui porte la ligne applicative, `_time`, et les champs `k8s.*` posés par Fluent Bit. Ce sont des attributs de l'enregistrement de log, et non des étiquettes de flux : VictoriaLogs les indexe de la même façon, sans imposer de liste d'étiquettes à configurer.
 
+**NB** : les autres métadonnées du filtre `kubernetes` (identifiant du conteneur, image, étiquettes, adresse IP du pod) restent dans l'enregistrement, préfixées par `kubernetes.` : seules les quatre clés renommées par `modify` portent le format `k8s.*`. Ces champs apparaissent dans la liste de vmui et ne gênent pas les requêtes.
+
 Ouvrez maintenant l'interface dans le navigateur, sur `http://$SRV_HOST:9428`. Elle s'appelle `vmui` et sert à la fois à écrire les requêtes et à lire les résultats, avec trois modes d'affichage (`Group`, `Table`, `JSON`).
 
-![Interface vmui de VictoriaLogs, requête sur les deux namespaces d'application et champs Kubernetes disponibles](img/tp03-vlogs-logsql.png)
+![Interface vmui de VictoriaLogs, requête sur les deux namespaces d'application](img/tp03-vlogs-logsql.png)
 
-La colonne de gauche liste les champs disponibles, avec le nombre de valeurs distinctes : ce sont les attributs posés par Fluent Bit, ce qui permet de construire les requêtes sans les deviner.
+Le panneau **Stream fields** de gauche reste vide : Fluent Bit n'envoie aucun attribut de ressource, donc VictoriaLogs n'a aucune étiquette de flux à proposer. C'est une différence avec Loki, où les étiquettes forment le point d'entrée de chaque requête. Ici, les champs `k8s.*` sont des attributs d'enregistrement : ils s'interrogent en les nommant, comme dans les requêtes suivantes.
 
 Dans le champ de requête, saisissez successivement les requêtes suivantes. Le langage s'appelle **LogsQL** ; il s'écrit comme une suite de filtres sur des champs, séparés par des espaces, et les valeurs contenant des caractères spéciaux vont entre guillemets.
 
@@ -1046,14 +1061,20 @@ kubectl -n application-a get pod -l app=frontend \
 ```
 
 ```text
+OTEL_NODE_IP=
+OTEL_POD_IP=
 OTEL_METRICS_EXPORTER=otlp
 OTEL_SERVICE_NAME=frontend
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-agent.observability.svc.cluster.local:4318
+OTEL_RESOURCE_ATTRIBUTES_POD_NAME=
+OTEL_RESOURCE_ATTRIBUTES_NODE_NAME=
 OTEL_PROPAGATORS=tracecontext,baggage
 OTEL_TRACES_SAMPLER=parentbased_traceidratio
 OTEL_TRACES_SAMPLER_ARG=1
-OTEL_RESOURCE_ATTRIBUTES=k8s.container.name=frontend,k8s.deployment.name=frontend,...
+OTEL_RESOURCE_ATTRIBUTES=k8s.container.name=frontend,k8s.deployment.name=frontend,k8s.namespace.name=application-a,k8s.node.name=$(OTEL_RESOURCE_ATTRIBUTES_NODE_NAME),k8s.pod.name=$(OTEL_RESOURCE_ATTRIBUTES_POD_NAME),...
 ```
+
+Les variables vides sont renseignées par Kubernetes au démarrage du conteneur, à partir des métadonnées du pod (`spec.nodeName` et le nom du pod), et les `$(...)` de `OTEL_RESOURCE_ATTRIBUTES` sont remplacés par ces valeurs : l'attribut `service.instance.id` devient, par exemple, `application-a.frontend-755c565478-h8dnl.frontend`.
 
 Dans Jaeger, les services `frontend` et `backend` sont apparus. Mais attention : les deux applications portent les mêmes noms de service. Ce qui les distingue est le namespace, dans les attributs de ressource :
 
@@ -1082,6 +1103,8 @@ Regardez enfin les attributs de ressource de cette trace, tous préfixés par `k
 jaeger "/api/v3/traces?query.service_name=frontend&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
   | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key|startswith("k8s.")) | "\(.key)=\(.value.stringValue)"] | unique | .[]' | sort
 ```
+
+La commande affiche notamment :
 
 ```text
 k8s.container.name=backend
@@ -1127,7 +1150,7 @@ ssh root@$SRV_HOST 'cd ~/tp03 && docker compose down -v && rm compose.yaml'
 ssh root@$SRV_HOST 'docker compose ls'
 ```
 
-La seconde commande n'affiche aucune ligne : plus aucun conteneur du TP ne tourne sur la machine serveur.
+La seconde commande n'affiche aucun projet : plus aucun conteneur du TP ne tourne sur la machine serveur.
 
 **NB** : le cluster ne se conserve pas d'un TP à l'autre. Un TP qui a besoin de Kubernetes le recrée avec `config/cluster/cluster-create.sh`, qui le reconstruit à l'identique et supprime au passage tout cluster existant.
 
@@ -1215,8 +1238,8 @@ kubectl -n observability get opentelemetrycollectors
 L'objet apparaît, prêt :
 
 ```text
-NAME        MODE         VERSION   READY   AGE   IMAGE
-otelcol-cr  deployment   0.162.0   1/1     25s   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s:0.162.0
+NAME         MODE         VERSION   READY   AGE   IMAGE                                                                                          MANAGEMENT
+otelcol-cr   deployment   0.162.0   1/1     20s   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s:0.162.0   managed
 ```
 
 Regardez ce que l'**operator** a créé : un Deployment, deux Services et un Service de supervision.

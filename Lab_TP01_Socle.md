@@ -832,14 +832,18 @@ Retrouvez la même série dans Grafana (`http://$SRV_HOST:3000`), via Explore et
 
 ## Cleanup
 
-Arrêtez tous les conteneurs et supprimez le réseau créé par le compose :
+Arrêtez tous les conteneurs et supprimez le réseau créé par le compose, ainsi que l'image de `telemetrygen` utilisée pour les tests de charge :
 
 ```bash
 cd ~/tp01
 docker compose down
+docker image rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0
+docker compose ps
 ```
 
-Les traces de Jaeger étant stockées en mémoire, elles disparaissent avec le conteneur. Le dossier `~/tp01` peut être conservé : les configurations de ce lab servent de point de départ aux suivants.
+La dernière commande n'affiche plus rien : aucun conteneur du lab ne tourne. Les traces de Jaeger étant stockées en mémoire, elles disparaissent avec le conteneur. Les images des backends sont conservées à dessein : elles serviront au TP3 et au TP4 sans re-téléchargement.
+
+Le dossier `~/tp01` peut être conservé : les configurations de ce lab servent de point de départ aux suivants.
 
 ## Extra
 

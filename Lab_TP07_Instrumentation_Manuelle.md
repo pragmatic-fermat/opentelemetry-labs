@@ -461,12 +461,15 @@ Si le terminal affiche une invite `>` qui ne revient pas, le shell attend la lig
 
 ## Cleanup
 
-Arrêtez la stack et supprimez son réseau :
+Arrêtez la stack, supprimez son réseau et l'image applicative construite par le compose :
 
 ```bash
 cd ~/tp07
-docker compose down
+docker compose down --rmi local
+docker compose ps
 ```
+
+`--rmi local` supprime l'image `tp07-app:local`, construite depuis `./app` et non téléchargée : sans cette option, elle reste sur la machine et se réutilise silencieusement d'une session à l'autre avec un code qui n'est plus celui du dépôt. La seconde commande n'affiche plus rien.
 
 Le dossier `~/tp07` peut être conservé : les modules écrits servent de point de départ aux TP suivants.
 

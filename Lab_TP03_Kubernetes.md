@@ -822,6 +822,15 @@ Tant que l'**operator** n'est pas installé, ces types n'existent pas et `kubect
 
 **NB** : n'exécutez pas `helm test` sur ce chart, ses pods de test utilisent une image qui n'est pas épinglée.
 
+**NB** : l'attente `--wait` rend la main dès que le pod de l'**operator** est prêt, mais le webhook qui valide les ressources personnalisées peut mettre quelques secondes de plus à répondre. Si `kubectl apply` d'une `Instrumentation` échoue sur `failed calling webhook ... connection refused`, attendez que le Service du webhook ait une adresse, puis relancez la commande :
+
+```bash
+kubectl get endpoints -n opentelemetry-operator-system \
+  operator-opentelemetry-operator-webhook
+```
+
+Tant que la colonne `ENDPOINTS` est vide, le webhook n'est pas joignable. Comptez quelques secondes, dix au plus.
+
 La ressource `Instrumentation` décrit comment instrumenter : où envoyer les données, quels propagators utiliser, quel échantillonnage appliquer et quelle image d'instrumentation injecter.
 
 L'`Instrumentation` est un objet d'espace de noms : il en faut une par application. Créez la même dans `application-a` et dans `application-b`, avec `sed` plutôt qu'à la main. L'exporter vise l'**agent** en OTLP HTTP (`http://otel-agent.observability.svc.cluster.local:4318`), protocole par défaut du SDK Node.js :

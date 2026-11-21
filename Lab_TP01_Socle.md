@@ -83,7 +83,9 @@ Versions utilisées dans ce lab :
 | Prometheus | v3.16.0 |
 | Grafana | 13.3.1 |
 
-**Note** : le tag de l'image du **collector** est `0.165.0` alors que celui de `telemetrygen` est `v0.165.0` (avec le `v`).
+> [!TIP]
+>
+> Le tag de l'image du **collector** est `0.165.0` alors que celui de `telemetrygen` est `v0.165.0` (avec le `v`).
 
 Les interfaces web sont accessibles depuis votre navigateur, sur la machine serveur (`$SRV_HOST`) :
 
@@ -217,7 +219,9 @@ services:
 EOF
 ```
 
-**Note** : Jaeger stocke les traces en mémoire, elles disparaissent si le conteneur redémarre. Le mot de passe de Grafana est celui du lab : ne le réutilisez jamais en dehors de ce contexte.
+> [!TIP]
+>
+> Jaeger stocke les traces en mémoire, elles disparaissent si le conteneur redémarre. Le mot de passe de Grafana est celui du lab : ne le réutilisez jamais en dehors de ce contexte.
 
 Démarrez les trois backends :
 
@@ -306,7 +310,9 @@ Les quatre fichiers de configuration sont dans le dossier `otelcol/`.
 
 Pour retrouver les options de chaque composant, consultez son README dans le dépôt [opentelemetry-collector-contrib](https://github.com/open-telemetry/opentelemetry-collector-contrib). Les exporters `debug` et `otlp_http` sont documentés dans le dépôt [opentelemetry-collector](https://github.com/open-telemetry/opentelemetry-collector).
 
-**NB** : le **collector** tourne dans un conteneur, donc `localhost` désigne le conteneur lui-même et non Jaeger. C'est pourquoi l'exporter vers Jaeger utilise le nom du service du compose, `jaeger`.
+> [!NOTE]
+>
+> Le **collector** tourne dans un conteneur, donc `localhost` désigne le conteneur lui-même et non Jaeger. C'est pourquoi l'exporter vers Jaeger utilise le nom du service du compose, `jaeger`.
 
 Créez d'abord le receiver `otlp`, qui accepte le HTTP (port 4318) sur toutes les interfaces du conteneur :
 
@@ -321,7 +327,9 @@ receivers:
 EOF
 ```
 
-**NB** : ce lab n'utilise que le transport HTTP de l'OTLP.
+> [!NOTE]
+>
+> Ce lab n'utilise que le transport HTTP de l'OTLP.
 
 Il est plus facile à déboguer : une simple requête `curl` suffit, comme [dans l'Extra](#extra), et il passe mieux à travers les proxys.
 
@@ -339,7 +347,9 @@ exporters:
 EOF
 ```
 
-**NB** : `otlp_http` est le type actuel de l'exporter, l'ancien nom `otlphttp` n'est conservé que comme alias déprécié. Vous le rencontrerez encore dans beaucoup de configurations trouvées sur Internet.
+> [!NOTE]
+>
+> `otlp_http` est le type actuel de l'exporter, l'ancien nom `otlphttp` n'est conservé que comme alias déprécié. Vous le rencontrerez encore dans beaucoup de configurations trouvées sur Internet.
 
 Le nom qui suit le `/` (`jaeger`) distingue plusieurs instances d'un même type de composant.
 
@@ -419,7 +429,9 @@ Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), choisissez le service `de
 
 ![Cinq traces du service demo dans Jaeger](img/tp01-jaeger-demo.png)
 
-**Note** : dans la commande `docker compose logs`, une erreur de type `connection refused` vers Jaeger signifie que l'adresse de l'exporter n'utilise pas le nom du service (`jaeger`). Si `telemetrygen` ne se connecte pas, vérifiez que le **collector** tourne (`docker compose ps`) et que son receiver écoute sur `0.0.0.0`.
+> [!TIP]
+>
+> Dans la commande `docker compose logs`, une erreur de type `connection refused` vers Jaeger signifie que l'adresse de l'exporter n'utilise pas le nom du service (`jaeger`). Si `telemetrygen` ne se connecte pas, vérifiez que le **collector** tourne (`docker compose ps`) et que son receiver écoute sur `0.0.0.0`.
 
 ## 3. Les premiers processors
 
@@ -451,7 +463,9 @@ processors:
 EOF
 ```
 
-**Note** : les guillemets simples autour de `'EOF'` empêchent le shell de remplacer lui-même `${env:LAB_ID}`, qui est destiné au **collector**.
+> [!TIP]
+>
+> Les guillemets simples autour de `'EOF'` empêchent le shell de remplacer lui-même `${env:LAB_ID}`, qui est destiné au **collector**.
 
 Placez ces processors dans le pipeline `traces`. Le `memory_limiter` passe en premier, pour refuser des données avant de les traiter si la mémoire est saturée, et le `batch` passe en dernier, pour grouper des données déjà traitées (le README du `batch` processor donne cette recommandation).
 
@@ -523,7 +537,9 @@ sed -i 's/timeout: 15s/timeout: 2s/' otelcol/processors.yaml
 docker compose restart otelcol
 ```
 
-**Note** : si l'attribut `lab.id` est vide ou vaut `0`, la variable `LAB_ID` n'est pas définie dans votre terminal. Contrôlez `echo $LAB_ID`, puis relancez `docker compose up -d otelcol` pour recréer le conteneur avec la valeur.
+> [!TIP]
+>
+> Si l'attribut `lab.id` est vide ou vaut `0`, la variable `LAB_ID` n'est pas définie dans votre terminal. Contrôlez `echo $LAB_ID`, puis relancez `docker compose up -d otelcol` pour recréer le conteneur avec la valeur.
 
 ## 4. Supprimer du bruit avec le filter
 
@@ -533,7 +549,9 @@ Le processor `filter` supprime les données qui vérifient une condition écrite
 
 Si une des conditions de la liste est vraie, la donnée est supprimée.
 
-**NB** : dans cette version du **collector**, le processor `filter` attend une liste `trace_conditions`, et les chemins OTTL commencent par le nom du contexte, par exemple `span.attributes["clé"]`.
+> [!NOTE]
+>
+> Dans cette version du **collector**, le processor `filter` attend une liste `trace_conditions`, et les chemins OTTL commencent par le nom du contexte, par exemple `span.attributes["clé"]`.
 
 Ajoutez un processor `filter/healthchecks` à la fin de `processors.yaml`, sans toucher au reste, avec `>>` à la place de `>`. Les deux espaces devant le nom du processor sont nécessaires : l'entrée doit avoir la même indentation que les processors déjà présents.
 
@@ -569,7 +587,9 @@ docker compose restart otelcol
 ./tg.sh traces --traces 10 --service shop-filter --telemetry-attributes 'http.route="/api/orders"'
 ```
 
-**NB** : les guillemets doubles à l'intérieur des guillemets simples sont nécessaires, `telemetrygen` s'en sert pour savoir que la valeur est une chaîne.
+> [!NOTE]
+>
+> Les guillemets doubles à l'intérieur des guillemets simples sont nécessaires, `telemetrygen` s'en sert pour savoir que la valeur est une chaîne.
 
 Seules les dix traces de `/api/orders` doivent exister dans Jaeger :
 
@@ -824,7 +844,9 @@ La page **Query** de Prometheus (`http://$SRV_HOST:9090/query`) affiche la même
 
 ![Résultat de la requête tp1_demo dans Prometheus](img/tp01-prometheus-requete.png)
 
-**Note** : le nom de la métrique peut porter un suffixe ajouté par le convertisseur selon l'unité, d'où l'expression régulière.
+> [!TIP]
+>
+> Le nom de la métrique peut porter un suffixe ajouté par le convertisseur selon l'unité, d'où l'expression régulière.
 
 Retrouvez la même série dans Grafana (`http://$SRV_HOST:3000`), via Explore et la source de données Prometheus :
 
@@ -841,7 +863,7 @@ docker image rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetry
 docker compose ps
 ```
 
-La dernière commande n'affiche plus rien : aucun conteneur du lab ne tourne. Les traces de Jaeger étant stockées en mémoire, elles disparaissent avec le conteneur. Les images des backends sont conservées à dessein : elles serviront au TP3 et au TP4 sans re-téléchargement.
+La dernière commande n'affiche plus rien : aucun conteneur du lab ne tourne. Les traces de Jaeger étant stockées en mémoire, elles disparaissent avec le conteneur. Les images des backends sont conservées à dessein : elles serviront au [TP3](Lab_TP03_Kubernetes.md) et au [TP4](Lab_TP04_Ansible_Jinja2.md) sans re-téléchargement.
 
 Le dossier `~/tp01` peut être conservé : les configurations de ce lab servent de point de départ aux suivants.
 
@@ -961,4 +983,4 @@ otelcol-1  | LogRecord #1
 otelcol-1  | LogRecord #2
 ```
 
-Aucun backend ne stocke les logs ici : c'est le rôle des TP suivants.
+Aucun backend ne stocke les logs ici : la collecte des logs des pods est traitée [au TP3](Lab_TP03_Kubernetes.md), et leur émission par le SDK [au TP7](Lab_TP07_Instrumentation_Manuelle.md).

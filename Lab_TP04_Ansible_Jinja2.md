@@ -31,7 +31,7 @@ Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, où le dépôt 
 
 Ansible, Docker et SSH sont installés sur `clt-N`. La clé SSH de `root` permet de se joindre à `srv-N` sans mot de passe, et le compte dispose de `sudo` sans mot de passe sur cette machine.
 
-Le TP1 est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici. Les commandes utilisent les noms complets des modules (`ansible.builtin.…`), qui fonctionnent avec toutes les versions récentes d'Ansible.
+Le [TP1](Lab_TP01_Socle.md) est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici. Les commandes utilisent les noms complets des modules (`ansible.builtin.…`), qui fonctionnent avec toutes les versions récentes d'Ansible.
 
 Versions utilisées dans ce lab :
 
@@ -148,7 +148,9 @@ Il contient un handler nommé `Redémarrer otelcol-contrib`, qui redémarre le s
 
 Quelques précisions sur le téléchargement. Il utilise la variable `otelcol_deb_url`, vers le fichier `/tmp/otelcol-contrib_<version>.deb`, avec le paramètre `checksum` : la somme attendue dépend de l'architecture du serveur. Le fait `ansible_architecture` vaut `x86_64` ou `aarch64`, et la variable `otelcol_arch_map` fait la correspondance avec les clés de `otelcol_checksums`.
 
-**NB** : d'où vient le paquet ? L'URL est assemblée dans `group_vars/all.yml`, dans la variable `otelcol_deb_url` :
+> [!NOTE]
+>
+> D'où vient le paquet ? L'URL est assemblée dans `group_vars/all.yml`, dans la variable `otelcol_deb_url` :
 
 ```yaml
 otelcol_deb_url: "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v{{ otelcol_version }}/otelcol-contrib_{{ otelcol_version }}_linux_{{ otelcol_arch_map[ansible_architecture] }}.deb"
@@ -227,7 +229,9 @@ LISTEN 0      4096               *:55679            *:*
 
 Le paquet démarre le service avec sa propre configuration par défaut, qui ouvre les ports 4317 et 4318 (OTLP) mais aussi 1777 et 55679 (pprof et zpages, des interfaces de diagnostic) sur toutes les interfaces. Vous allez la remplacer par une configuration que vous maîtrisez.
 
-**Attention** : si la stack du TP1 tourne encore sur `srv-N`, le service échoue au démarrage avec `bind: address already in use` sur le port 4318. Arrêtez-la avant de continuer :
+> [!WARNING]
+>
+> Si la stack du [TP1](Lab_TP01_Socle.md) tourne encore sur `srv-N`, le service échoue au démarrage avec `bind: address already in use` sur le port 4318. Arrêtez-la avant de continuer :
 
 ```bash
 ansible otel -b -m ansible.builtin.shell -a 'cd ~/tp01 && docker compose down'
@@ -251,12 +255,23 @@ Le template produit une configuration de **collector** qui contient :
 - une première ligne de commentaire `{{ ansible_managed | comment }}`, qui indique que le fichier est géré par Ansible ;
 - un receiver `otlp` (gRPC et HTTP) qui écoute sur toutes les interfaces, ports 4317 et 4318 ;
 - si la variable `otelcol_hostmetrics_enabled` est vraie, un receiver `hostmetrics` avec `collection_interval: 30s` et les scrapers `cpu`, `load` et `memory` (écrits `cpu: {}`, etc.) ;
-- les processors `memory_limiter` (1 s, 256 MiB, marge de 64 MiB), `resource` et `batch`. Le processor `resource` reçoit, par une boucle sur le dictionnaire `otelcol_resource_attributes`, une entrée `upsert` par attribut (clé `key`, valeur écrite avec le filtre `to_json`, qui ajoute les guillemets nécessaires à une chaîne YAML). Le `batch` utilise la valeur de `otelcol_batch_timeout` ;
+- les processors `memory_limiter` (1 s, 256 MiB, marge de 64 MiB), `resourcedetection`, `resource` et `batch`. Le processor `resourcedetection` interroge la machine elle-même (détecteur `system` : nom d'hôte, système, identifiant machine) et complète la ressource avec ce qu'il trouve. Le processor `resource` reçoit, par une boucle sur le dictionnaire `otelcol_resource_attributes`, une entrée `upsert` par attribut (clé `key`, valeur écrite avec le filtre `to_json`, qui ajoute les guillemets nécessaires à une chaîne YAML). Le `batch` utilise la valeur de `otelcol_batch_timeout` ;
 - l'exporter `otlp_grpc/jaeger`, vers `otelcol_backend_host` sur le port 4317 sans TLS ;
 - si `otelcol_hostmetrics_enabled` est vraie, un exporter `otlp_http/prometheus` dont le paramètre `metrics_endpoint` vaut `http://<otelcol_backend_host>:9090/api/v1/otlp/v1/metrics` ;
-- un pipeline `traces` (receiver `otlp`, processors `memory_limiter`, `resource` puis `batch`, exporter `otlp_grpc/jaeger`) et, si `otelcol_hostmetrics_enabled` est vraie, un pipeline `metrics` (receiver `hostmetrics`, mêmes processors, exporter `otlp_http/prometheus`).
+- un pipeline `traces` (receiver `otlp`, processors `memory_limiter`, `resourcedetection`, `resource` puis `batch`, exporter `otlp_grpc/jaeger`) et, si `otelcol_hostmetrics_enabled` est vraie, un pipeline `metrics` (receiver `hostmetrics`, mêmes processors, exporter `otlp_http/prometheus`).
 
 La structure reprend celle des TP précédents. Seules changent les valeurs, qui viennent désormais des variables, et les blocs conditionnels.
+
+Le processor `resourcedetection` mérite un mot avant d'écrire le template. Deux façons de renseigner la ressource se complètent ici :
+
+- `resource` pose ce que vous décidez : `deployment.environment.name`, `lab.id`, un attribut de parc commun à tous les serveurs ;
+- `resourcedetection` lit ce que la machine sait d'elle-même : son nom, son système, son identifiant. Rien à déclarer, et chaque serveur reçoit sa propre valeur.
+
+C'est ce qui rendra la partie 5 lisible : le même template déployé sur quatre serveurs produira quatre `host.name` différents, sans une variable de plus. Le réglage `override: false` laisse la priorité aux attributs déjà posés, par `resource` ou par l'application : la détection complète la ressource, elle ne l'écrase pas. Le détecteur `env` existe aussi et lit `OTEL_RESOURCE_ATTRIBUTES` dans l'environnement du service ; il n'est pas utilisé ici, pour ne pas multiplier les mécanismes dans ce lab.
+
+> [!NOTE]
+>
+> `otelcol_backend_host` est lue dans l'environnement du terminal qui lance `ansible-playbook`, par `lookup('ansible.builtin.env', 'CLT_HOST')`. Si `CLT_HOST` est vide, l'endpoint de l'exporter devient `:4317` et le **collector** tente de joindre sa propre machine : les traces n'arrivent pas dans Jaeger, et les logs du service citent `127.0.0.1:4317`. Contrôlez `echo $CLT_HOST` avant de lancer le playbook ; s'il est vide, ouvrez un nouveau terminal web, où la variable est définie.
 
 ```bash
 mkdir -p templates
@@ -283,6 +298,10 @@ processors:
     check_interval: 1s
     limit_mib: 256
     spike_limit_mib: 64
+  resourcedetection:
+    detectors: [system]
+    timeout: 2s
+    override: false
   resource:
     attributes:
 {% for key, value in otelcol_resource_attributes.items() %}
@@ -307,12 +326,12 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
+      processors: [memory_limiter, resourcedetection, resource, batch]
       exporters: [otlp_grpc/jaeger]
 {% if otelcol_hostmetrics_enabled %}
     metrics:
       receivers: [hostmetrics]
-      processors: [memory_limiter, resource, batch]
+      processors: [memory_limiter, resourcedetection, resource, batch]
       exporters: [otlp_http/prometheus]
 {% endif %}
 EOF
@@ -345,6 +364,10 @@ processors:
     check_interval: 1s
     limit_mib: 256
     spike_limit_mib: 64
+  resourcedetection:
+    detectors: [system]
+    timeout: 2s
+    override: false
   resource:
     attributes:
       - key: deployment.environment.name
@@ -366,7 +389,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
+      processors: [memory_limiter, resourcedetection, resource, batch]
       exporters: [otlp_grpc/jaeger]
 ```
 
@@ -464,7 +487,23 @@ deployment.environment.name=tp4
 lab.id=<votre numéro>
 ```
 
-**NB** : si le comptage vaut 0, attendez quelques secondes et relancez la requête. Le premier export après un redémarrage du service peut prendre quelques instants (la connexion vers Jaeger doit s'établir, et le processor `batch` attend son timeout de 2 s avant d'envoyer).
+La même requête, filtrée sur `host.name`, montre ce qu'aucune variable n'a fourni : le nom de la machine, détecté par `resourcedetection`. Les traces sont celles du **collector** de `srv-N`, donc le nom est celui du serveur, pas celui de `clt-N` :
+
+```bash
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq -r '.result.resourceSpans[].resource.attributes[] | select(.key=="host.name" or .key=="os.type") | "\(.key)=\(.value.stringValue)"' | sort -u
+```
+
+```text
+host.name=srv-N.monlab.top
+os.type=linux
+```
+
+Selon la configuration de la machine, `host.name` peut n'afficher que `srv-N` : dans les deux cas, c'est le nom du serveur qui fait tourner le **collector**, pas celui de `clt-N`, et aucune variable ne l'a fourni.
+
+> [!NOTE]
+>
+> Si le comptage vaut 0, attendez quelques secondes et relancez la requête. Le premier export après un redémarrage du service peut prendre quelques instants (la connexion vers Jaeger doit s'établir, et le processor `batch` attend son timeout de 2 s avant d'envoyer).
 
 Ouvrez l'interface de Jaeger (`http://$CLT_HOST:16686`) et sélectionnez le service `ansible-demo` : les cinq traces sont visibles.
 
@@ -504,7 +543,7 @@ Le diff montre les lignes que le template ajouterait à la configuration du serv
 @@ -37,3 +45,7 @@
 +    metrics:
 +      receivers: [hostmetrics]
-+      processors: [memory_limiter, resource, batch]
++      processors: [memory_limiter, resourcedetection, resource, batch]
 +      exporters: [otlp_http/prometheus]
 ```
 
@@ -575,7 +614,9 @@ ansible-playbook playbook.yml | grep -A2 'PLAY RECAP'
 
 Le résumé indique `failed=0` et `changed=0` : le fichier déployé correspond déjà au résultat du template.
 
-**NB** : si Ansible affiche `UNREACHABLE`, contrôlez `cat inventory.ini` (le nom du serveur doit apparaître sous `[otel]`) puis testez `ssh $SRV_HOST hostname`. Si une variable booléenne passée avec `-e` semble ignorée, c'est la chaîne `false` qui est évaluée comme vraie par Jinja2 : utilisez la forme JSON, `-e '{"otelcol_hostmetrics_enabled": false}'`.
+> [!NOTE]
+>
+> Si Ansible affiche `UNREACHABLE`, contrôlez `cat inventory.ini` (le nom du serveur doit apparaître sous `[otel]`) puis testez `ssh $SRV_HOST hostname`. Si une variable booléenne passée avec `-e` semble ignorée, c'est la chaîne `false` qui est évaluée comme vraie par Jinja2 : utilisez la forme JSON, `-e '{"otelcol_hostmetrics_enabled": false}'`.
 
 ## 5. Étendre le parc : 4 serveurs, 4 configurations
 
@@ -603,7 +644,9 @@ ansible ephemere -m ansible.builtin.setup -a 'filter=ansible_distribution' -o | 
 
 Remplacez `10.20.N.4`, `10.20.N.5` et `10.20.N.6` par les adresses privées communiquées par votre animateur.
 
-**Note** : l'IP privée de `srv2-N` vaut `10.20.N.4`, celle de `srv3-N` vaut `10.20.N.5`, et celle de `srv4-N` vaut `10.20.N.6` : DigitalOcean attribue les adresses privées de façon consécutive depuis le début du sous-réseau.
+> [!TIP]
+>
+> L'IP privée de `srv2-N` vaut `10.20.N.4`, celle de `srv3-N` vaut `10.20.N.5`, et celle de `srv4-N` vaut `10.20.N.6` : DigitalOcean attribue les adresses privées de façon consécutive depuis le début du sous-réseau.
 
 La sortie attendue pour le ping est `SUCCESS` sur les quatre machines, et pour `setup`, `ansible_distribution: Debian`.
 
@@ -700,7 +743,9 @@ srv4-0 [database] : 0.13
 
 ![Métriques système des serveurs dans Prometheus, différenciées par instance et par job](img/tp04-prometheus-multi.png)
 
-**NB** : les labels `instance` et `job` de Prometheus viennent des attributs de ressource `service.instance.id` et `service.name`. Pour les remplir automatiquement avec le hostname de chaque serveur, ajoutez ces deux attributs dans le template Jinja2, en utilisant les facts Ansible (`ansible_hostname`), et redéployez :
+> [!NOTE]
+>
+> Les labels `instance` et `job` de Prometheus viennent des attributs de ressource `service.instance.id` et `service.name`. Pour les remplir automatiquement avec le hostname de chaque serveur, ajoutez ces deux attributs dans le template Jinja2, en utilisant les facts Ansible (`ansible_hostname`), et redéployez :
 
 ```yaml
       - key: service.name
@@ -711,7 +756,9 @@ srv4-0 [database] : 0.13
         action: upsert
 ```
 
-**NB** : les machines éphémères sont détruites par l'animateur à la fin du TP : la configuration qu'elles portent est entièrement reproductible par le playbook, c'est le sens de l'infrastructure-as-code.
+> [!NOTE]
+>
+> Les machines éphémères sont détruites par l'animateur à la fin du TP : la configuration qu'elles portent est entièrement reproductible par le playbook, c'est le sens de l'infrastructure-as-code.
 
 ## Cleanup
 
@@ -741,7 +788,7 @@ Le cas d'usage est celui d'une équipe qui exploite deux environnements, `prepro
 
 - la production doit être vue vite : lots courts (1 seconde) et métriques système collectées, parce que la capacité de ces serveurs compte ;
 - la préproduction peut attendre : lots longs (10 secondes), pas de métriques système, pour ne pas payer le coût d'une collecte dont personne ne se sert ;
-- les deux flux doivent rester **séparés et identifiables** : ports différents, donc règles de pare-feu différentes, et un attribut `tenant` qui permet de retrouver l'origine de chaque donnée dans le backend.
+- les deux flux (streams) doivent rester **séparés et identifiables** : ports différents, donc règles de pare-feu différentes, et un attribut `tenant` qui permet de retrouver l'origine de chaque donnée dans le backend.
 
 C'est exactement ce qu'un template Jinja2 rend confortable : on décrit les deux environnements une fois, et le reste est généré. Sans boucle, il faudrait recopier six blocs de configuration à la main, avec le risque d'en oublier un.
 
@@ -842,7 +889,7 @@ Quatre constructions se combinent ici :
 - l'accès `{{ t.port_grpc }}` et `{{ t.batch_timeout }}` lit les champs de l'élément en cours d'itération ;
 - le suffixe `{{ t.name }}` garantit l'unicité des noms de composants, exigée par le **collector**.
 
-L'attribut `service.instance.id` mérite une explication : c'est lui qui devient l'étiquette `instance` dans Prometheus. Sans lui, les séries de métriques arrivent sans étiquette et deviennent impossibles à attribuer à un environnement.
+L'attribut `service.instance.id` mérite une explication : c'est lui qui devient le label `instance` dans Prometheus. Sans lui, les séries de métriques arrivent sans label et deviennent impossibles à attribuer à un environnement.
 
 Rendez le template sur `clt-N` et validez-le avant de déployer :
 
@@ -941,7 +988,9 @@ instance=otelcol-prod : 12 series
 
 `preprod` n'apparaît pas : sa variable `hostmetrics: false` a supprimé le receiver et le pipeline `metrics` de sa configuration. Une seule variable change, et le template produit deux comportements.
 
-**NB** : ce modèle a une limite bien réelle, à connaître avant de le déployer en production. Les deux environnements partagent le même processus et donc le même `memory_limiter` : si la préproduction sature son endpoint, le limiteur peut rejeter aussi les données de production. C'est le problème du voisin bruyant, et c'est pourquoi certains parcs isolent la production sur un **collector** distinct. Le TP9 traite ces questions de passerelle de production.
+> [!NOTE]
+>
+> Ce modèle a une limite bien réelle, à connaître avant de le déployer en production. Les deux environnements partagent le même processus et donc le même `memory_limiter` : si la préproduction sature son endpoint, le limiteur peut rejeter aussi les données de production. C'est le problème du voisin bruyant, et c'est pourquoi certains parcs isolent la production sur un **collector** distinct. [Le TP9](Lab_TP09_Gateway_Production.md) traite ces questions de **gateway** de production.
 
 Revenez à la configuration du TP avant de continuer :
 

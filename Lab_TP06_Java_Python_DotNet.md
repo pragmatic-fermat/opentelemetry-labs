@@ -70,6 +70,12 @@ flowchart LR
   COL --> JAE[(Jaeger)]
 ```
 
+## Ce que ce TP introduit, suppose et laisse
+
+- Introduit : l'auto-instrumentation de quatre runtimes par quatre mécanismes différents (option de démarrage Java, point d'entrée Python, variables d'environnement .NET, extension PHP), la configuration par variables `OTEL_*` seule, et la comparaison des spans et des attributs produits par chaque **agent** sur une même requête.
+- Suppose vu : rien, le lab est autonome et crée ses propres backends. La lecture d'une trace aide, et le [TP1](Lab_TP01_Socle.md) la fournit.
+- Laisse aux suivants : l'écriture de spans manuels et le contexte métier ([TP7](Lab_TP07_Instrumentation_Manuelle.md)), la collecte et l'exploitation des logs ([TP3](Lab_TP03_Kubernetes.md), [TP7](Lab_TP07_Instrumentation_Manuelle.md)), l'audit des conventions et la corrélation des signaux ([TP10](Lab_TP10_Exploitation.md)), le diagnostic ([TP11](Lab_TP11_Diagnostic_Incident.md)).
+
 ## 1. Applications de départ et backends
 
 Les backends de ce lab tiennent dans un fichier `compose.yaml` : un Jaeger et un **collector** qui reçoit en OTLP/HTTP. Créez le dossier et la stack sur `clt-N` :
@@ -147,9 +153,13 @@ curl -s -o /dev/null -w 'collector OTLP : %{http_code}\n' \
 collector OTLP : 200
 ```
 
-**NB** : ce TP n'utilise que le signal traces, et sans processor : la configuration du **collector** tient en trois fichiers. Le TP1 détaille les quatre sections, les processors et le fan-out ; ce lab reprend la même logique en version minimale.
+> [!NOTE]
+>
+> Ce TP n'utilise que le signal traces, et sans processor : la configuration du **collector** tient en trois fichiers. Le [TP1](Lab_TP01_Socle.md) détaille les quatre sections, les processors et le fan-out ; ce lab reprend la même logique en version minimale.
 
-**NB** : si l'API renvoie `{"services":[]}` tout de suite après le démarrage, attendez quelques secondes et réinterrogez : Jaeger enregistre le service `jaeger` lui-même une fois sa télémétrie interne démarrée.
+> [!NOTE]
+>
+> Si l'API renvoie `{"services":[]}` tout de suite après le démarrage, attendez quelques secondes et réinterrogez : Jaeger enregistre le service `jaeger` lui-même une fois sa télémétrie interne démarrée.
 
 Recopiez les quatre applications sur le serveur :
 
@@ -216,7 +226,9 @@ ssh $SRV_HOST 'tail -2 /tmp/checkout.log'
 checkout listening on 8081
 ```
 
-**NB** : trois pièges sur ce lancement. D'abord, le mode source-file (`java checkout.java`, qui compile à la volée) ne convient pas : il charge le compilateur en mémoire, l'**agent** détecte un outil JDK et se désactive avec le message `JDK tool detected, agent will not be started`. Ensuite, `-javaagent` doit précéder `-cp` et la classe, l'**agent** devant s'attacher avant le chargement des classes. Enfin, `setsid` détache le service de la session SSH : un service lancé par SSH et détaché avec `nohup` seul peut être tué à la fermeture de la session, ce qui s'est produit avec le service .NET ; `setsid` le rend indépendant de la session tout entière, et `< /dev/null` lui évite de lire le terminal. Les quatre lancements de ce lab suivent le même schéma. L'**agent** instrumente les bibliothèques du JDK et les clients HTTP sans qu'on les déclare, ce qui explique que le span client vers `inventory` apparaîtra sans code dédié.
+> [!NOTE]
+>
+> Trois pièges sur ce lancement. D'abord, le mode source-file (`java checkout.java`, qui compile à la volée) ne convient pas : il charge le compilateur en mémoire, l'**agent** détecte un outil JDK et se désactive avec le message `JDK tool detected, agent will not be started`. Ensuite, `-javaagent` doit précéder `-cp` et la classe, l'**agent** devant s'attacher avant le chargement des classes. Enfin, `setsid` détache le service de la session SSH : un service lancé par SSH et détaché avec `nohup` seul peut être tué à la fermeture de la session, ce qui s'est produit avec le service .NET ; `setsid` le rend indépendant de la session tout entière, et `< /dev/null` lui évite de lire le terminal. Les quatre lancements de ce lab suivent le même schéma. L'**agent** instrumente les bibliothèques du JDK et les clients HTTP sans qu'on les déclare, ce qui explique que le span client vers `inventory` apparaîtra sans code dédié.
 
 Appelez le service et vérifiez qu'il répond, puis regardez Jaeger :
 
@@ -266,7 +278,9 @@ ssh $SRV_HOST 'tail -2 /tmp/inventory.log'
 inventory listening on 8080
 ```
 
-**NB** : en Python, il n'y a pas d'option de JVM ni de variable `NODE_OPTIONS`. L'**agent** est un point d'entrée : `opentelemetry-instrument` remplace `python` et pose les hooks avant l'import de l'application. L'ordre est donc inversé par rapport à Java.
+> [!NOTE]
+>
+> En Python, il n'y a pas d'option de JVM ni de variable `NODE_OPTIONS`. L'**agent** est un point d'entrée : `opentelemetry-instrument` remplace `python` et pose les hooks avant l'import de l'application. L'ordre est donc inversé par rapport à Java.
 
 Appelez la chaîne depuis `clt-N` :
 
@@ -314,7 +328,9 @@ ssh $SRV_HOST 'cd ~/tp06/dotnet && unzip -q oi.tar.gz && ls'
 LICENSE  OpenTelemetry.AutoInstrumentation.Native.so  instrument.sh  linux-x64  net  ...
 ```
 
-**NB** : l'auto-instrumentation 1.20.0 abandonne .NET 8 et 9, arrivés en fin de support, et ne supporte plus que .NET 10 et 11. C'est pourquoi le service cible `net10.0`. Avec une version plus ancienne de l'auto-instrumentation, l'application ne démarrerait pas ou resterait sans spans.
+> [!NOTE]
+>
+> L'auto-instrumentation 1.20.0 abandonne .NET 8 et 9, arrivés en fin de support, et ne supporte plus que .NET 10 et 11. C'est pourquoi le service cible `net10.0`. Avec une version plus ancienne de l'auto-instrumentation, l'application ne démarrerait pas ou resterait sans spans.
 
 Démarrez le service par le script d'environnement fourni, qui positionne les variables du profileur :
 
@@ -337,9 +353,13 @@ info: Microsoft.Hosting.Lifetime[0]
       Content root path: /root/tp06
 ```
 
-**NB** : contrairement aux trois autres services, le service .NET n'affiche pas de message de démarrage explicite : les lignes ci-dessus, écrites par ASP.NET Core, signalent qu'il est prêt. Le port se vérifie par un appel : `curl -s http://$SRV_HOST:8082/price`.
+> [!NOTE]
+>
+> Contrairement aux trois autres services, le service .NET n'affiche pas de message de démarrage explicite : les lignes ci-dessus, écrites par ASP.NET Core, signalent qu'il est prêt. Le port se vérifie par un appel : `curl -s http://$SRV_HOST:8082/price`.
 
-**NB** : sur .NET, l'activation passe par le profileur CLR (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`), que le script `instrument.sh` exporte. Le script cherche ses fichiers dans `OTEL_DOTNET_AUTO_HOME`, qui vaut par défaut `~/.otel-dotnet-auto` : sans cette variable, il échoue avec `There are no files under the location specified via OTEL_DOTNET_AUTO_HOME`. C'est la mécanique la plus intrusive des quatre, et la seule qui demande un script fourni par le projet.
+> [!NOTE]
+>
+> Sur .NET, l'activation passe par le profileur CLR (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`), que le script `instrument.sh` exporte. Le script cherche ses fichiers dans `OTEL_DOTNET_AUTO_HOME`, qui vaut par défaut `~/.otel-dotnet-auto` : sans cette variable, il échoue avec `There are no files under the location specified via OTEL_DOTNET_AUTO_HOME`. C'est la mécanique la plus intrusive des quatre, et la seule qui demande un script fourni par le projet.
 
 Vérifiez la chaîne complète :
 
@@ -370,7 +390,9 @@ ssh $SRV_HOST 'echo "extension=opentelemetry.so" > /etc/php/8.3/cli/conf.d/20-op
 opentelemetry
 ```
 
-**NB** : `pecl` vient du paquet `php-pear`, et la compilation de l'extension demande `php8.3-dev` et la chaîne de compilation (`build-essential`). C'est le point d'installation le plus lourd des quatre langages : l'extension `opentelemetry` de PHP n'est pas un paquet Debian, elle se compile à l'installation.
+> [!NOTE]
+>
+> `pecl` vient du paquet `php-pear`, et la compilation de l'extension demande `php8.3-dev` et la chaîne de compilation (`build-essential`). C'est le point d'installation le plus lourd des quatre langages : l'extension `opentelemetry` de PHP n'est pas un paquet Debian, elle se compile à l'installation.
 
 L'extension seule ne fait rien : elle fournit les points d'accroche, et les paquets Composer décident de ce qui est instrumenté. Installez l'application et ses dépendances :
 
@@ -383,7 +405,9 @@ ssh $SRV_HOST 'ls ~/tp06/shipping/vendor/open-telemetry'
 api  context  exporter-otlp  gen-otlp-protobuf  opentelemetry-auto-slim  sdk  sem-conv
 ```
 
-**NB** : l'exporter OTLP en HTTP a besoin d'un client PSR-18 pour envoyer les requêtes. Le `composer.json` fourni contient donc `guzzlehttp/guzzle`. Sans lui, chaque requête lève l'avertissement `No PSR-18 clients found. Make sure to install a package providing "psr/http-client-implementation"`, et aucun span n'est envoyé.
+> [!NOTE]
+>
+> L'exporter OTLP en HTTP a besoin d'un client PSR-18 pour envoyer les requêtes. Le `composer.json` fourni contient donc `guzzlehttp/guzzle`. Sans lui, chaque requête lève l'avertissement `No PSR-18 clients found. Make sure to install a package providing "psr/http-client-implementation"`, et aucun span n'est envoyé.
 
 Lancez le service avec les mêmes variables `OTEL_*`, plus celle qui active le chargement automatique :
 
@@ -403,7 +427,9 @@ ssh $SRV_HOST 'tail -2 /tmp/shipping.log'
 [Fri Nov 21 ...] PHP 8.3.x Development Server (http://0.0.0.0:8083) started
 ```
 
-**NB** : en PHP, l'activation tient à deux éléments, et il faut les deux. L'extension `opentelemetry` fournit les hooks au niveau du moteur, et `OTEL_PHP_AUTOLOAD_ENABLED=true` demande au SDK de s'enregistrer à chaque requête. Sans l'extension, les paquets Composer s'installent mais ne produisent aucun span ; sans la variable, l'extension est chargée mais ne s'enregistre pas.
+> [!NOTE]
+>
+> En PHP, l'activation tient à deux éléments, et il faut les deux. L'extension `opentelemetry` fournit les hooks au niveau du moteur, et `OTEL_PHP_AUTOLOAD_ENABLED=true` demande au SDK de s'enregistrer à chaque requête. Sans l'extension, les paquets Composer s'installent mais ne produisent aucun span ; sans la variable, l'extension est chargée mais ne s'enregistre pas.
 
 Vérifiez la chaîne complète, désormais sur quatre langages :
 
@@ -418,7 +444,9 @@ curl -s "http://localhost:16686/api/v3/services" | jq -c '.services'
 {"services":["checkout","inventory","jaeger","pricing","shipping"]}
 ```
 
-**NB** : l'exemple de la documentation PHP est souvent un script unique servi par le serveur intégré. Cela fonctionne pour l'export, mais pas pour l'instrumentation automatique de l'entrée HTTP : il n'y a pas de framework à intercepter. C'est pourquoi le service utilise Slim, dont l'instrumentation est fournie par `opentelemetry-auto-slim`. Pour reprendre l'esprit de l'application PHP de démonstration du lab d'origine, c'est la même mécanique qui s'appliquerait, avec un framework plutôt qu'avec un script nu.
+> [!NOTE]
+>
+> L'exemple de la documentation PHP est souvent un script unique servi par le serveur intégré. Cela fonctionne pour l'export, mais pas pour l'instrumentation automatique de l'entrée HTTP : il n'y a pas de framework à intercepter. C'est pourquoi le service utilise Slim, dont l'instrumentation est fournie par `opentelemetry-auto-slim`. Pour reprendre l'esprit de l'application PHP de démonstration du lab d'origine, c'est la même mécanique qui s'appliquerait, avec un framework plutôt qu'avec un script nu.
 
 ## 6. Trace multi-langages et comparaison
 
@@ -469,7 +497,9 @@ Trois différences valent la discussion en séance :
 - **les noms de spans** varient : Java produit `GET /order`, Python `GET /stock`, .NET `GET /price`, PHP `GET /ship`, parce que chaque instrumentation applique sa propre convention de nommage, et que PHP passe par le middleware PSR-15 de Slim ;
 - **les versions de SDK** varient aussi : au moment de la rédaction, `1.68.0` pour l'**agent** Java, `1.45.2` pour le SDK Python, `1.21.0` pour le SDK .NET, `1.17.0` pour le SDK PHP, chacun suivant son propre cycle de publication.
 
-**NB** : la propagation entre langages ne demande aucune configuration supplémentaire parce que les quatre **agents** utilisent `tracecontext` par défaut. Si un service n'apparaissait pas dans la trace, la première vérification est l'en-tête `traceparent` sur l'appel sortant, et la seconde le propagator configuré par `OTEL_PROPAGATORS`.
+> [!NOTE]
+>
+> La propagation entre langages ne demande aucune configuration supplémentaire parce que les quatre **agents** utilisent `tracecontext` par défaut. Si un service n'apparaissait pas dans la trace, la première vérification est l'en-tête `traceparent` sur l'appel sortant, et la seconde le propagator configuré par `OTEL_PROPAGATORS`.
 
 ## Cleanup
 

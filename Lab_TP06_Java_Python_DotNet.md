@@ -29,7 +29,7 @@
 
 Le lab se déroule sur deux machines : `srv-N` héberge les quatre applications et leurs **agents**, `clt-N` porte le **collector** et Jaeger, qui reçoivent les données. Vous travaillez depuis le terminal de `clt-N`, et les commandes destinées au serveur passent par SSH.
 
-Prérequis : TP1 recommandé. La stack du TP1 (Jaeger et un **collector** qui reçoit en OTLP) doit tourner sur `clt-N`.
+Prérequis : aucun TP préalable. Ce lab crée ses propres backends à la partie 1 : un Jaeger et un **collector** qui reçoit en OTLP, sur `clt-N`. Les machines sont reconstruites par cloud-init : partez du principe qu'aucun service d'un TP précédent ne tourne encore, et que les ports 16686 et 4318 doivent être libres.
 
 Les quatre applications sont fournies dans le dépôt et recopiées sur `srv-N`. Chacune est volontairement minimale : un endpoint HTTP, un appel au service suivant, aucune bibliothèque OpenTelemetry.
 
@@ -42,14 +42,14 @@ Versions utilisées dans ce lab :
 | Exporter OTLP Python (`opentelemetry-exporter-otlp-proto-http`) | 1.45.2 |
 | Flask | 3.1.3 |
 | requests | 2.34.2 |
-| Auto-instrumentation .NET | 1.20.0 |
-| PHP | 8.3 (paquet `php8.3-cli`) |
+| .NET | 10.0 (runtime ASP.NET Core) |
+| Auto-instrumentation .NET | 1.20.0 (supporte .NET 10 et 11, abandonne .NET 8 et 9) |
 | Extension PECL `opentelemetry` | 1.1.0 |
 | SDK PHP (`open-telemetry/sdk`) | 1.7 |
 | Exporter OTLP PHP (`open-telemetry/exporter-otlp`) | 1.2 |
 | Slim (`slim/slim`) | 4.14 |
-| OpenJDK | 21 (paquet `openjdk-21-jre-headless`) |
-| .NET | 8.0 (runtime ASP.NET Core) |
+| OpenJDK | 21 (paquet `openjdk-21-jdk-headless`) |
+| PHP | 8.3 (paquet `php8.3-cli`) |
 | Jaeger | 2.23.0 |
 
 Le schéma suivant montre la chaîne : une requête entre par le service Java, qui appelle le service Python, qui appelle le service .NET, qui appelle le service PHP. Les quatre **agents** envoient au même **collector**.
@@ -62,15 +62,79 @@ flowchart LR
   C([curl]) -->|TCP/8081| J["checkout<br/>Java, agent 2.34.0"]
   J -->|TCP/8080| P["inventory<br/>Python, opentelemetry-instrument"]
   P -->|TCP/8082| D["pricing<br/>.NET, auto-instrumentation 1.20.0"]
+  D -->|TCP/8083| S["shipping<br/>PHP, extension opentelemetry"]
   J -.->|OTLP/HTTP 4318| COL[collector]
   P -.->|OTLP/HTTP 4318| COL
   D -.->|OTLP/HTTP 4318| COL
+  S -.->|OTLP/HTTP 4318| COL
   COL --> JAE[(Jaeger)]
 ```
 
 ## 1. Applications de départ et backends
 
-Vérifiez d'abord que la stack du TP1 répond sur `clt-N` :
+Les backends de ce lab tiennent dans un fichier `compose.yaml` : un Jaeger et un **collector** qui reçoit en OTLP/HTTP. Créez le dossier et la stack sur `clt-N` :
+
+```bash
+mkdir -p ~/tp06/otelcol
+cd ~/tp06
+
+cat > compose.yaml <<'EOF'
+name: tp06
+
+services:
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    ports:
+      - "16686:16686"
+    restart: unless-stopped
+
+  otelcol:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0
+    command:
+      - --config=/etc/otelcol/receivers.yaml
+      - --config=/etc/otelcol/exporters.yaml
+      - --config=/etc/otelcol/service.yaml
+    volumes:
+      - ./otelcol:/etc/otelcol:ro
+    ports:
+      - "4318:4318"
+    depends_on:
+      - jaeger
+    restart: unless-stopped
+EOF
+
+cat > otelcol/receivers.yaml <<'EOF'
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+EOF
+
+cat > otelcol/exporters.yaml <<'EOF'
+exporters:
+  otlp_http/jaeger:
+    endpoint: http://jaeger:4318
+EOF
+
+cat > otelcol/service.yaml <<'EOF'
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlp_http/jaeger]
+EOF
+
+docker compose up -d
+docker compose ps --format '{{.Service}} {{.State}}'
+```
+
+```text
+jaeger running
+otelcol running
+```
+
+Vérifiez que les deux backends répondent :
 
 ```bash
 curl -s http://localhost:16686/api/v3/services
@@ -82,6 +146,10 @@ curl -s -o /dev/null -w 'collector OTLP : %{http_code}\n' \
 {"services":["jaeger"]}
 collector OTLP : 200
 ```
+
+**NB** : ce TP n'utilise que le signal traces, et sans processor : la configuration du **collector** tient en trois fichiers. Le TP1 détaille les quatre sections, les processors et le fan-out ; ce lab reprend la même logique en version minimale.
+
+**NB** : si l'API renvoie `{"services":[]}` tout de suite après le démarrage, attendez quelques secondes et réinterrogez : Jaeger enregistre le service `jaeger` lui-même une fois sa télémétrie interne démarrée.
 
 Recopiez les quatre applications sur le serveur :
 
@@ -111,7 +179,7 @@ Sans instrumentation, une requête produit quatre lignes de log séparées et au
 Installez un JRE et l'**agent** Java sur le serveur :
 
 ```bash
-ssh $SRV_HOST 'apt-get update -qq && apt-get install -y -qq openjdk-21-jre-headless'
+ssh $SRV_HOST 'apt-get update -qq && apt-get install -y -qq openjdk-21-jdk-headless'
 ssh $SRV_HOST 'mkdir -p ~/tp06/java && cd ~/tp06/java && \
   curl -fsSL -o opentelemetry-javaagent.jar \
   https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.34.0/opentelemetry-javaagent.jar'
@@ -122,7 +190,15 @@ ssh $SRV_HOST 'java -version 2>&1 | head -1'
 openjdk version "21.0.x"
 ```
 
-L'**agent** Java se fixe à la machine virtuelle au démarrage, par l'option `-javaagent`. Aucune ligne de code ne change. Lancez le service avec les variables `OTEL_*` :
+L'**agent** Java se fixe à la machine virtuelle au démarrage, par l'option `-javaagent`. Aucune ligne de code ne change. Compilez d'abord le service, puis lancez-le avec les variables `OTEL_*` :
+
+```bash
+ssh $SRV_HOST 'cd ~/tp06 && javac checkout.java && ls checkout.class'
+```
+
+```text
+checkout.class
+```
 
 ```bash
 ssh $SRV_HOST 'cd ~/tp06 && \
@@ -130,7 +206,7 @@ ssh $SRV_HOST 'cd ~/tp06 && \
   OTEL_EXPORTER_OTLP_ENDPOINT=http://'"$CLT_HOST"':4318 \
   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
   OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=tp6,lab.id='"$LAB_ID"' \
-  nohup java -javaagent:./java/opentelemetry-javaagent.jar -cp . checkout.java \
+  nohup java -javaagent:./java/opentelemetry-javaagent.jar -cp . checkout \
   > /tmp/checkout.log 2>&1 &'
 sleep 4
 ssh $SRV_HOST 'tail -2 /tmp/checkout.log'
@@ -140,7 +216,7 @@ ssh $SRV_HOST 'tail -2 /tmp/checkout.log'
 checkout listening on 8081
 ```
 
-**NB** : `-javaagent` doit précéder `-cp`. L'**agent** instrumente les bibliothèques du JDK et les clients HTTP sans qu'on les déclare, ce qui explique que le span client vers `inventory` apparaîtra sans code dédié.
+**NB** : trois pièges sur ce lancement. D'abord, le mode source-file (`java checkout.java`, qui compile à la volée) ne convient pas : il charge le compilateur en mémoire, l'**agent** détecte un outil JDK et se désactive avec le message `JDK tool detected, agent will not be started`. Ensuite, le mode source-file demande le JDK et non le JRE : sans le module `jdk.compiler`, il retombe en mode classe et échoue avec `ClassNotFoundException`. Enfin, `-javaagent` doit précéder `-cp` et la classe, l'**agent** devant s'attacher avant le chargement des classes. Il instrumente les bibliothèques du JDK et les clients HTTP sans qu'on les déclare, ce qui explique que le span client vers `inventory` apparaîtra sans code dédié.
 
 Appelez le service et vérifiez qu'il répond, puis regardez Jaeger :
 
@@ -209,11 +285,11 @@ curl -s "http://localhost:16686/api/v3/services" | jq -c '.services'
 
 ## 4. .NET
 
-Installez le SDK .NET 8, puis compilez le service. Le SDK suffit pour le runtime et pour la compilation, et évite de livrer un binaire dans le dépôt :
+Installez le SDK .NET 10, puis compilez le service. Le SDK suffit pour le runtime et pour la compilation, et évite de livrer un binaire dans le dépôt :
 
 ```bash
 ssh $SRV_HOST 'curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
-  bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet && \
+  bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet && \
   ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet'
 ssh $SRV_HOST 'export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1; \
   cd ~/tp06/pricing && dotnet publish -c Release -o out 2>&1 | tail -3'
@@ -227,6 +303,7 @@ ssh $SRV_HOST 'ls ~/tp06/pricing/out/pricing.dll'
 L'auto-instrumentation .NET n'est pas un paquet applicatif : c'est un ensemble de bibliothèques natives chargées par le profileur CLR, plus un script qui exporte les variables nécessaires. Téléchargez-la à version épinglée :
 
 ```bash
+ssh $SRV_HOST 'apt-get install -y -qq unzip'
 ssh $SRV_HOST 'mkdir -p ~/tp06/dotnet && cd ~/tp06/dotnet && \
   curl -fsSL -o oi.tar.gz \
   https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation/releases/download/v1.20.0/opentelemetry-dotnet-instrumentation-linux-glibc-x64.zip'
@@ -234,8 +311,10 @@ ssh $SRV_HOST 'cd ~/tp06/dotnet && unzip -q oi.tar.gz && ls'
 ```
 
 ```text
-LICENSE  OpenTelemetry.AutoInstrumentation.Native.so  net8.0  ...
+LICENSE  OpenTelemetry.AutoInstrumentation.Native.so  instrument.sh  linux-x64  net  ...
 ```
+
+**NB** : l'auto-instrumentation 1.20.0 abandonne .NET 8 et 9, arrivés en fin de support, et ne supporte plus que .NET 10 et 11. C'est pourquoi le service cible `net10.0`. Avec une version plus ancienne de l'auto-instrumentation, l'application ne démarrerait pas ou resterait sans spans.
 
 Démarrez le service par le script d'environnement fourni, qui positionne les variables du profileur :
 
@@ -245,6 +324,7 @@ ssh $SRV_HOST 'cd ~/tp06 && \
   OTEL_EXPORTER_OTLP_ENDPOINT=http://'"$CLT_HOST"':4318 \
   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf \
   OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=tp6,lab.id='"$LAB_ID"' \
+  OTEL_DOTNET_AUTO_HOME=~/tp06/dotnet \
   nohup sh ~/tp06/dotnet/instrument.sh dotnet ~/tp06/pricing/out/pricing.dll \
   > /tmp/pricing.log 2>&1 &'
 sleep 5
@@ -252,10 +332,14 @@ ssh $SRV_HOST 'tail -3 /tmp/pricing.log'
 ```
 
 ```text
-pricing listening on 8082
+      Hosting environment: Production
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: /root/tp06
 ```
 
-**NB** : sur .NET, l'activation passe par le profileur CLR (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`), que le script `instrument.sh` exporte. C'est la mécanique la plus intrusive des quatre, et la seule qui demande un script fourni par le projet.
+**NB** : contrairement aux trois autres services, le service .NET n'affiche pas de message de démarrage explicite : les lignes ci-dessus, écrites par ASP.NET Core, signalent qu'il est prêt. Le port se vérifie par un appel : `curl -s http://$SRV_HOST:8082/price`.
+
+**NB** : sur .NET, l'activation passe par le profileur CLR (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`), que le script `instrument.sh` exporte. Le script cherche ses fichiers dans `OTEL_DOTNET_AUTO_HOME`, qui vaut par défaut `~/.otel-dotnet-auto` : sans cette variable, il échoue avec `There are no files under the location specified via OTEL_DOTNET_AUTO_HOME`. C'est la mécanique la plus intrusive des quatre, et la seule qui demande un script fourni par le projet.
 
 Vérifiez la chaîne complète :
 
@@ -383,23 +467,38 @@ Trois différences valent la discussion en séance :
 Arrêtez les quatre services sur le serveur, puis supprimez les fichiers installés :
 
 ```bash
-ssh $SRV_HOST 'pkill -f checkout.java; pkill -f inventory.py; pkill -f pricing.dll; pkill -f "php -S"'
+ssh $SRV_HOST 'pkill -f "[c]heckout.java"; pkill -f "[i]nventory.py"; \
+  pkill -f "[p]ricing.dll"; pkill -f "[p]hp -S"'
 ssh $SRV_HOST 'rm -rf ~/tp06 /usr/share/dotnet /usr/local/bin/dotnet'
 ssh $SRV_HOST 'pecl uninstall opentelemetry; rm -f /etc/php/8.3/cli/conf.d/20-opentelemetry.ini'
-ssh $SRV_HOST 'apt-get purge -y openjdk-21-jre-headless python3-venv php8.3-cli php8.3-curl php8.3-xml php8.3-mbstring composer'
+ssh $SRV_HOST 'apt-get purge -y openjdk-21-jdk-headless python3-venv php8.3-cli php8.3-curl php8.3-xml php8.3-mbstring composer'
 ```
 
-Les services étaient lancés en `nohup`, sans service systemd : `pkill` suffit, et la vérification suivante ne doit plus rien renvoyer :
+Les services étaient lancés en `nohup`, sans service systemd : `pkill` suffit. Les motifs sont écrits `[c]heckout.java` plutôt que `checkout.java` : sans les crochets, `pkill -f` tue aussi le shell qui l'exécute, car sa propre ligne de commande contient le motif, et les `pkill` suivants ne s'exécutent jamais. La vérification suivante ne doit plus rien renvoyer :
 
 ```bash
-ssh $SRV_HOST 'pgrep -af "checkout.java|inventory.py|pricing.dll|php -S" || echo "aucun service"'
+ssh $SRV_HOST 'pgrep -af "[c]heckout.java|[i]nventory.py|[p]ricing.dll|[p]hp -S" || echo "aucun service"'
 ```
 
 ```text
 aucun service
 ```
 
-La stack du TP1 sur `clt-N` reste en place : elle sert au TP suivant.
+Détruisez aussi la stack du lab sur `clt-N` :
+
+```bash
+cd ~/tp06 && docker compose down -v
+```
+
+Les ports 16686 et 4318 redeviennent libres :
+
+```bash
+ss -ltn | grep -E ':(16686|4318) ' || echo "ports libres"
+```
+
+```text
+ports libres
+```
 
 ## Extra
 

@@ -16,7 +16,7 @@
 - [1. Préparer le poste de contrôle](#1-préparer-le-poste-de-contrôle)
 - [2. Installer le **collector**](#2-installer-le-collector)
 - [3. Générer la configuration avec Jinja2](#3-générer-la-configuration-avec-jinja2)
-- [4. Modifier la configuration](#4-modifier-la-configuration)
+- [4. Déploiements successifs](#4-déploiements-successifs)
 - [5. Étendre le parc : 4 serveurs, 4 configurations](#5-étendre-le-parc-4-serveurs-4-configurations)
 - [Cleanup](#cleanup)
 - [Extra](#extra)
@@ -509,9 +509,13 @@ Ouvrez l'interface de Jaeger (`http://$CLT_HOST:16686`) et sélectionnez le serv
 
 ![Traces du service ansible-demo dans Jaeger, avec les attributs déployés par Ansible](img/tp04-jaeger-traces.png)
 
-## 4. Modifier la configuration
+## 4. Déploiements successifs
 
-Vous allez activer la collecte des métriques du serveur sans modifier ni le playbook, ni le template : seules les variables changent.
+Un parc ne se déploie pas une seule fois : il change. Cette partie enchaîne cinq déploiements sur le même serveur, du premier ajout au retour en arrière, en passant par une dérive corrigée et un changement refusé. À chaque fois la mécanique est la même : une variable ou un template, un rendu, le contrôle `validate`, puis un redémarrage si le fichier change.
+
+### Un ajout
+
+Vous allez activer la collecte des métriques du serveur sans modifier ni le playbook, ni le template : seule une variable change.
 
 Une variable définie pour un hôte précis, dans `host_vars/<nom de l'hôte>.yml`, l'emporte sur celle de `group_vars/all.yml`.
 
@@ -547,16 +551,28 @@ Le diff montre les lignes que le template ajouterait à la configuration du serv
 +      exporters: [otlp_http/prometheus]
 ```
 
-Appliquez le changement, puis attendez une minute le temps d'une collecte :
+Appliquez le changement. Le résumé montre deux tâches modifiées : le fichier déployé, puis le handler qui redémarre le service.
 
 ```bash
-ansible-playbook playbook.yml
+ansible-playbook playbook.yml | grep -E 'RUNNING HANDLER|changed:' | head -4
+```
+
+```text
+changed: [srv-N.monlab.top]
+RUNNING HANDLER [Redémarrer otelcol-contrib] ***
+changed: [srv-N.monlab.top]
+```
+
+Contrôlez que l'instance en cours utilise bien cette configuration, puis attendez une minute le temps d'une collecte :
+
+```bash
+ansible otel -a 'grep -c hostmetrics /etc/otelcol-contrib/config.yaml'
 sleep 60
 curl -s http://localhost:9090/api/v1/query --data-urlencode 'query=count({__name__=~"system_cpu.*"})' \
   | jq -r '.data.result[0].value[1]'
 ```
 
-La commande affiche un nombre supérieur à 0 : Prometheus a reçu les métriques de `srv-N` :
+La première commande affiche `2`, une ligne pour le receiver et une pour le pipeline. La seconde affiche un nombre supérieur à 0 : Prometheus a reçu les métriques de `srv-N`.
 
 ```text
 12
@@ -566,7 +582,9 @@ Le nom exact des métriques dépend de la conversion appliquée par Prometheus, 
 
 ![Métriques système de srv-N dans Prometheus, collectées via hostmetrics et OTLP](img/tp04-prometheus-metrics.png)
 
-Relancez le playbook une troisième fois, et lisez le résumé :
+### Un passage sans changement
+
+Relancez le playbook immédiatement, et lisez le résumé :
 
 ```bash
 ansible-playbook playbook.yml | grep -A2 'PLAY RECAP'
@@ -579,11 +597,89 @@ PLAY RECAP *********************************************************************
 srv-N.monlab.top           : ok=5    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 ```
 
+### Un retour en arrière
+
+La collecte des métriques système a été ajoutée, elle peut être retirée de la même façon. Désactivez la variable :
+
+```bash
+cat > host_vars/$SRV_HOST.yml <<'EOF'
+otelcol_hostmetrics_enabled: false
+EOF
+ansible-playbook playbook.yml --check --diff
+```
+
+Le diff montre cette fois des lignes retirées, les mêmes qu'à l'ajout :
+
+```diff
+-  hostmetrics:
+-    collection_interval: 30s
+-    scrapers:
+-      cpu: {}
+-      load: {}
+-      memory: {}
+@@ -36,8 +30,6 @@
+-  otlp_http/prometheus:
+-    metrics_endpoint: http://<CLT_HOST>:9090/api/v1/otlp/v1/metrics
+@@ -45,7 +37,3 @@
+-    metrics:
+-      receivers: [hostmetrics]
+-      processors: [memory_limiter, resourcedetection, resource, batch]
+-      exporters: [otlp_http/prometheus]
+```
+
+Appliquez, puis vérifiez que la configuration en cours ne contient plus le receiver :
+
+```bash
+ansible-playbook playbook.yml | grep -E 'RUNNING HANDLER|changed:' | head -4
+ansible otel -m ansible.builtin.shell -a 'grep -c hostmetrics /etc/otelcol-contrib/config.yaml || true'
+```
+
+La seconde commande affiche `0`. Dans Prometheus, les séries existantes ne disparaissent pas instantanément : le serveur les marque comme périmées après cinq minutes sans nouvelle valeur, puis les oublie. La partie suivante dure assez longtemps pour le constater à la fin, avec la même requête.
+
+### Une dérive corrigée
+
+Que se passe-t-il si quelqu'un modifie la configuration à la main sur le serveur ? Ajoutez une ligne au fichier déployé, comme le ferait un dépannage pressé :
+
+```bash
+ansible otel -b -m ansible.builtin.shell -a 'echo "# ajouté à la main" >> /etc/otelcol-contrib/config.yaml'
+ansible otel -a 'tail -1 /etc/otelcol-contrib/config.yaml'
+```
+
+Le serveur porte maintenant une configuration que le template ne décrit pas. Demandez à Ansible ce qu'il ferait :
+
+```bash
+ansible-playbook playbook.yml --check --diff
+```
+
+Le diff contient la ligne à retirer :
+
+```diff
+@@ -45,4 +45,3 @@
+- # ajouté à la main
+```
+
+Appliquez, puis contrôlez la fin du fichier :
+
+```bash
+ansible-playbook playbook.yml >/dev/null
+ansible otel -a 'tail -1 /etc/otelcol-contrib/config.yaml'
+```
+
+La ligne a disparu, et le fichier se termine de nouveau par la déclaration de l'exporter du pipeline `traces` :
+
+```text
+      exporters: [otlp_grpc/jaeger]
+```
+
+Ansible est la source de vérité : une modification manuelle est écrasée au passage suivant. C'est ce qui rend un parc prévisible, et c'est aussi pourquoi une urgence se règle en modifiant le template, pas le serveur.
+
+### Un changement refusé
+
 Simulez enfin une erreur de saisie. La valeur de `otelcol_batch_timeout` est invalide, et le paramètre `validate` doit empêcher son déploiement :
 
 ```bash
 cat > host_vars/$SRV_HOST.yml <<'EOF'
-otelcol_hostmetrics_enabled: true
+otelcol_hostmetrics_enabled: false
 otelcol_batch_timeout: "deux secondes"
 EOF
 ansible-playbook playbook.yml
@@ -1010,3 +1106,60 @@ Ajoutez au template un receiver `filelog` sur `/var/log/syslog` et un pipeline d
 ### 4. Conserver les versions précédentes de la configuration
 
 Ajoutez le paramètre `backup: true` à la tâche de configuration et observez les copies conservées sur le serveur à chaque modification.
+
+### 5. Revenir à une version antérieure du binaire
+
+Pour l'exercice, imaginez qu'une régression de la version 0.165.0 vous oblige à revenir à 0.164.0 le temps d'un diagnostic. Le playbook rend l'opération simple, à deux conditions : changer les sommes de contrôle avec la version, et prévenir APT qu'il s'agit d'une descente de version.
+
+Commencez par la version et les sommes. Celles de la 0.164.0 sont publiées avec la version :
+
+```bash
+sed -i 's/otelcol_version: "0.165.0"/otelcol_version: "0.164.0"/' group_vars/all.yml
+sed -i 's|amd64: "sha256:dafb5174344dd15f339fd8208783b17122fb4cd37fa7e5461fb09d99df212b4b"|amd64: "sha256:1995260c54cf5d74964a85e5e7d27834bb9a252c87a2582a4fb6a6c34565a90d"|' group_vars/all.yml
+sed -i 's|arm64: "sha256:4dcfb6b69dfa10132c593ed5782823eec79dc408a0d68291e1c4adc5879d0948"|arm64: "sha256:34dca7290ff50d8be123c587dff51d93711a59e2cff41895e8801b145749dd0e"|' group_vars/all.yml
+grep -A3 'otelcol_checksums' group_vars/all.yml
+```
+
+Autorisez ensuite la descente de version dans la tâche d'installation :
+
+```bash
+sed -i 's|        deb: "/tmp/otelcol-contrib_{{ otelcol_version }}.deb"|        deb: "/tmp/otelcol-contrib_{{ otelcol_version }}.deb"\n        allow_downgrade: true|' playbook.yml
+grep -A3 'deb:' playbook.yml | head -4
+```
+
+```text
+        deb: "/tmp/otelcol-contrib_{{ otelcol_version }}.deb"
+        allow_downgrade: true
+        state: present
+```
+
+Déployez, puis contrôlez la version installée et l'état du service :
+
+```bash
+ansible-playbook playbook.yml
+ansible otel -a '/usr/bin/otelcol-contrib --version'
+ansible otel -a 'systemctl is-active otelcol-contrib'
+ansible otel -a 'dpkg-query -W otelcol-contrib'
+```
+
+On obtient la version antérieure, un service actif et un paquet marqué `0.164.0` :
+
+```text
+otelcol-contrib version 0.164.0
+active
+otelcol-contrib	0.164.0
+```
+
+Envoyez cinq traces pour vérifier que le **collector** déployé fonctionne toujours :
+
+```bash
+docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
+  traces --otlp-endpoint $SRV_HOST:4317 --otlp-insecure --rate 10 --traces 5 --service ansible-demo
+sleep 3
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq '[.result.resourceSpans[].scopeSpans[].spans[].traceId] | unique | length'
+```
+
+> [!NOTE]
+>
+> Trois choses à retenir de cet exercice. Sans `allow_downgrade`, APT refuse l'opération avec `Packages were downgraded and -y was used without --allow-downgrades`, et le paquet reste en 0.165.0. Une somme de contrôle oubliée fait échouer le téléchargement avant même l'installation. Et la remontée de version est le cas normal : sans `allow_downgrade`, APT installe la version supérieure sans broncher.

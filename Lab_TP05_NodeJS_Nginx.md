@@ -78,7 +78,7 @@ flowchart LR
   NG -.->|OTLP/gRPC| JA
 ```
 
-Le message suit ces étapes : une requête HTTP arrive sur `messenger`, qui écrit dans sa base et publie un événement dans RabbitMQ ; `notifier` consomme l'événement, écrit dans sa propre base et simule l'envoi d'un SMS. Sans télémétrie, il faut lire les logs de deux processus dans deux terminaux.
+Le message suit ces étapes : une requête HTTP arrive sur `messenger`, qui joue le rôle de producteur (publisher), écrit dans sa base puis publie un événement dans RabbitMQ, le courtier de messages (broker) ; `notifier`, le consommateur (subscriber), lit l'événement dans la file (queue), écrit dans sa propre base et simule l'envoi d'un SMS. Sans télémétrie, il faut lire les logs de deux processus dans deux terminaux.
 
 Installez d'abord Node.js, avec le gestionnaire de versions `asdf`, comme pour l'application d'origine : la machine ne fournit pas de Node.js, et il faut une version récente pour l'auto-instrumentation actuelle. Le paquet distribué par Ubuntu est trop ancien.
 
@@ -498,6 +498,12 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
 > [!NOTE]
 >
 > La trace unique s'explique par la composition du bundle. `@opentelemetry/auto-instrumentations-node` embarque l'instrumentation de `amqplib` : à la publication, le messenger pose un span `publish <default>` et écrit le contexte dans les en-têtes du message ; à la consommation, le notifier lit ces en-têtes et continue la trace avec son span `chat_queue process`. Sans cette instrumentation, par exemple avec un `amqplib` brut, l'en-tête ne serait pas posé et le notifier apparaîtrait dans une trace séparée. Retenez pour l'instant qu'une trace séparée signifie une propagation manquante, pas une collecte en panne.
+
+> [!NOTE]
+>
+> RabbitMQ n'apparaît pas dans la trace, et c'est le comportement attendu. Le courtier ne parle pas OTel : il transporte des messages AMQP, et ce sont les bibliothèques clientes instrumentées qui produisent les spans, à l'envoi et à la réception, en faisant voyager le contexte dans les en-têtes du message. Le courtier, lui, s'observe par ses métriques (profondeur de file, débit, nombre de consommateurs) et par ses logs, pas par des spans. PostgreSQL est dans le même cas : les spans de requête viennent de l'instrumentation du client, pas du serveur de base.
+>
+> Nginx fait exception ici parce qu'il n'est pas un courtier mais un proxy HTTP, et que son image embarque un module OTel compilé : le proxy voit la requête entrer et sortir, il peut donc créer un span et propager `traceparent` vers l'amont. La règle générale est celle-ci : les intermédiaires qui traitent du trafic, comme les proxys, les maillages de services (service mesh) ou les passerelles d'API, émettent souvent des spans, tandis que les systèmes de stockage et de messagerie laissent cette charge à leurs clients. Une trace décrit donc les interactions vues par l'application, pas les entrailles de l'infrastructure.
 
 ## 5. Nginx devant l'application
 

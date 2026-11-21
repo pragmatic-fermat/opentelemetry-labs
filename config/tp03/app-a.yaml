@@ -1,7 +1,7 @@
 # Application de démonstration : deux services Node.js (frontend et backend).
 # Le code tient dans un ConfigMap et s'exécute avec l'image node officielle,
 # sans aucune bibliothèque OpenTelemetry : l'instrumentation sera injectée
-# par l'Operator à la partie 4.
+# par l'Operator à la partie 5.
 # Le texte INGRESS_HOST est remplacé par sed avant l'application (voir l'énoncé).
 apiVersion: v1
 kind: ConfigMap
@@ -21,6 +21,7 @@ data:
     }
 
     http.createServer((req, res) => {
+      console.log(req.method + ' ' + req.url);
       if (backend && req.url.startsWith('/api')) {
         http.get(backend + req.url, (upstream) => {
           let body = '';

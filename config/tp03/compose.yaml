@@ -1,0 +1,31 @@
+# Backends du TP3, exécutés sur srv-N par Docker Compose.
+#
+# La gateway du cluster envoie : les traces à Jaeger sur TCP/4318 (OTLP/HTTP),
+# les logs à VictoriaLogs sur TCP/9428 (/insert/opentelemetry/v1/logs).
+# Le navigateur joint les deux interfaces directement, sur ces mêmes ports
+# (16686 pour Jaeger, 9428 pour VictoriaLogs).
+#
+# Versions épinglées : Jaeger 2.23.0, VictoriaLogs v1.54.0.
+name: tp03
+
+services:
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    restart: unless-stopped
+
+  victoria-logs:
+    image: victoriametrics/victoria-logs:v1.54.0
+    command:
+      - -storageDataPath=/vlogs
+      - -retentionPeriod=1d
+    ports:
+      - "9428:9428"
+    volumes:
+      - vlogs:/vlogs
+    restart: unless-stopped
+
+volumes:
+  vlogs:

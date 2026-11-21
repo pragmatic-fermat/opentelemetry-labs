@@ -1,18 +1,23 @@
 # Fonctions d'aide pour le TP3. À charger dans chaque terminal : source ~/tp03/helpers.sh
 #
-#   appA /api/orders           appelle application-a via la Gateway
-#   appB /api/orders           appelle application-b via la Gateway
-#   jaeger '/api/v3/services'  appelle l'API de Jaeger via la Gateway
-#   vlogs '/select/logsql/query?query=...'  interroge VictoriaLogs via la Gateway
+#   appA /api/orders                          appelle application-a via la Gateway API
+#   appB /api/orders                          appelle application-b via la Gateway API
+#   jaeger '/api/v3/services'                 appelle l'API de Jaeger sur srv-N
+#   vlogs '/select/logsql/query?query=...'    interroge VictoriaLogs sur srv-N
 #
-# Les appels passent par localhost:8080 (ingress-nginx) avec l'en-tête Host
-# attendu, ce qui évite de dépendre de la résolution DNS de sslip.io.
-# Nom qui pointe vers la machine depuis le navigateur : IP publique en tirets
-# et suffixe sslip.io. Surchargeable en exportant INGRESS_HOST avant le source.
+# Les applications passent par localhost:8080, le port que KinD publie depuis
+# le control-plane, avec l'en-tête Host attendu par la HTTPRoute : cela évite
+# de dépendre de la résolution DNS de sslip.io. INGRESS_HOST est le nom qui
+# pointe vers clt-N depuis le navigateur : IP publique en tirets, suffixe
+# sslip.io. Surchargeable en exportant INGRESS_HOST avant le source.
+#
+# Les backends, eux, écoutent sur srv-N : SRV_HOST est fourni par
+# l'environnement de la machine (srv-N.<domaine>).
 : "${INGRESS_HOST:=$(curl -s https://api.ipify.org | tr '.' '-').sslip.io}"
 export INGRESS_HOST
+: "${SRV_HOST:?SRV_HOST n'est pas défini : ouvrez un nouveau terminal}"
 
 appA() { curl -s -H "Host: app-a.${INGRESS_HOST}" "http://localhost:8080$1"; }
 appB() { curl -s -H "Host: app-b.${INGRESS_HOST}" "http://localhost:8080$1"; }
-jaeger() { curl -s -H "Host: jaeger.${INGRESS_HOST}" "http://localhost:8080$1"; }
-vlogs() { curl -s -H "Host: vlogs.${INGRESS_HOST}" "http://localhost:8080$1"; }
+jaeger() { curl -s "http://${SRV_HOST}:16686$1"; }
+vlogs() { curl -s "http://${SRV_HOST}:9428$1"; }

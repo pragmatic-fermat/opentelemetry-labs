@@ -15,7 +15,7 @@
 # l'environnement de la machine (srv-N.<domaine>).
 : "${INGRESS_HOST:=$(curl -s https://api.ipify.org | tr '.' '-').sslip.io}"
 export INGRESS_HOST
-: "${SRV_HOST:?SRV_HOST n'est pas défini : ouvrez un nouveau terminal}"
+: "${SRV_HOST:?SRV_HOST non défini : ouvrez un nouveau terminal}"
 
 appA() { curl -s -H "Host: app-a.${INGRESS_HOST}" "http://localhost:8080$1"; }
 appB() { curl -s -H "Host: app-b.${INGRESS_HOST}" "http://localhost:8080$1"; }

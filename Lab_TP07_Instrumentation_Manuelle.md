@@ -31,7 +31,7 @@ Vous travaillez depuis son terminal web, dans `/root`, où le dépôt des labs e
 
 Vous instrumentez à la main une petite application Python composée de deux services : `shop` reçoit des commandes et interroge `inventory` pour connaître le stock. Aucune bibliothèque d'auto-instrumentation n'est utilisée.
 
-Le TP1 est conseillé pour le rôle du **collector**. Aucune connaissance de Python au-delà de la lecture d'un script n'est nécessaire : le code utile est court et commenté.
+Le [TP1](Lab_TP01_Socle.md) est conseillé pour le rôle du **collector**. Aucune connaissance de Python au-delà de la lecture d'un script n'est nécessaire : le code utile est court et commenté.
 
 Versions utilisées dans ce lab :
 
@@ -455,7 +455,9 @@ Suivez maintenant un log jusqu'à sa trace dans Grafana. Ouvrez Explore (`http:/
 
 Observez aussi les lignes qui n'ont pas de lien : les messages de démarrage du serveur Flask et les lignes d'accès sont émis hors de tout span, et n'ont donc pas d'identifiant de trace. Seuls les logs écrits pendant qu'un span est actif sont reliés à une trace.
 
-**NB** : si une modification semble sans effet ou si un service redémarre en boucle, lisez `docker compose logs shop --tail 30` (ou `inventory`) : une erreur de syntaxe, un import erroné ou une indentation incorrecte apparaît dans la trace Python. Pensez à `docker compose restart shop inventory`, le code est lu au démarrage.
+> [!NOTE]
+>
+> Si une modification semble sans effet ou si un service redémarre en boucle, lisez `docker compose logs shop --tail 30` (ou `inventory`) : une erreur de syntaxe, un import erroné ou une indentation incorrecte apparaît dans la trace Python. Pensez à `docker compose restart shop inventory`, le code est lu au démarrage.
 
 Si le terminal affiche une invite `>` qui ne revient pas, le shell attend la ligne `EOF` d'un `cat` : tapez-la, ou interrompez avec Ctrl+C.
 

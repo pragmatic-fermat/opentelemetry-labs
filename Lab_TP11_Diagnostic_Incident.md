@@ -29,7 +29,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 Machine(s) : `clt-N` (Docker Compose) ou `k8s-N` (Helm), à confirmer à la rédaction.
 
-Prérequis : TP1 recommandé. Plusieurs TP d'instrumentation sont utiles mais non obligatoires.
+Prérequis : [TP1](Lab_TP01_Socle.md) recommandé. Plusieurs TP d'instrumentation sont utiles mais non obligatoires.
 
 Durée prévue : 1/4 j (environ 2 heures de manipulation).
 

@@ -9,7 +9,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 - expliquer pourquoi la distribution `contrib` n'est pas adaptée à la production (taille, surface d'attaque, mises à jour subies en bloc) et dans quels cas `core` suffit ;
 - décrire un **collector** sur mesure dans un manifeste OCB (OpenTelemetry **collector** Builder), en ne retenant que les receivers, processors et exporters nécessaires ;
 - construire le binaire puis une image Docker, et comparer taille et liste de composants avec `contrib` ;
-- faire tourner la configuration du TP1 sur ce **collector** et constater qu'un composant absent est refusé dès la validation ;
+- faire tourner la configuration du [TP1](Lab_TP01_Socle.md) sur ce **collector** et constater qu'un composant absent est refusé dès la validation ;
 - reproduire un pipeline OTLP vers Jaeger avec Grafana Alloy, puis citer ses gains et ses limites.
 
 # Contenu
@@ -30,7 +30,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 Machine(s) : `clt-N`.
 
-Prérequis : TP1 recommandé : les backends et la configuration du **collector** du TP1 sont réutilisés pour valider le **collector** sur mesure.
+Prérequis : [TP1](Lab_TP01_Socle.md) recommandé : les backends et la configuration du **collector** du TP1 sont réutilisés pour valider le **collector** sur mesure.
 
 Durée prévue : 1/4 j (environ 2 heures de manipulation).
 
@@ -47,7 +47,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 À compléter. Points couverts :
 
-- Partir de la configuration du TP1 pour déduire la liste minimale de composants.
+- Partir de la configuration du [TP1](Lab_TP01_Socle.md) pour déduire la liste minimale de composants.
 - Écrire le manifeste OCB avec des versions exactes.
 
 ## 3. Construire le binaire et l'image
@@ -61,7 +61,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 À compléter. Points couverts :
 
-- Valider et démarrer le **collector** avec la configuration du TP1.
+- Valider et démarrer le **collector** avec la configuration du [TP1](Lab_TP01_Socle.md).
 - Ajouter un composant absent du manifeste et lire l'erreur de validation.
 
 ## 5. Grafana Alloy : le même pipeline

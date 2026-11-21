@@ -29,7 +29,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 Machine(s) : `srv-N` (hôte Linux, noyau compatible à vérifier) et éventuellement `k8s-N`.
 
-Prérequis : TP5 ou TP6 recommandé, pour comparer avec l'auto-instrumentation.
+Prérequis : [TP5](Lab_TP05_NodeJS_Nginx.md) ou [TP6](Lab_TP06_Java_Python_DotNet.md) recommandé, pour comparer avec l'auto-instrumentation.
 
 Durée prévue : 1/4 j (environ 2 heures de manipulation).
 

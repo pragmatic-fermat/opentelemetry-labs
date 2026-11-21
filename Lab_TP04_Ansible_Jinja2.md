@@ -31,7 +31,7 @@ Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, où le dépôt 
 
 Ansible, Docker et SSH sont installés sur `clt-N`. La clé SSH de `root` permet de se joindre à `srv-N` sans mot de passe, et le compte dispose de `sudo` sans mot de passe sur cette machine.
 
-Le TP1 est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici. Les commandes utilisent les noms complets des modules (`ansible.builtin.…`), qui fonctionnent avec toutes les versions récentes d'Ansible.
+Le [TP1](Lab_TP01_Socle.md) est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici. Les commandes utilisent les noms complets des modules (`ansible.builtin.…`), qui fonctionnent avec toutes les versions récentes d'Ansible.
 
 Versions utilisées dans ce lab :
 
@@ -148,7 +148,9 @@ Il contient un handler nommé `Redémarrer otelcol-contrib`, qui redémarre le s
 
 Quelques précisions sur le téléchargement. Il utilise la variable `otelcol_deb_url`, vers le fichier `/tmp/otelcol-contrib_<version>.deb`, avec le paramètre `checksum` : la somme attendue dépend de l'architecture du serveur. Le fait `ansible_architecture` vaut `x86_64` ou `aarch64`, et la variable `otelcol_arch_map` fait la correspondance avec les clés de `otelcol_checksums`.
 
-**NB** : d'où vient le paquet ? L'URL est assemblée dans `group_vars/all.yml`, dans la variable `otelcol_deb_url` :
+> [!NOTE]
+>
+> D'où vient le paquet ? L'URL est assemblée dans `group_vars/all.yml`, dans la variable `otelcol_deb_url` :
 
 ```yaml
 otelcol_deb_url: "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v{{ otelcol_version }}/otelcol-contrib_{{ otelcol_version }}_linux_{{ otelcol_arch_map[ansible_architecture] }}.deb"
@@ -227,7 +229,9 @@ LISTEN 0      4096               *:55679            *:*
 
 Le paquet démarre le service avec sa propre configuration par défaut, qui ouvre les ports 4317 et 4318 (OTLP) mais aussi 1777 et 55679 (pprof et zpages, des interfaces de diagnostic) sur toutes les interfaces. Vous allez la remplacer par une configuration que vous maîtrisez.
 
-**Attention** : si la stack du TP1 tourne encore sur `srv-N`, le service échoue au démarrage avec `bind: address already in use` sur le port 4318. Arrêtez-la avant de continuer :
+> [!WARNING]
+>
+> Si la stack du [TP1](Lab_TP01_Socle.md) tourne encore sur `srv-N`, le service échoue au démarrage avec `bind: address already in use` sur le port 4318. Arrêtez-la avant de continuer :
 
 ```bash
 ansible otel -b -m ansible.builtin.shell -a 'cd ~/tp01 && docker compose down'
@@ -464,7 +468,9 @@ deployment.environment.name=tp4
 lab.id=<votre numéro>
 ```
 
-**NB** : si le comptage vaut 0, attendez quelques secondes et relancez la requête. Le premier export après un redémarrage du service peut prendre quelques instants (la connexion vers Jaeger doit s'établir, et le processor `batch` attend son timeout de 2 s avant d'envoyer).
+> [!NOTE]
+>
+> Si le comptage vaut 0, attendez quelques secondes et relancez la requête. Le premier export après un redémarrage du service peut prendre quelques instants (la connexion vers Jaeger doit s'établir, et le processor `batch` attend son timeout de 2 s avant d'envoyer).
 
 Ouvrez l'interface de Jaeger (`http://$CLT_HOST:16686`) et sélectionnez le service `ansible-demo` : les cinq traces sont visibles.
 
@@ -575,7 +581,9 @@ ansible-playbook playbook.yml | grep -A2 'PLAY RECAP'
 
 Le résumé indique `failed=0` et `changed=0` : le fichier déployé correspond déjà au résultat du template.
 
-**NB** : si Ansible affiche `UNREACHABLE`, contrôlez `cat inventory.ini` (le nom du serveur doit apparaître sous `[otel]`) puis testez `ssh $SRV_HOST hostname`. Si une variable booléenne passée avec `-e` semble ignorée, c'est la chaîne `false` qui est évaluée comme vraie par Jinja2 : utilisez la forme JSON, `-e '{"otelcol_hostmetrics_enabled": false}'`.
+> [!NOTE]
+>
+> Si Ansible affiche `UNREACHABLE`, contrôlez `cat inventory.ini` (le nom du serveur doit apparaître sous `[otel]`) puis testez `ssh $SRV_HOST hostname`. Si une variable booléenne passée avec `-e` semble ignorée, c'est la chaîne `false` qui est évaluée comme vraie par Jinja2 : utilisez la forme JSON, `-e '{"otelcol_hostmetrics_enabled": false}'`.
 
 ## 5. Étendre le parc : 4 serveurs, 4 configurations
 
@@ -603,7 +611,9 @@ ansible ephemere -m ansible.builtin.setup -a 'filter=ansible_distribution' -o | 
 
 Remplacez `10.20.N.4`, `10.20.N.5` et `10.20.N.6` par les adresses privées communiquées par votre animateur.
 
-**Note** : l'IP privée de `srv2-N` vaut `10.20.N.4`, celle de `srv3-N` vaut `10.20.N.5`, et celle de `srv4-N` vaut `10.20.N.6` : DigitalOcean attribue les adresses privées de façon consécutive depuis le début du sous-réseau.
+> [!TIP]
+>
+> L'IP privée de `srv2-N` vaut `10.20.N.4`, celle de `srv3-N` vaut `10.20.N.5`, et celle de `srv4-N` vaut `10.20.N.6` : DigitalOcean attribue les adresses privées de façon consécutive depuis le début du sous-réseau.
 
 La sortie attendue pour le ping est `SUCCESS` sur les quatre machines, et pour `setup`, `ansible_distribution: Debian`.
 
@@ -700,7 +710,9 @@ srv4-0 [database] : 0.13
 
 ![Métriques système des serveurs dans Prometheus, différenciées par instance et par job](img/tp04-prometheus-multi.png)
 
-**NB** : les labels `instance` et `job` de Prometheus viennent des attributs de ressource `service.instance.id` et `service.name`. Pour les remplir automatiquement avec le hostname de chaque serveur, ajoutez ces deux attributs dans le template Jinja2, en utilisant les facts Ansible (`ansible_hostname`), et redéployez :
+> [!NOTE]
+>
+> Les labels `instance` et `job` de Prometheus viennent des attributs de ressource `service.instance.id` et `service.name`. Pour les remplir automatiquement avec le hostname de chaque serveur, ajoutez ces deux attributs dans le template Jinja2, en utilisant les facts Ansible (`ansible_hostname`), et redéployez :
 
 ```yaml
       - key: service.name
@@ -711,7 +723,9 @@ srv4-0 [database] : 0.13
         action: upsert
 ```
 
-**NB** : les machines éphémères sont détruites par l'animateur à la fin du TP : la configuration qu'elles portent est entièrement reproductible par le playbook, c'est le sens de l'infrastructure-as-code.
+> [!NOTE]
+>
+> Les machines éphémères sont détruites par l'animateur à la fin du TP : la configuration qu'elles portent est entièrement reproductible par le playbook, c'est le sens de l'infrastructure-as-code.
 
 ## Cleanup
 
@@ -941,7 +955,9 @@ instance=otelcol-prod : 12 series
 
 `preprod` n'apparaît pas : sa variable `hostmetrics: false` a supprimé le receiver et le pipeline `metrics` de sa configuration. Une seule variable change, et le template produit deux comportements.
 
-**NB** : ce modèle a une limite bien réelle, à connaître avant de le déployer en production. Les deux environnements partagent le même processus et donc le même `memory_limiter` : si la préproduction sature son endpoint, le limiteur peut rejeter aussi les données de production. C'est le problème du voisin bruyant, et c'est pourquoi certains parcs isolent la production sur un **collector** distinct. Le TP9 traite ces questions de passerelle de production.
+> [!NOTE]
+>
+> Ce modèle a une limite bien réelle, à connaître avant de le déployer en production. Les deux environnements partagent le même processus et donc le même `memory_limiter` : si la préproduction sature son endpoint, le limiteur peut rejeter aussi les données de production. C'est le problème du voisin bruyant, et c'est pourquoi certains parcs isolent la production sur un **collector** distinct. [Le TP9](Lab_TP09_Gateway_Production.md) traite ces questions de passerelle de production.
 
 Revenez à la configuration du TP avant de continuer :
 

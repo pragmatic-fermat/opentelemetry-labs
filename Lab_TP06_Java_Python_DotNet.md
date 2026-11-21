@@ -29,7 +29,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 Machine(s) : `srv-N` (hôte Linux sans Docker) pour les applications, `clt-N` pour le **collector** et les backends.
 
-Prérequis : TP1 recommandé (le **collector** et Jaeger du TP1 reçoivent les données).
+Prérequis : [TP1](Lab_TP01_Socle.md) recommandé (le **collector** et Jaeger du TP1 reçoivent les données).
 
 Durée prévue : 1/4 j (environ 2 heures de manipulation).
 

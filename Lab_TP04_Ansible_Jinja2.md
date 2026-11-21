@@ -715,15 +715,21 @@ srv4-0 [database] : 0.13
 
 ## Cleanup
 
-Arrêtez les backends du poste de contrôle, puis désinstallez le **collector** du serveur :
+Arrêtez les backends du poste de contrôle, puis désinstallez le **collector** du serveur et effacez le paquet téléchargé :
 
 ```bash
 cd ~/tp04
 docker compose down
 ansible otel -b -m ansible.builtin.apt -a "name=otelcol-contrib state=absent purge=true"
+ansible otel -b -m ansible.builtin.file -a "path=/tmp/otelcol-contrib_0.165.0.deb state=absent"
+ansible otel -a 'command -v otelcol-contrib || echo absent'
 ```
 
-Le dossier `~/tp04` peut être conservé : le playbook et le template servent de point de départ au TP suivant sur les mêmes machines.
+La dernière commande affiche `absent` : le binaire, la configuration `/etc/otelcol-contrib` et le paquet dans `/tmp` ont disparu du serveur.
+
+Si des serveurs éphémères ont été déployés [à la partie 5](#5-étendre-le-parc-4-serveurs-4-configurations), ils ne se nettoient pas depuis le terminal : votre animateur les détruit en fin de séance avec `animateur/scripts/tp04-vms-destroy.sh`. Aucun playbook n'est nécessaire pour cela, et les machines disparaissent avec leurs paquets et leurs configurations.
+
+Le dossier `~/tp04` peut être conservé : le playbook, le template et les `host_vars` servent de point de départ au TP suivant.
 
 ## Extra
 

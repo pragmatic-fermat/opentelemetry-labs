@@ -657,15 +657,28 @@ curl -s "http://localhost:16686/api/v3/traces?query.service_name=messenger&query
 
 ## Cleanup
 
-Arrêtez les deux services Node.js (Ctrl+C dans leurs terminaux), puis supprimez les conteneurs et les volumes :
+Arrêtez les deux services Node.js (Ctrl+C dans leurs terminaux), puis supprimez les conteneurs, les volumes et le **collector** :
 
 ```bash
 docker rm -f otelcol 2>/dev/null
 cd ~/tp05
 docker compose -f compose.yaml down -v
+docker ps --format '{{.Names}}' | grep -E 'ingress|jaeger|rabbitmq|messenger-db|notifier-db|otelcol' || echo "aucun conteneur du TP5"
 ```
 
-Le dossier `~/tp05` peut être conservé : les dépôts clonés et les fichiers `tracing.mjs` servent au TP7.
+La seconde commande supprime aussi les volumes des deux bases PostgreSQL : les données créées pendant le TP ne survivent pas au lab. La dernière commande confirme qu'il ne reste aucun conteneur du TP5.
+
+Le dossier `~/tp05` peut être conservé : les dépôts clonés, les fichiers `tracing.mjs` et `request-logger.mjs` servent au TP7.
+
+**NB** : à la [partie 6](#6-données-applicatives-et-masquage), `tracing.mjs` pointe vers le **collector** sur le port 4319, qui est arrêté par ce cleanup. Pour repartir sur Jaeger directement au TP suivant, remettez l'URL d'origine :
+
+```bash
+cd ~/tp05/messenger/app
+sed -i 's|http://localhost:4319/v1/traces|http://localhost:4318/v1/traces|' tracing.mjs
+grep -n "4318/v1/traces" tracing.mjs
+cd ~/tp05/notifier/app
+grep -n "4318/v1/traces" tracing.mjs
+```
 
 ## Extra
 

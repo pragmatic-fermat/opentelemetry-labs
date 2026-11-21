@@ -696,7 +696,7 @@ Trois champs méritent l'attention : `_msg` (le message), `_time`, et `_stream`,
 
 Ouvrez maintenant l'interface dans le navigateur, sur `http://vlogs.$INGRESS_HOST:8080`. Elle s'appelle `vmui` et sert à la fois à écrire les requêtes et à lire les résultats, avec trois modes d'affichage (`Group`, `Table`, `JSON`).
 
-![Interface vmui de VictoriaLogs, requête sur le namespace application-a et champs Kubernetes disponibles](img/tp03-vlogs-logsql.png)
+![Interface vmui de VictoriaLogs, requête sur les deux namespaces d'application et champs Kubernetes disponibles](img/tp03-vlogs-logsql.png)
 
 La colonne de gauche liste les champs disponibles, avec le nombre de valeurs distinctes : ce sont les attributs de ressource posés par l'**agent**, ce qui permet de construire les requêtes sans les deviner.
 
@@ -708,18 +708,22 @@ Tous les logs de l'application A :
 k8s.namespace.name:"application-a"
 ```
 
-Pour vérifier que le namespace distingue bien les deux applications, demandez le décompte par namespace :
+Pour vérifier que le namespace distingue bien les deux applications, restreignez la requête aux deux namespaces d'application, puis demandez le décompte par namespace et par conteneur :
 
 ```text
-k8s.namespace.name:* | stats by (k8s.namespace.name) count() as lignes | sort by (lignes desc)
+k8s.namespace.name:in("application-a","application-b") | stats by (k8s.namespace.name, k8s.container.name) count() as lignes
 ```
 
-```text
-application-a : 24
-application-b : 24
+```json
+{"k8s.namespace.name":"application-a","k8s.container.name":"frontend","lignes":"1"}
+{"k8s.namespace.name":"application-a","k8s.container.name":"backend","lignes":"1"}
+{"k8s.namespace.name":"application-b","k8s.container.name":"frontend","lignes":"1"}
+{"k8s.namespace.name":"application-b","k8s.container.name":"backend","lignes":"1"}
 ```
 
-Les deux applications produisent le même volume de logs, et le seul champ qui les sépare est `k8s.namespace.name`. C'est l'attribut que l'**agent** a ajouté, et sans lui les deux jeux de lignes seraient indiscernables.
+Quatre lignes, une par couple application et conteneur : les deux applications produisent les mêmes messages, et le seul champ qui les sépare est `k8s.namespace.name`. C'est l'attribut que l'**agent** a ajouté, et sans lui les deux jeux de lignes seraient indiscernables.
+
+**NB** : la fonction `in(...)` évite d'écrire deux requêtes ; `k8s.namespace.name:application-*` fonctionne aussi, avec un filtre par préfixe.
 
 Uniquement les logs du conteneur `frontend` de l'application A :
 
@@ -924,9 +928,7 @@ C'est le résultat à retenir de ce TP : un même nom de service dans deux envir
 
 Une même trace traverse donc les deux services. Ouvrez-la dans l'interface de Jaeger (`http://jaeger.$INGRESS_HOST:8080`) : vous voyez le span serveur du frontend, le span client de son appel au backend, puis le span serveur du backend. Le lien entre les deux services repose sur le propagator `tracecontext`.
 
-Regardez enfin les attributs de ressource de cette trace : `k8s.pod.name`, `k8s.namespace.name` et `k8s.node.name` y figurent. Ils viennent de deux sources complémentaires : l'**agent** les ajoute par le processor `k8s_attributes` pour les traces qu'il reçoit, et l'**operator** les injecte aussi dans `OTEL_RESOURCE_ATTRIBUTES` au moment de la création du pod, avec le préfixe `k8s.container.name` et `k8s.deployment.name`.
-
-Vérifiez que le namespace apparaît aussi sur les métriques, troisième signal. L'**operator** a injecté `OTEL_METRICS_EXPORTER=otlp`, et la même ressource s'applique aux métriques de runtime envoyées par le SDK :
+Regardez enfin les attributs de ressource de cette trace, tous préfixés par `k8s.` :
 
 ```bash
 jaeger "/api/v3/traces?query.service_name=frontend&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
@@ -934,14 +936,20 @@ jaeger "/api/v3/traces?query.service_name=frontend&query.startTimeMin=$(date -u 
 ```
 
 ```text
+k8s.container.name=backend
 k8s.container.name=frontend
+k8s.deployment.name=backend
 k8s.deployment.name=frontend
 k8s.namespace.name=application-a
+k8s.namespace.name=application-b
 k8s.node.name=cluster-worker
-k8s.pod.name=frontend-...
 ```
 
-Les trois signaux portent donc le même attribut : `k8s.namespace.name` vient du processor pour les logs, de l'**agent** pour les traces, et de la ressource injectée par l'**operator** pour les métriques. C'est cette cohérence qui permet de corréler les trois signaux d'une même application.
+Ces attributs viennent de deux sources complémentaires : l'**agent** les ajoute par le processor `k8s_attributes` pour les données qu'il reçoit, et l'**operator** les injecte dans `OTEL_RESOURCE_ATTRIBUTES` au moment de la création du pod, avec `k8s.container.name` et `k8s.deployment.name`. Le namespace, lui, apparaît dans les deux chemins, ce qui explique qu'il soit présent même sur un pod instrumenté avant l'**agent**.
+
+Le troisième signal, les métriques, n'est pas exporté dans ce TP : il n'y a pas de backend de métriques dans le cluster, et le pipeline `metrics` du chart reste sur l'exporter `debug`. L'attribut y serait identique, puisque les métriques du SDK portent la même ressource que les traces. C'est le TP1, avec Prometheus, qui montre ce signal de bout en bout.
+
+Le résultat à retenir est donc celui-ci : `k8s.namespace.name` accompagne les logs et les traces, et il est posé de la même façon pour toutes les applications du cluster. C'est ce qui rend possible la question « cette ligne appartient-elle à l'application A ou à l'application B ? », alors que les deux portent les mêmes noms de service.
 
 **NB** : si les pods redémarrent mais qu'aucune trace n'apparaît, vérifiez que l'init container est présent (`kubectl -n application-a describe pod -l app=frontend`). S'il manque, l'annotation n'est pas sur le modèle de pod ou l'`Instrumentation` a été créée après les pods : dans ce second cas, redémarrez-les avec `kubectl -n application-a rollout restart deployment/frontend`.
 

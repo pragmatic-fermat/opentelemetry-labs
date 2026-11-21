@@ -16,7 +16,8 @@
 - [1. Préparer le cluster](#1-préparer-le-cluster)
 - [2. Le **collector** en mode **gateway**](#2-le-collector-en-mode-gateway)
 - [3. Le **collector** en mode **agent**](#3-le-collector-en-mode-agent)
-- [4. L'**operator** et l'auto-instrumentation](#4-loperator-et-lauto-instrumentation)
+- [4. Les logs des pods, de l'**agent** à VictoriaLogs](#4-les-logs-des-pods-de-lagent-à-victorialogs)
+- [5. L'**operator** et l'auto-instrumentation](#5-loperator-et-lauto-instrumentation)
 - [Cleanup](#cleanup)
 - [Extra](#extra)
 
@@ -24,7 +25,7 @@
 
 ## Environnement
 
-Ce lab se déroule sur la machine cliente `clt-N` (N est votre numéro de participant), qui héberge un cluster Kubernetes local créé avec KinD : un nœud control-plane et un worker.
+Ce lab se déroule sur la machine cliente `clt-N` (N est votre numéro de participant), qui héberge un cluster Kubernetes local créé avec KinD : un nœud control-plane et trois workers.
 
 Vous travaillez depuis le terminal web de cette machine, dans `/root`, et le dépôt des labs y est déjà cloné dans `/root/opentelemetry-labs`.
 
@@ -42,12 +43,14 @@ Versions utilisées dans ce lab :
 | Image de l'**operator** | 0.162.0 |
 | Image d'auto-instrumentation Node.js | 0.82.0-1 |
 | Jaeger | 2.23.0 |
+| VictoriaLogs (stockage et interface des logs) | v1.54.0 |
 | Node.js (application de démonstration) | 22.23.5 |
 | telemetrygen | v0.165.0 |
 
 Les interfaces web passent par la Gateway API du cluster, publiée sur le port `TCP/8080` de la machine `clt-N` :
 
 - Jaeger : `http://jaeger.$INGRESS_HOST:8080` ;
+- VictoriaLogs : `http://vlogs.$INGRESS_HOST:8080` ;
 - application : `http://app.$INGRESS_HOST:8080`.
 
 La variable `INGRESS_HOST` contient le nom qui pointe vers la machine (`echo $INGRESS_HOST`).
@@ -56,7 +59,7 @@ La variable `INGRESS_HOST` contient le nom qui pointe vers la machine (`echo $IN
 
 Vous travaillez sur la machine cliente `clt-N`, dans le terminal web, sous `/root`. Le cluster Kubernetes n'est pas une machine à part : c'est un **cluster KinD**, c'est-à-dire des conteneurs Docker qui jouent le rôle de nœuds, tous sur `clt-N`.
 
-Le schéma suivant montre l'ensemble : votre navigateur arrive par Internet sur `clt-N`, Caddy publie le terminal web sur `TCP/443`, et le cluster publie sa Gateway API sur `TCP/8080` de la même machine. À l'intérieur, le nœud control-plane porte Traefik, l'implémentation de la Gateway API qui reçoit ce port, et les workers portent les pods de l'application et de Jaeger :
+Le schéma suivant montre l'ensemble : votre navigateur arrive par Internet sur `clt-N`, Caddy publie le terminal web sur `TCP/443`, et le cluster publie sa Gateway API sur `TCP/8080` de la même machine. À l'intérieur, le nœud control-plane porte Traefik, l'implémentation de la Gateway API qui reçoit ce port, et les workers portent les pods de l'application, de Jaeger et de VictoriaLogs :
 
 ```mermaid
 ---
@@ -80,6 +83,7 @@ flowchart TB
       P1[frontend 8080]
       P2[backend 8080]
       P3[jaeger 16686/4317/4318]
+      P4[victoria-logs 9428]
       R1["HTTPRoute app"]
       R2["HTTPRoute jaeger"]
       W1 --- P1
@@ -89,6 +93,9 @@ flowchart TB
       CP --> R2
       R1 --> P1
       R2 --> P3
+      R3["HTTPRoute vlogs"]
+      R3 --> P4
+      CP --> R3
     end
   end
 
@@ -276,23 +283,33 @@ On obtient un nom de la forme :
 178-62-255-117.sslip.io
 ```
 
-Les fonctions `app` et `jaeger` de `helpers.sh` s'en servent pour appeler la `Gateway` par `http://localhost:8080` avec le bon en-tête `Host`, ce qui évite de dépendre de la résolution DNS. Rechargez-les avec `source ~/tp03/helpers.sh` dans chaque nouveau terminal.
+Les fonctions `app`, `jaeger` et `vlogs` de `helpers.sh` s'en servent pour appeler la `Gateway` par `http://localhost:8080` avec le bon en-tête `Host`, ce qui évite de dépendre de la résolution DNS. Rechargez-les avec `source ~/tp03/helpers.sh` dans chaque nouveau terminal.
 
-### Déployer l'application et Jaeger
+### Déployer l'application, Jaeger et VictoriaLogs
 
-Le dossier contient trois manifestes : `namespaces.yaml` (les espaces de noms `observability` et `demo`), `jaeger.yaml` (Jaeger avec stockage en mémoire) et `demo-app.yaml` (une application Node.js en deux services).
+Le dossier contient quatre manifestes : `namespaces.yaml` (les espaces de noms `observability` et `demo`), `jaeger.yaml` (Jaeger avec stockage en mémoire), `demo-app.yaml` (une application Node.js en deux services) et `logs.yaml` (VictoriaLogs, qui stocke les logs et fournit son interface de requête).
 
 L'application est écrite en JavaScript et tient dans un ConfigMap : les pods l'exécutent avec l'image `node:22.23.5-slim`, sans aucune bibliothèque OpenTelemetry dans un premier temps. Chaque service écoute sur le port `8080` dans son pod, derrière un Service Kubernetes sur le port 80.
 
-Les deux manifestes qui déclarent une `HTTPRoute` contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom avant l'envoi au cluster :
+Les trois manifestes qui déclarent une `HTTPRoute` contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom avant l'envoi au cluster :
 
 ```bash
 kubectl apply -f namespaces.yaml
 sed "s/INGRESS_HOST/$INGRESS_HOST/g" jaeger.yaml | kubectl apply -f -
 sed "s/INGRESS_HOST/$INGRESS_HOST/g" demo-app.yaml | kubectl apply -f -
-kubectl -n observability rollout status deployment/jaeger
+sed "s/INGRESS_HOST/$INGRESS_HOST/g" logs.yaml | kubectl apply -f -
+kubectl -n observability rollout status deployment/jaeger deployment/victoria-logs
 kubectl -n demo rollout status deployment/frontend deployment/backend
 ```
+
+Trois manifestes sur quatre déclarent une `HTTPRoute` et contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom.
+
+Ce que contient `logs.yaml`, en résumé :
+
+- **VictoriaLogs**, un seul conteneur, sans dépendance externe et sans configuration : il stocke ses données dans le pod (`emptyDir`) et expose sur `TCP/9428` l'ingestion, la requête et l'interface web. L'ingestion OTLP se fait sur `/insert/opentelemetry/v1/logs`, en protobuf, et l'interface de requête sur `/select/vmui/` ;
+- la `HTTPRoute` de VictoriaLogs, sur `vlogs.<INGRESS_HOST>`.
+
+**NB** : ce TP utilise VictoriaLogs plutôt que Loki et Grafana, employés au TP7. L'intérêt est double : une interface différente, donc un outil de plus dans la boîte à outils, et aucun recouvrement avec le TP7, qui traite de la corrélation entre logs et traces dans Grafana.
 
 Regardez où sont les pods ; ils se répartissent sur les workers, pas sur le control-plane :
 
@@ -309,11 +326,24 @@ backend-6bc7bd9b8d-4ftph    1/1     Running   0          8s    10.244.2.3   clus
 frontend-7cd9b8f4d7-dwpp6   1/1     Running   0          8s    10.244.3.3   cluster-worker2
 ```
 
-Contrôlez que l'application répond et que Jaeger est vide :
+Les pods de `observability` comprennent maintenant Jaeger et VictoriaLogs :
+
+```bash
+kubectl -n observability get pods
+```
+
+```text
+NAME                             READY   STATUS    RESTARTS   AGE
+jaeger-c9b9698dd-8v924           1/1     Running   0          40s
+victoria-logs-6b7d8c9f5d-lq2xk   1/1     Running   0          40s
+```
+
+Contrôlez que l'application répond, que Jaeger est vide et que VictoriaLogs répond :
 
 ```bash
 app /api/orders
 jaeger /api/v3/services
+vlogs '/select/logsql/query?query=*&limit=1'
 ```
 
 La première commande affiche une réponse JSON du frontend qui contient celle du backend :
@@ -340,11 +370,13 @@ flowchart LR
   subgraph CLT["clt-N"]
     subgraph K["cluster KinD"]
       A[frontend] --> GW[otel-gateway]
-      GW -->|OTLP/HTTP<br/>jaeger.observability:4318| J[(jaeger)]
+      GW -->|traces, OTLP/gRPC| J[(jaeger)]
+      GW -->|logs, OTLP/HTTP| VL[(victoria-logs)]
       TG([pod telemetrygen]) --> GW
     end
   end
   B([Navigateur]) -->|TCP/8080<br/>Host: jaeger.INGRESS_HOST| J
+  B -->|TCP/8080<br/>Host: vlogs.INGRESS_HOST| VL
 ```
 
 **NB** : le mot **gateway** désigne ici un rôle du monde OpenTelemetry, à ne pas confondre avec la ressource `Gateway` de Kubernetes installée en partie 1, qui est le point d'entrée HTTP du cluster. La première reçoit de la télémétrie, la seconde reçoit du trafic web.
@@ -362,7 +394,11 @@ Le chart se configure par un fichier de valeurs. Le chart n'impose pas d'image p
 
 La configuration du **collector** se place sous la clé `config:` de ce fichier. Le chart la fusionne avec sa configuration par défaut : les dictionnaires sont fusionnés, les listes sont remplacées.
 
-Créez le fichier complet, avec l'exporter `otlp_grpc/jaeger` vers `jaeger.observability.svc.cluster.local` (port `TCP/4317`, sans TLS) et un pipeline `traces` qui relie le receiver `otlp`, les processors `memory_limiter` puis `batch`, et cet exporter :
+Créez le fichier complet. Il contient deux exporters et deux pipelines :
+
+- `otlp_grpc/jaeger`, vers `jaeger.observability.svc.cluster.local` sur le port `TCP/4317`, sans TLS, pour les traces ;
+- `otlp_http/victorialogs`, vers `http://victoria-logs.observability.svc.cluster.local:9428/insert/opentelemetry/v1/logs`, pour les logs ;
+- un pipeline `traces` et un pipeline `logs`, chacun avec le receiver `otlp` et les processors `memory_limiter` puis `batch`.
 
 ```bash
 cat > gateway-values.yaml <<'EOF'
@@ -384,12 +420,18 @@ config:
       endpoint: jaeger.observability.svc.cluster.local:4317
       tls:
         insecure: true
+    otlp_http/victorialogs:
+      logs_endpoint: http://victoria-logs.observability.svc.cluster.local:9428/insert/opentelemetry/v1/logs
   service:
     pipelines:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, batch]
         exporters: [otlp_grpc/jaeger]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp_http/victorialogs]
 EOF
 ```
 
@@ -400,7 +442,7 @@ helm template otel-gateway open-telemetry/opentelemetry-collector --version 0.17
   -n observability -f gateway-values.yaml | grep -B2 -A60 'relay:'
 ```
 
-Repérez ce que vous n'avez pas écrit : l'extension `health_check`, les receivers par défaut, et les pipelines `metrics` et `logs`. C'est la fusion du chart avec ses propres valeurs.
+Repérez ce que vous n'avez pas écrit : l'extension `health_check`, les receivers par défaut (`zipkin`, `jaeger`...), et le pipeline `metrics`. C'est la fusion du chart avec ses propres valeurs. Le pipeline `logs`, lui, vient de votre fichier : vos listes remplacent celles du chart.
 
 Installez ensuite la **gateway** :
 
@@ -442,6 +484,8 @@ Le processor `k8s_attributes` interroge l'API Kubernetes pour retrouver, à part
 
 Deux réglages du fichier de valeurs méritent une explication. Le preset `kubernetesAttributes` ajoute au chart le processor `k8s_attributes` et les droits RBAC dont il a besoin pour lire l'API Kubernetes. Le réglage `service.enabled` crée un Service, que le chart ne crée pas par défaut pour un DaemonSet : en mode **agent**, ce Service est configuré avec `internalTrafficPolicy: Local`, de sorte qu'une application atteint toujours l'**agent** de son propre nœud.
 
+Le preset `logsCollection` complète ce dispositif pour les logs : il monte le dossier `/var/log/pods` des nœuds dans le pod de l'**agent** et ajoute un receiver `file_log` qui lit ces fichiers. C'est la raison d'être d'un **agent** DaemonSet : les logs d'un pod sont écrits sur le disque de son nœud, une **gateway** centralisée ne peut pas les lire.
+
 Listez vous-même `k8s_attributes` dans le pipeline : sans cela, le preset l'ajoute en première position, avant `memory_limiter`.
 
 ```bash
@@ -462,6 +506,8 @@ service:
 presets:
   kubernetesAttributes:
     enabled: true
+  logsCollection:
+    enabled: true
 config:
   exporters:
     otlp_grpc/gateway:
@@ -472,6 +518,10 @@ config:
     pipelines:
       traces:
         receivers: [otlp]
+        processors: [memory_limiter, k8s_attributes, batch]
+        exporters: [otlp_grpc/gateway]
+      logs:
+        receivers: [otlp, file_log]
         processors: [memory_limiter, k8s_attributes, batch]
         exporters: [otlp_grpc/gateway]
 EOF
@@ -486,6 +536,19 @@ kubectl -n observability get daemonset otel-agent-agent
 ```
 
 Le DaemonSet se nomme `otel-agent-agent` : le chart ajoute le suffixe `-agent` en mode daemonset, alors que le Service garde le nom `otel-agent`. Les colonnes `DESIRED` et `READY` sont égales.
+
+Contrôlez que le dossier des logs des pods est bien monté dans les pods de l'**agent** :
+
+```bash
+kubectl -n observability get pods -l app.kubernetes.io/instance=otel-agent \
+  -o jsonpath='{.items[0].spec.containers[0].volumeMounts[*].mountPath}{"\n"}'
+```
+
+```text
+/conf /var/log/pods /var/lib/docker/containers /var/run/secrets/kubernetes.io/serviceaccount
+```
+
+La présence de `/var/log/pods` confirme que le preset a fait son travail. Sans ce montage, le receiver `file_log` n'aurait rien à lire et le pipeline `logs` resterait vide.
 
 Envoyez des traces de test à l'**agent**, cette fois, et non à la **gateway** :
 
@@ -541,7 +604,76 @@ Pour brancher la **gateway** sur le backend externe, remplacez l'endpoint de l'e
 
 puis `helm upgrade --install` avec le nouveau fichier de valeurs. Les traces apparaissent alors dans le Jaeger de `srv-N`, consultable sur `http://$SRV_HOST:16686`.
 
-## 4. L'**operator** et l'auto-instrumentation
+## 4. Les logs des pods, de l'**agent** à VictoriaLogs
+
+Le pipeline `logs` mis en place aux parties 2 et 3 tourne, mais rien ne l'a encore vérifié : il faut générer des logs, puis les lire.
+
+Commencez par produire du trafic applicatif, qui écrit dans les logs des pods `frontend` et `backend` :
+
+```bash
+for i in $(seq 20); do app /api/orders > /dev/null; done
+```
+
+Interrogez ensuite VictoriaLogs par son API, sans passer par l'interface, pour vérifier que les logs sont bien arrivés. Le champ `_msg` contient le message, et les attributs Kubernetes sont devenus des champs à part entière :
+
+```bash
+source ~/tp03/helpers.sh
+vlogs '/select/logsql/query?query=k8s.namespace.name%3A%22demo%22&limit=2'
+```
+
+On obtient des lignes JSON, une par entrée de log :
+
+```json
+{"_msg":"frontend listening on 8080","_stream":"{k8s.container.name=\"frontend\",k8s.namespace.name=\"demo\",...}","_time":"2026-11-21T08:12:41Z","k8s.container.name":"frontend","k8s.namespace.name":"demo","k8s.node.name":"cluster-worker2","k8s.pod.name":"frontend-7cd9b8f4d7-dwpp6", ...}
+```
+
+Trois champs méritent l'attention : `_msg` (le message), `_time`, et `_stream`, qui regroupe les étiquettes identifiant la source. Les autres champs viennent des attributs de ressource que l'**agent** a ajoutés avec `k8s_attributes` : c'est ce qui rend les logs exploitables, sans quoi il ne resterait que des chemins de fichiers.
+
+Ouvrez maintenant l'interface dans le navigateur, sur `http://vlogs.$INGRESS_HOST:8080`. Elle s'appelle `vmui` et sert à la fois à écrire les requêtes et à lire les résultats, avec trois modes d'affichage (`Group`, `Table`, `JSON`).
+
+Dans le champ de requête, saisissez successivement les requêtes suivantes. Le langage s'appelle **LogsQL** ; il s'écrit comme une suite de filtres sur des champs, séparés par des espaces, et les valeurs contenant des caractères spéciaux vont entre guillemets.
+
+Tous les logs du namespace `demo` :
+
+```text
+k8s.namespace.name:"demo"
+```
+
+Uniquement les logs du conteneur `frontend` :
+
+```text
+k8s.namespace.name:"demo" k8s.container.name:"frontend"
+```
+
+Les logs qui contiennent le mot `orders` dans le message :
+
+```text
+k8s.namespace.name:"demo" _msg:"orders"
+```
+
+Les logs d'une seule source, avec le filtre de flux, plus rapide car il restreint les séries lues :
+
+```text
+_stream:{k8s.container.name="backend"}
+```
+
+Le nombre de lignes par conteneur, pour repérer celui qui parle le plus :
+
+```text
+k8s.namespace.name:"demo" | stats by (k8s.container.name) count() as lignes | sort by (lignes desc)
+```
+
+Les erreurs des cinq dernières minutes, avec le filtre temporel :
+
+```text
+_time:5m k8s.namespace.name:"demo" severity_text:"ERROR"
+```
+
+**NB** : contrairement à une recherche plein texte, un mot seul comme `orders` ne donne rien ici : LogsQL cherche dans un champ précis, d'où `_msg:"orders"`. C'est la différence de philosophy avec les filtres `|=` de LogQL vus ailleurs, et un point à retenir : dans VictoriaLogs, on nomme le champ que l'on interroge.
+
+Comparez enfin ce que vous voyez avec la partie 3 : les traces portaient `k8s.pod.name`, les logs portent le même champ. C'est ce qui permet, dans un outil qui gère les deux signaux, de passer d'une ligne de log au pod qui l'a produite, puis à ses traces. Le TP7 montre ce lien dans Grafana ; ici, vous l'observez à la main, ce qui rend le mécanisme plus visible.
+
+## 5. L'**operator** et l'auto-instrumentation
 
 L'OpenTelemetry **operator** injecte un **agent** d'instrumentation dans les pods qui portent une annotation, au moment de leur création, sans modifier l'image de l'application.
 
@@ -725,61 +857,7 @@ La seconde commande n'affiche plus rien : plus aucun cluster ne tourne sur la ma
 
 À vous de jouer, si le temps le permet. Chaque exercice est guidé pas à pas ; les commandes se suivent.
 
-### 1. Collecter les logs des conteneurs
-
-Le chart de l'**agent** propose un preset `logsCollection` : il ajoute un receiver `file_log` qui lit les fichiers de `/var/log/pods`, monte ce dossier dans le pod, et complète le pipeline `logs`.
-
-Mettez à jour l'**agent** en activant ce preset :
-
-```bash
-helm upgrade --install otel-agent open-telemetry/opentelemetry-collector \
-  --version 0.179.1 -n observability -f agent-values.yaml \
-  --set presets.logsCollection.enabled=true --wait
-```
-
-Vérifiez que le volume est bien monté dans les pods de l'**agent** :
-
-```bash
-kubectl -n observability get pods -l app.kubernetes.io/instance=otel-agent \
-  -o jsonpath='{.items[0].spec.containers[0].volumeMounts[*].mountPath}{"\n"}'
-```
-
-La liste contient `/var/log/pods`. Regardez ensuite la configuration générée par le chart :
-
-```bash
-kubectl -n observability get configmap otel-agent-agent \
-  -o jsonpath='{.data.relay}' | sed -n '/logs:/,/metrics:/p'
-```
-
-Le pipeline `logs` reçoit maintenant deux receivers, `otlp` et `file_log`, et exporte vers `debug` :
-
-```text
-        logs:
-          exporters:
-          - debug
-          processors:
-          - k8s_attributes
-          - memory_limiter
-          - batch
-          receivers:
-          - otlp
-          - file_log
-```
-
-Les enregistrements collectés apparaissent dans les logs du pod de l'**agent** :
-
-```bash
-kubectl -n observability logs daemonset/otel-agent-agent --tail=5
-```
-
-Revenez à la configuration de départ sans le preset :
-
-```bash
-helm upgrade --install otel-agent open-telemetry/opentelemetry-collector \
-  --version 0.179.1 -n observability -f agent-values.yaml --wait
-```
-
-### 2. Ajouter un attribut de ressource à l'instrumentation
+### 1. Ajouter un attribut de ressource à l'instrumentation
 
 La ressource `Instrumentation` accepte des attributs ajoutés à toutes les données des pods instrumentés, dans `spec.resource.resourceAttributes`. Ajoutons l'environnement de déploiement :
 
@@ -804,7 +882,7 @@ kubectl -n demo get pods -l app=frontend \
 
 Elle commence maintenant par `deployment.environment.name=tp3,` suivi des attributs `k8s.*` ajoutés par l'**operator**. Générez du trafic (`for i in $(seq 10); do app /api/orders > /dev/null; done`) et retrouvez l'attribut dans la ressource des traces, dans Jaeger.
 
-### 3. Déployer un **collector** avec la ressource `OpenTelemetryCollector`
+### 2. Déployer un **collector** avec la ressource `OpenTelemetryCollector`
 
 L'**operator** sait aussi déployer un **collector** : au lieu d'écrire un fichier de valeurs Helm, on décrit un objet `OpenTelemetryCollector`, et l'**operator** crée le Deployment, le Service et la configuration.
 
@@ -857,6 +935,6 @@ kubectl -n observability get pods,svc | grep otelcol-cr
 
 L'image par défaut est la distribution `k8s`, plus légère que `contrib` ; pour utiliser une autre distribution, ajoutez `image:` dans `spec`. Comparez enfin les deux approches : avec Helm, la configuration est rendue par le chart et versionnée dans un fichier de valeurs ; avec l'**operator**, elle est portée par un objet Kubernetes, visible avec `kubectl get` et modifiable comme n'importe quelle ressource.
 
-### 4. Placer le backend hors du cluster
+### 3. Placer le backend hors du cluster
 
 Reprenez l'encadré de [la partie 3](#3-le-collector-en-mode-agent) : pointez l'exporter de la **gateway** vers le **collector** du TP1 installé sur `srv-N`, puis vérifiez que les traces arrivent dans le Jaeger de `srv-N`, sur `http://$SRV_HOST:16686`.

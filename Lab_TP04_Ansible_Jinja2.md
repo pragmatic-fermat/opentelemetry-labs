@@ -716,33 +716,42 @@ Le résumé indique `failed=0` et `changed=0` : le fichier déployé correspond 
 
 ## 5. Étendre le parc : 4 serveurs, 4 configurations
 
-Votre animateur a provisionné trois serveurs éphémères Debian pour votre groupe, aux adresses privées `10.20.N.4`, `10.20.N.5` et `10.20.N.6`. Vous allez les intégrer dans l'inventaire, et générer pour chacun une configuration différente, sans écrire un seul playbook de plus.
+Votre animateur a provisionné trois serveurs éphémères Debian pour votre groupe, dans le même VPC que `clt-N`. Leurs adresses privées changent d'une session à l'autre, et DigitalOcean ne garantit pas l'ordre dans lequel il les attribue : vous allez donc les découvrir au lieu de les écrire en dur.
 
-D'abord, vérifiez que la connexion fonctionne et que le système est bien Debian :
+Le dossier contient `discover-ephemere.sh`, qui balaie le sous-réseau privé de `clt-N` sur le port SSH, interroge les machines qui répondent, et ne garde que celles dont le nom commence par `srv2-`, `srv3-` ou `srv4-`. Lancez-le, puis construisez l'inventaire à partir de son résultat :
 
 ```bash
+chmod +x discover-ephemere.sh
+./discover-ephemere.sh > ephemeres.ini
+cat ephemeres.ini
 cat > inventory.ini <<EOF
 [otel]
 $SRV_HOST
 
-[ephemere]
-srv-frontend ansible_host=10.20.N.4
-srv-backend ansible_host=10.20.N.5
-srv-database ansible_host=10.20.N.6
+$(cat ephemeres.ini)
 
 [collector:children]
 otel
 ephemere
 EOF
+cat inventory.ini
+```
+
+La découverte prend une dizaine de secondes. Le fichier `ephemeres.ini` contient les trois alias reliés aux adresses trouvées, dans l'ordre croissant des adresses, par exemple :
+
+```text
+[ephemere]
+srv-frontend ansible_host=10.20.N.7
+srv-backend ansible_host=10.20.N.8
+srv-database ansible_host=10.20.N.9
+```
+
+Les numéros finaux dépendent de la session : c'est justement ce que le script évite de deviner. Vérifiez maintenant que la connexion fonctionne et que le système est bien Debian :
+
+```bash
 ansible all -m ansible.builtin.ping -o | head -6
 ansible ephemere -m ansible.builtin.setup -a 'filter=ansible_distribution' -o | grep -o 'Debian\|ansible_hostname[^,]*' | head -4
 ```
-
-Remplacez `10.20.N.4`, `10.20.N.5` et `10.20.N.6` par les adresses privées communiquées par votre animateur.
-
-> [!TIP]
->
-> DigitalOcean attribue les adresses privées de façon consécutive dans le VPC, mais pas nécessairement dans l'ordre des noms de machines : la première créée peut être `.4` et la suivante `.6`. Votre animateur vous communique la correspondance, et les alias de l'inventaire servent justement à ne pas dépendre des noms.
 
 La sortie attendue pour le ping est `SUCCESS` sur les quatre machines, et pour `setup`, `ansible_distribution: Debian`.
 

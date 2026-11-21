@@ -361,7 +361,7 @@ L'appel vers `shipping` échoue encore : le service PHP est l'objet de la partie
 Installez PHP, l'extension `opentelemetry` et Composer :
 
 ```bash
-ssh $SRV_HOST 'apt-get install -y -qq php8.3-cli php8.3-curl php8.3-xml php8.3-mbstring unzip composer'
+ssh $SRV_HOST 'apt-get install -y -qq php8.3-cli php8.3-curl php8.3-xml php8.3-mbstring unzip composer php-pear php8.3-dev build-essential'
 ssh $SRV_HOST 'pecl install opentelemetry-1.1.0'
 ssh $SRV_HOST 'echo "extension=opentelemetry.so" > /etc/php/8.3/cli/conf.d/20-opentelemetry.ini; php -m | grep opentelemetry'
 ```
@@ -369,6 +369,8 @@ ssh $SRV_HOST 'echo "extension=opentelemetry.so" > /etc/php/8.3/cli/conf.d/20-op
 ```text
 opentelemetry
 ```
+
+**NB** : `pecl` vient du paquet `php-pear`, et la compilation de l'extension demande `php8.3-dev` et la chaîne de compilation (`build-essential`). C'est le point d'installation le plus lourd des quatre langages : l'extension `opentelemetry` de PHP n'est pas un paquet Debian, elle se compile à l'installation.
 
 L'extension seule ne fait rien : elle fournit les points d'accroche, et les paquets Composer décident de ce qui est instrumenté. Installez l'application et ses dépendances :
 
@@ -378,8 +380,10 @@ ssh $SRV_HOST 'ls ~/tp06/shipping/vendor/open-telemetry'
 ```
 
 ```text
-exporter-otlp  opentelemetry-auto-slim  sdk
+api  context  exporter-otlp  gen-otlp-protobuf  opentelemetry-auto-slim  sdk  sem-conv
 ```
+
+**NB** : l'exporter OTLP en HTTP a besoin d'un client PSR-18 pour envoyer les requêtes. Le `composer.json` fourni contient donc `guzzlehttp/guzzle`. Sans lui, chaque requête lève l'avertissement `No PSR-18 clients found. Make sure to install a package providing "psr/http-client-implementation"`, et aucun span n'est envoyé.
 
 Lancez le service avec les mêmes variables `OTEL_*`, plus celle qui active le chargement automatique :
 
@@ -418,7 +422,9 @@ curl -s "http://localhost:16686/api/v3/services" | jq -c '.services'
 
 ## 6. Trace multi-langages et comparaison
 
-Envoyez quelques requêtes, puis ouvrez Jaeger et cherchez le service `checkout`. Une requête produit une trace unique à travers les quatre langages, grâce au propagator W3C `tracecontext`, actif par défaut dans les quatre **agents**.
+Envoyez quelques requêtes, puis ouvrez Jaeger et cherchez le service `checkout`. Une requête produit une trace unique à travers les quatre langages, grâce au propagateur W3C `tracecontext`, actif par défaut dans les quatre **agents** :
+
+![Traces du service checkout dans Jaeger](img/tp06-jaeger-services.png)
 
 ```bash
 for i in $(seq 5); do curl -s http://$SRV_HOST:8081/order > /dev/null; done
@@ -428,16 +434,19 @@ curl -s "http://localhost:16686/api/v3/traces?query.service_name=checkout&query.
 ```
 
 ```text
-1 GET
+1 {closure}
 2 GET /order
 2 GET /price
 2 GET /ship
 2 GET /stock
 3 GET
 3 GET
+3 GET
 ```
 
-Les kinds se lisent ainsi : `2` est un span serveur, `3` un span client. Vous voyez les quatre spans serveur, un par langage, et les trois spans client qui les relient. Une seule trace, quatre services, quatre **agents** différents.
+Les kinds se lisent ainsi : `2` est un span serveur, `3` un span client, `1` un span interne. Vous voyez les quatre spans serveur, un par langage, et les trois spans client qui les relient. Le span interne `{closure}` vient de PHP : l'instrumentation de Slim crée un span autour du middleware, et son nom tient à l'implémentation. Une seule trace, quatre services, quatre **agents** différents :
+
+![Waterfall d'une trace à quatre langages](img/tp06-jaeger-trace-4langages.png)
 
 Comparez maintenant les attributs produits par chaque **agent** :
 
@@ -458,7 +467,7 @@ Trois différences valent la discussion en séance :
 
 - **`telemetry.sdk.language`** vaut `java`, `python`, `dotnet` ou `php` selon le service, et c'est le seul attribut qui trahit le langage : le reste de la trace est homogène ;
 - **les noms de spans** varient : Java produit `GET /order`, Python `GET /stock`, .NET `GET /price`, PHP `GET /ship`, parce que chaque instrumentation applique sa propre convention de nommage, et que PHP passe par le middleware PSR-15 de Slim ;
-- **les métriques de runtime** ne sont pas identiques, et PHP n'en produit aucune par défaut : Java expose la mémoire de la JVM, Python le compteur du ramasse-miettes, .NET le pool de threads. Elles arriveraient dans Prometheus, comme au TP1, si le pipeline `metrics` était exporté.
+- **les versions de SDK** varient aussi : au moment de la rédaction, `1.68.0` pour l'**agent** Java, `1.45.2` pour le SDK Python, `1.21.0` pour le SDK .NET, `1.17.0` pour le SDK PHP, chacun suivant son propre cycle de publication.
 
 **NB** : la propagation entre langages ne demande aucune configuration supplémentaire parce que les quatre **agents** utilisent `tracecontext` par défaut. Si un service n'apparaissait pas dans la trace, la première vérification est l'en-tête `traceparent` sur l'appel sortant, et la seconde le propagator configuré par `OTEL_PROPAGATORS`.
 
@@ -471,7 +480,7 @@ ssh $SRV_HOST 'pkill -f "[c]heckout.java"; pkill -f "[i]nventory.py"; \
   pkill -f "[p]ricing.dll"; pkill -f "[p]hp -S"'
 ssh $SRV_HOST 'rm -rf ~/tp06 /usr/share/dotnet /usr/local/bin/dotnet'
 ssh $SRV_HOST 'pecl uninstall opentelemetry; rm -f /etc/php/8.3/cli/conf.d/20-opentelemetry.ini'
-ssh $SRV_HOST 'apt-get purge -y openjdk-21-jdk-headless python3-venv php8.3-cli php8.3-curl php8.3-xml php8.3-mbstring composer'
+ssh $SRV_HOST 'apt-get purge -y openjdk-21-jdk-headless python3-venv php8.3-cli php8.3-curl php8.3-xml php8.3-mbstring composer unzip php-pear php8.3-dev build-essential'
 ```
 
 Les services étaient lancés en `nohup`, sans service systemd : `pkill` suffit. Les motifs sont écrits `[c]heckout.java` plutôt que `checkout.java` : sans les crochets, `pkill -f` tue aussi le shell qui l'exécute, car sa propre ligne de commande contient le motif, et les `pkill` suivants ne s'exécutent jamais. La vérification suivante ne doit plus rien renvoyer :

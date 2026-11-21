@@ -35,14 +35,14 @@ echo "Creation de 3 machines ephemeres Debian (srv2, srv3, srv4) pour $NB_GROUPE
 
 for ((g=0; g<NB_GROUPES; g++)); do
   VPC_NAME="vpc-$g"
-  VPC_INFO=$(doctl vpcs list --format ID,Name,Region --no-header | awk -v name="$VPC_NAME" '$2==name {print $1, $3; exit}')
+  VPC_INFO=$(doctl vpcs list --format ID,Name,Region,IPRange --no-header | awk -v name="$VPC_NAME" '$2==name {print $1, $3, $4; exit}')
 
   if [ -z "$VPC_INFO" ]; then
     echo "Erreur : le VPC '$VPC_NAME' n'a pas ete trouve dans DigitalOcean." >&2
     exit 1
   fi
 
-  read -r VPC_ID VPC_REGION <<< "$VPC_INFO"
+  read -r VPC_ID VPC_REGION VPC_RANGE <<< "$VPC_INFO"
 
   echo "Groupe $g : creation de srv2-$g, srv3-$g et srv4-$g (Debian 13) dans $VPC_NAME ($VPC_REGION)..."
   doctl compute droplet create "srv2-$g" "srv3-$g" "srv4-$g" \
@@ -53,6 +53,27 @@ for ((g=0; g<NB_GROUPES; g++)); do
     --ssh-keys "$KEY_ID" \
     --tag-names "tp04-ephemere,tp04-groupe-$g" \
     --wait
+
+  # Verifie que les machines sont bien dans le VPC du groupe : c'est ce
+  # sous-reseau que le script de decouverte des participants balaie.
+  VPC_PREFIX=$(echo "$VPC_RANGE" | cut -d. -f1-3)
+  BAD=0
+  while read -r name droplet_vpc ip; do
+    if [ "$droplet_vpc" != "$VPC_ID" ]; then
+      echo "ERREUR : $name n'est pas dans $VPC_NAME ($VPC_ID)." >&2
+      BAD=1
+    fi
+    case "$ip" in
+      "$VPC_PREFIX".*) ;;
+      *) echo "ERREUR : $name a l'adresse $ip, hors de $VPC_RANGE." >&2; BAD=1 ;;
+    esac
+  done < <(doctl compute droplet list --tag-name "tp04-groupe-$g" \
+    --format Name,VPCUUID,PrivateIPv4 --no-header)
+  if [ "$BAD" -ne 0 ]; then
+    echo "Groupe $g : machines hors du VPC attendu, verifiez avant la seance." >&2
+    exit 1
+  fi
+  echo "Groupe $g : les trois machines sont dans $VPC_NAME ($VPC_RANGE)."
 done
 
 echo ""

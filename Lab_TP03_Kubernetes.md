@@ -49,6 +49,8 @@ Versions utilisées dans ce lab :
 
 Les interfaces web passent par la Gateway API du cluster, publiée sur le port `TCP/8080` de la machine `clt-N` :
 
+- application A : `http://app-a.$INGRESS_HOST:8080` ;
+- application B : `http://app-b.$INGRESS_HOST:8080` ;
 - Jaeger : `http://jaeger.$INGRESS_HOST:8080` ;
 - VictoriaLogs : `http://vlogs.$INGRESS_HOST:8080` ;
 - application : `http://app.$INGRESS_HOST:8080`.
@@ -234,7 +236,7 @@ Chaque réglage a son rôle :
 - `ports.web.hostPort: 80` : le pod prend le port 80 du nœud directement, dans le conteneur. Côté machine, ce port 80 est celui que KinD publie sur `TCP/8080` ;
 - `providers.kubernetesGateway.enabled` : Traefik lit les ressources `Gateway` et `HTTPRoute` ;
 - `gateway.enabled` : le chart crée lui-même une ressource `Gateway` et sa `GatewayClass`, au lieu de vous demander de les écrire ;
-- `namespacePolicy.from: All` : par défaut, une `Gateway` n'accepte que les routes de son propre espace de noms. Sans ce réglage, les routes de `demo` et d'`observability` seraient ignorées ;
+- `namespacePolicy.from: All` : par défaut, une `Gateway` n'accepte que les routes de son propre espace de noms. Sans ce réglage, les routes de `application-a`, d'`application-b` et d'`observability` seraient ignorées ;
 - `tolerations` : le nœud control-plane porte une interdiction (`taint`) qui écarte les pods ordinaires. Or c'est lui qui détient le port publié vers la machine : le pod Traefik doit donc y être toléré.
 
 Vérifiez le résultat :
@@ -287,19 +289,23 @@ Les fonctions `app`, `jaeger` et `vlogs` de `helpers.sh` s'en servent pour appel
 
 ### Déployer l'application, Jaeger et VictoriaLogs
 
-Le dossier contient quatre manifestes : `namespaces.yaml` (les espaces de noms `observability` et `demo`), `jaeger.yaml` (Jaeger avec stockage en mémoire), `demo-app.yaml` (une application Node.js en deux services) et `logs.yaml` (VictoriaLogs, qui stocke les logs et fournit son interface de requête).
+Le dossier contient cinq manifestes : `namespaces.yaml` (les espaces de noms `observability`, `application-a` et `application-b`), `jaeger.yaml` (Jaeger avec stockage en mémoire), `app-a.yaml` et `app-b.yaml` (la même application Node.js déployée deux fois) et `logs.yaml` (VictoriaLogs, qui stocke les logs et fournit son interface de requête).
 
-L'application est écrite en JavaScript et tient dans un ConfigMap : les pods l'exécutent avec l'image `node:22.23.5-slim`, sans aucune bibliothèque OpenTelemetry dans un premier temps. Chaque service écoute sur le port `8080` dans son pod, derrière un Service Kubernetes sur le port 80.
+Les deux applications sont volontairement identiques : même image, même code, mêmes deux services `frontend` et `backend`. Seuls changent l'espace de noms et le nom d'hôte. C'est la situation d'une plateforme qui héberge plusieurs équipes, et c'est ce qui permettra de vérifier que le namespace voyage bien avec les données.
 
-Les trois manifestes qui déclarent une `HTTPRoute` contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom avant l'envoi au cluster :
+Chaque application est écrite en JavaScript et tient dans un ConfigMap : les pods l'exécutent avec l'image `node:22.23.5-slim`, sans aucune bibliothèque OpenTelemetry dans un premier temps. Chaque service écoute sur le port `8080` dans son pod, derrière un Service Kubernetes sur le port 80.
+
+Les quatre manifestes qui déclarent une `HTTPRoute` contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom avant l'envoi au cluster :
 
 ```bash
 kubectl apply -f namespaces.yaml
 sed "s/INGRESS_HOST/$INGRESS_HOST/g" jaeger.yaml | kubectl apply -f -
-sed "s/INGRESS_HOST/$INGRESS_HOST/g" demo-app.yaml | kubectl apply -f -
+sed "s/INGRESS_HOST/$INGRESS_HOST/g" app-a.yaml | kubectl apply -f -
+sed "s/INGRESS_HOST/$INGRESS_HOST/g" app-b.yaml | kubectl apply -f -
 sed "s/INGRESS_HOST/$INGRESS_HOST/g" logs.yaml | kubectl apply -f -
 kubectl -n observability rollout status deployment/jaeger deployment/victoria-logs
-kubectl -n demo rollout status deployment/frontend deployment/backend
+kubectl -n application-a rollout status deployment/frontend deployment/backend
+kubectl -n application-b rollout status deployment/frontend deployment/backend
 ```
 
 Trois manifestes sur quatre déclarent une `HTTPRoute` et contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom.
@@ -311,20 +317,23 @@ Ce que contient `logs.yaml`, en résumé :
 
 **NB** : ce TP utilise VictoriaLogs plutôt que Loki et Grafana, employés au TP7. L'intérêt est double : une interface différente, donc un outil de plus dans la boîte à outils, et aucun recouvrement avec le TP7, qui traite de la corrélation entre logs et traces dans Grafana.
 
-Regardez où sont les pods ; ils se répartissent sur les workers, pas sur le control-plane :
+Regardez où sont les pods ; ils se répartissent sur les workers, pas sur le control-plane, et les deux applications cohabitent :
 
 ```bash
-kubectl -n demo get pods -o wide
+kubectl -n application-a get pods -o wide
+kubectl -n application-b get pods -o wide
 kubectl -n observability get pods -o wide
 ```
 
 On obtient par exemple :
 
 ```text
-NAME                       READY   STATUS    RESTARTS   AGE   IP           NODE
+NAME                        READY   STATUS    RESTARTS   AGE   IP           NODE
 backend-6bc7bd9b8d-4ftph    1/1     Running   0          8s    10.244.2.3   cluster-worker
 frontend-7cd9b8f4d7-dwpp6   1/1     Running   0          8s    10.244.3.3   cluster-worker2
 ```
+
+Les mêmes noms de pods apparaissent dans `application-a` et dans `application-b`, avec des adresses IP différentes : deux objets Kubernetes distincts, dans deux espaces de noms distincts.
 
 Les pods de `observability` comprennent maintenant Jaeger et VictoriaLogs :
 
@@ -341,12 +350,13 @@ victoria-logs-6b7d8c9f5d-lq2xk   1/1     Running   0          40s
 Contrôlez que l'application répond, que Jaeger est vide et que VictoriaLogs répond :
 
 ```bash
-app /api/orders
+appA /api/orders
+appB /api/orders
 jaeger /api/v3/services
 vlogs '/select/logsql/query?query=*&limit=1'
 ```
 
-La première commande affiche une réponse JSON du frontend qui contient celle du backend :
+Les deux premières commandes affichent la même réponse JSON, une fois par application :
 
 ```text
 {"from":"frontend","backend":{"from":"backend","path":"/api/orders"}}
@@ -454,7 +464,7 @@ helm upgrade --install otel-gateway open-telemetry/opentelemetry-collector \
 Envoyez cinq traces de test depuis un pod temporaire, avec `telemetrygen` :
 
 ```bash
-kubectl -n demo run tg-gateway --restart=Never --rm -i \
+kubectl -n application-a run tg-gateway --restart=Never --rm -i \
   --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 -- \
   traces --otlp-endpoint otel-gateway.observability.svc.cluster.local:4317 \
   --otlp-insecure --rate 10 --traces 5 --service k8s-gateway
@@ -553,8 +563,8 @@ La présence de `/var/log/pods` confirme que le preset a fait son travail. Sans 
 **NB** : le receiver `file_log` du preset démarre avec `start_at: end`, c'est-à-dire qu'il lit les fichiers à partir du moment où il démarre. Les lignes écrites avant l'installation de l'**agent** ne seront donc jamais collectées, et un pod démarré avant lui n'apparaîtra pas. C'est le comportement attendu, et non une panne. Si la partie 4 ne montre aucun log, redémarrez les déploiements pour qu'ils réécrivent leurs lignes d'initialisation :
 
 ```bash
-kubectl -n demo rollout restart deployment/frontend deployment/backend
-kubectl -n demo rollout status deployment/frontend deployment/backend
+kubectl -n application-a rollout restart deployment/frontend deployment/backend
+kubectl -n application-b rollout restart deployment/frontend deployment/backend
 ```
 
 Chaque redémarrage produit aussi une nouvelle valeur dans `k8s.pod.name`, ce qui est visible dans les logs et dans les traces.
@@ -562,7 +572,7 @@ Chaque redémarrage produit aussi une nouvelle valeur dans `k8s.pod.name`, ce qu
 Envoyez des traces de test à l'**agent**, cette fois, et non à la **gateway** :
 
 ```bash
-kubectl -n demo run tg-agent --restart=Never --rm -i \
+kubectl -n application-a run tg-agent --restart=Never --rm -i \
   --image=ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 -- \
   traces --otlp-endpoint otel-agent.observability.svc.cluster.local:4317 \
   --otlp-insecure --rate 10 --traces 5 --service k8s-agent
@@ -578,7 +588,7 @@ jaeger "/api/v3/traces?query.service_name=k8s-agent&query.startTimeMin=$(date -u
 La commande affiche notamment :
 
 ```text
-k8s.namespace.name=demo
+k8s.namespace.name=application-a
 k8s.node.name=cluster-worker2
 k8s.pod.name=tg-agent
 ```
@@ -592,11 +602,11 @@ Jusqu'ici, Jaeger tourne dans le cluster, à côté de la **gateway**. Dans une 
 Est-ce que cela passe par la `Gateway`, des ports publiés ou des règles `iptables` ? Seulement dans un sens. Un pod peut **sortir** librement : ses paquets passent par le réseau Docker de `clt-N`, qui les traduit (NAT) puis par le VPC DigitalOcean. Depuis un pod du cluster, joindre `srv-N` sur son adresse privée fonctionne donc sans aucune règle supplémentaire, comme le montre l'essai ci-dessous (la stack du TP1 doit tourner sur `srv-N`) :
 
 ```bash
-kubectl -n demo run nettest --restart=Never --image=curlimages/curl:8.11.0 --command -- sleep 120
-kubectl -n demo wait --for=condition=Ready pod/nettest --timeout=120s
-kubectl -n demo exec nettest -- curl -s -o /dev/null -w '%{http_code}\n' \
+kubectl -n application-a run nettest --restart=Never --image=curlimages/curl:8.11.0 --command -- sleep 120
+kubectl -n application-a wait --for=condition=Ready pod/nettest --timeout=120s
+kubectl -n application-a exec nettest -- curl -s -o /dev/null -w '%{http_code}\n' \
   -X POST http://10.20.0.3:4318/v1/traces -H 'Content-Type: application/json' -d '{}'
-kubectl -n demo delete pod nettest
+kubectl -n application-a delete pod nettest
 ```
 
 On obtient `200` : le pod a joint le **collector** de `srv-N` sur `TCP/4318`, sur le réseau privé du VPC.
@@ -661,51 +671,70 @@ Trois points se lisent sur ce schéma :
 
 Le pipeline `logs` mis en place aux parties 2 et 3 tourne, mais rien ne l'a encore vérifié : il faut générer des logs, puis les lire.
 
-Commencez par produire du trafic applicatif, qui écrit dans les logs des pods `frontend` et `backend`. Si vous arrivez directement ici, redémarrez d'abord les deux déploiements : le receiver `file_log` ne lit que ce qui est écrit après son démarrage (voir le NB de [la partie 3](#3-le-collector-en-mode-agent)) :
+Commencez par produire du trafic applicatif dans les deux applications, ce qui écrit dans les logs de leurs pods. Si vous arrivez directement ici, redémarrez d'abord les déploiements : le receiver `file_log` ne lit que ce qui est écrit après son démarrage (voir le NB de [la partie 3](#3-le-collector-en-mode-agent)) :
 
 ```bash
-for i in $(seq 20); do app /api/orders > /dev/null; done
+for i in $(seq 10); do appA /api/orders > /dev/null; done
+for i in $(seq 10); do appB /api/orders > /dev/null; done
 ```
 
 Interrogez ensuite VictoriaLogs par son API, sans passer par l'interface, pour vérifier que les logs sont bien arrivés. Le champ `_msg` contient le message, et les attributs Kubernetes sont devenus des champs à part entière :
 
 ```bash
 source ~/tp03/helpers.sh
-vlogs '/select/logsql/query?query=k8s.namespace.name%3A%22demo%22&limit=2'
+vlogs '/select/logsql/query?query=k8s.namespace.name%3A*&limit=3'
 ```
 
 On obtient des lignes JSON, une par entrée de log :
 
 ```json
-{"_msg":"frontend listening on 8080","_stream":"{k8s.container.name=\"frontend\",k8s.namespace.name=\"demo\",...}","_time":"2026-11-21T08:12:41Z","k8s.container.name":"frontend","k8s.namespace.name":"demo","k8s.node.name":"cluster-worker2","k8s.pod.name":"frontend-7cd9b8f4d7-dwpp6", ...}
+{"_msg":"frontend listening on 8080","_stream":"{k8s.container.name=\"frontend\",k8s.namespace.name=\"application-a\",...}","_time":"2026-11-21T08:12:41Z","k8s.container.name":"frontend","k8s.namespace.name":"application-a","k8s.node.name":"cluster-worker",...}
+{"_msg":"frontend listening on 8080","_stream":"{k8s.container.name=\"frontend\",k8s.namespace.name=\"application-b\",...}","_time":"2026-11-21T08:12:44Z","k8s.container.name":"frontend","k8s.namespace.name":"application-b","k8s.node.name":"cluster-worker2",...}
 ```
 
 Trois champs méritent l'attention : `_msg` (le message), `_time`, et `_stream`, qui regroupe les étiquettes identifiant la source. Les autres champs viennent des attributs de ressource que l'**agent** a ajoutés avec `k8s_attributes` : c'est ce qui rend les logs exploitables, sans quoi il ne resterait que des chemins de fichiers.
 
 Ouvrez maintenant l'interface dans le navigateur, sur `http://vlogs.$INGRESS_HOST:8080`. Elle s'appelle `vmui` et sert à la fois à écrire les requêtes et à lire les résultats, avec trois modes d'affichage (`Group`, `Table`, `JSON`).
 
-![Interface vmui de VictoriaLogs, requête sur le namespace demo et champs Kubernetes disponibles](img/tp03-vlogs-logsql.png)
+![Interface vmui de VictoriaLogs, requête sur les deux namespaces d'application et champs Kubernetes disponibles](img/tp03-vlogs-logsql.png)
 
 La colonne de gauche liste les champs disponibles, avec le nombre de valeurs distinctes : ce sont les attributs de ressource posés par l'**agent**, ce qui permet de construire les requêtes sans les deviner.
 
 Dans le champ de requête, saisissez successivement les requêtes suivantes. Le langage s'appelle **LogsQL** ; il s'écrit comme une suite de filtres sur des champs, séparés par des espaces, et les valeurs contenant des caractères spéciaux vont entre guillemets.
 
-Tous les logs du namespace `demo` :
+Tous les logs de l'application A :
 
 ```text
-k8s.namespace.name:"demo"
+k8s.namespace.name:"application-a"
 ```
 
-Uniquement les logs du conteneur `frontend` :
+Pour vérifier que le namespace distingue bien les deux applications, restreignez la requête aux deux namespaces d'application, puis demandez le décompte par namespace et par conteneur :
 
 ```text
-k8s.namespace.name:"demo" k8s.container.name:"frontend"
+k8s.namespace.name:in("application-a","application-b") | stats by (k8s.namespace.name, k8s.container.name) count() as lignes
 ```
 
-Les logs qui contiennent le mot `orders` dans le message :
+```json
+{"k8s.namespace.name":"application-a","k8s.container.name":"frontend","lignes":"1"}
+{"k8s.namespace.name":"application-a","k8s.container.name":"backend","lignes":"1"}
+{"k8s.namespace.name":"application-b","k8s.container.name":"frontend","lignes":"1"}
+{"k8s.namespace.name":"application-b","k8s.container.name":"backend","lignes":"1"}
+```
+
+Quatre lignes, une par couple application et conteneur : les deux applications produisent les mêmes messages, et le seul champ qui les sépare est `k8s.namespace.name`. C'est l'attribut que l'**agent** a ajouté, et sans lui les deux jeux de lignes seraient indiscernables.
+
+**NB** : la fonction `in(...)` évite d'écrire deux requêtes ; `k8s.namespace.name:application-*` fonctionne aussi, avec un filtre par préfixe.
+
+Uniquement les logs du conteneur `frontend` de l'application A :
 
 ```text
-k8s.namespace.name:"demo" _msg:"orders"
+k8s.namespace.name:"application-a" k8s.container.name:"frontend"
+```
+
+Les logs de l'application B qui contiennent le mot `orders` :
+
+```text
+k8s.namespace.name:"application-b" _msg:"orders"
 ```
 
 Les logs d'une seule source, avec le filtre de flux, plus rapide car il restreint les séries lues :
@@ -714,21 +743,23 @@ Les logs d'une seule source, avec le filtre de flux, plus rapide car il restrein
 _stream:{k8s.container.name="backend"}
 ```
 
-Le nombre de lignes par conteneur, pour repérer celui qui parle le plus :
+Le nombre de lignes par conteneur et par application, qui montre les deux dimensions à la fois :
 
 ```text
-k8s.namespace.name:"demo" | stats by (k8s.container.name) count() as lignes | sort by (lignes desc)
+k8s.namespace.name:* | stats by (k8s.namespace.name, k8s.container.name) count() as lignes | sort by (lignes desc)
 ```
 
 Les erreurs des cinq dernières minutes, avec le filtre temporel :
 
 ```text
-_time:5m k8s.namespace.name:"demo" severity_text:"ERROR"
+_time:5m k8s.namespace.name:* severity_text:"ERROR"
 ```
 
 **NB** : contrairement à une recherche plein texte, un mot seul comme `orders` ne donne rien ici : LogsQL cherche dans un champ précis, d'où `_msg:"orders"`. C'est la différence de philosophy avec les filtres `|=` de LogQL vus ailleurs, et un point à retenir : dans VictoriaLogs, on nomme le champ que l'on interroge.
 
 Comparez enfin ce que vous voyez avec la partie 3 : les traces portaient `k8s.pod.name`, les logs portent le même champ. C'est ce qui permet, dans un outil qui gère les deux signaux, de passer d'une ligne de log au pod qui l'a produite, puis à ses traces. Le TP7 montre ce lien dans Grafana ; ici, vous l'observez à la main, ce qui rend le mécanisme plus visible.
+
+**NB** : à ce stade, le namespace est présent dans les logs, mais les applications ne sont pas encore instrumentées : il n'y a donc pas de traces. La partie 5 vérifie que le même attribut apparaît aussi sur les traces et sur les métriques, cette fois posé par l'**operator** et par les SDK.
 
 ## 5. L'**operator** et l'auto-instrumentation
 
@@ -791,9 +822,18 @@ Tant que l'**operator** n'est pas installé, ces types n'existent pas et `kubect
 
 **NB** : n'exécutez pas `helm test` sur ce chart, ses pods de test utilisent une image qui n'est pas épinglée.
 
+**NB** : l'attente `--wait` rend la main dès que le pod de l'**operator** est prêt, mais le webhook qui valide les ressources personnalisées peut mettre quelques secondes de plus à répondre. Si `kubectl apply` d'une `Instrumentation` échoue sur `failed calling webhook ... connection refused`, attendez que le Service du webhook ait une adresse, puis relancez la commande :
+
+```bash
+kubectl get endpoints -n opentelemetry-operator-system \
+  operator-opentelemetry-operator-webhook
+```
+
+Tant que la colonne `ENDPOINTS` est vide, le webhook n'est pas joignable. Comptez quelques secondes, dix au plus.
+
 La ressource `Instrumentation` décrit comment instrumenter : où envoyer les données, quels propagators utiliser, quel échantillonnage appliquer et quelle image d'instrumentation injecter.
 
-Créez-la dans l'espace de noms `demo`. L'exporter vise l'**agent** en OTLP HTTP (`http://otel-agent.observability.svc.cluster.local:4318`), protocole par défaut du SDK Node.js :
+L'`Instrumentation` est un objet d'espace de noms : il en faut une par application. Créez la même dans `application-a` et dans `application-b`, avec `sed` plutôt qu'à la main. L'exporter vise l'**agent** en OTLP HTTP (`http://otel-agent.observability.svc.cluster.local:4318`), protocole par défaut du SDK Node.js :
 
 ```bash
 cat > instrumentation.yaml <<'EOF'
@@ -801,7 +841,7 @@ apiVersion: opentelemetry.io/v1alpha1
 kind: Instrumentation
 metadata:
   name: demo
-  namespace: demo
+  namespace: application-a
 spec:
   exporter:
     endpoint: http://otel-agent.observability.svc.cluster.local:4318
@@ -824,37 +864,47 @@ L'annotation doit se trouver sur le modèle de pod, et non sur le Deployment : `
 
 ```bash
 kubectl apply -f instrumentation.yaml
-for d in frontend backend; do
-  kubectl -n demo patch deployment $d -p \
-    '{"spec":{"template":{"metadata":{"annotations":{"instrumentation.opentelemetry.io/inject-nodejs":"true"}}}}}'
+sed "s/namespace: application-a/namespace: application-b/" instrumentation.yaml | kubectl apply -f -
+for ns in application-a application-b; do
+  for d in frontend backend; do
+    kubectl -n $ns patch deployment $d -p \
+      '{"spec":{"template":{"metadata":{"annotations":{"instrumentation.opentelemetry.io/inject-nodejs":"true"}}}}}'
+  done
 done
-kubectl -n demo rollout status deployment/frontend deployment/backend
+for ns in application-a application-b; do
+  kubectl -n $ns rollout status deployment/frontend deployment/backend
+done
 ```
 
-L'`Instrumentation` doit exister avant la création des pods : l'**operator** ne modifie pas un pod déjà démarré.
+Chaque `Instrumentation` doit exister avant la création des pods de son espace de noms : l'**operator** ne modifie pas un pod déjà démarré.
 
 Générez du trafic :
 
 ```bash
-for i in $(seq 20); do app /api/orders > /dev/null; done
+for i in $(seq 10); do appA /api/orders > /dev/null; done
+for i in $(seq 10); do appB /api/orders > /dev/null; done
 ```
 
 Les pods contiennent maintenant un **init container** que vos manifestes ne déclarent pas :
 
 ```bash
-kubectl -n demo get pod -l app=frontend -o jsonpath='{.items[*].spec.initContainers[*].name}{"\n"}'
+for ns in application-a application-b; do
+  echo -n "$ns : "
+  kubectl -n $ns get pod -l app=frontend -o jsonpath='{.items[*].spec.initContainers[*].name}{"\n"}'
+done
 ```
 
 On obtient :
 
 ```text
-opentelemetry-auto-instrumentation-nodejs
+application-a : opentelemetry-auto-instrumentation-nodejs
+application-b : opentelemetry-auto-instrumentation-nodejs
 ```
 
 Les variables d'environnement ajoutées au conteneur de l'application disent tout du mécanisme :
 
 ```bash
-kubectl -n demo get pod -l app=frontend \
+kubectl -n application-a get pod -l app=frontend \
   -o jsonpath='{range .items[*].spec.containers[0].env[*]}{.name}={.value}{"\n"}{end}' | grep OTEL_
 ```
 
@@ -868,26 +918,49 @@ OTEL_TRACES_SAMPLER_ARG=1
 OTEL_RESOURCE_ATTRIBUTES=k8s.container.name=frontend,k8s.deployment.name=frontend,...
 ```
 
-Dans Jaeger, les services `frontend` et `backend` sont apparus :
+Dans Jaeger, les services `frontend` et `backend` sont apparus. Mais attention : les deux applications portent les mêmes noms de service. Ce qui les distingue est le namespace, dans les attributs de ressource :
 
 ```bash
 jaeger '/api/v3/services' | jq -c '.services'
 jaeger "/api/v3/traces?query.service_name=frontend&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
-  | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key=="service.name") | .value.stringValue] | unique | .[]'
+  | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key=="k8s.namespace.name") | .value.stringValue] | unique | .[]' | sort
 ```
 
-La première commande contient `frontend` et `backend`, la seconde affiche :
+La première commande contient `frontend` et `backend`, la seconde affiche les deux namespaces :
 
 ```text
-"backend"
-"frontend"
+application-a
+application-b
 ```
+
+C'est le résultat à retenir de ce TP : un même nom de service dans deux environnements doit rester discernable, et c'est le namespace qui le permet. Sans cet attribut, une trace de préproduction et une trace de production seraient impossibles à séparer dans le backend.
 
 Une même trace traverse donc les deux services. Ouvrez-la dans l'interface de Jaeger (`http://jaeger.$INGRESS_HOST:8080`) : vous voyez le span serveur du frontend, le span client de son appel au backend, puis le span serveur du backend. Le lien entre les deux services repose sur le propagator `tracecontext`.
 
-Regardez enfin les attributs de ressource de cette trace : `k8s.pod.name`, `k8s.namespace.name` et `k8s.node.name` y figurent, ajoutés par l'**agent**.
+Regardez enfin les attributs de ressource de cette trace, tous préfixés par `k8s.` :
 
-**NB** : si les pods redémarrent mais qu'aucune trace n'apparaît, vérifiez que l'init container est présent (`kubectl -n demo describe pod -l app=frontend`). S'il manque, l'annotation n'est pas sur le modèle de pod ou l'`Instrumentation` a été créée après les pods : dans ce second cas, redémarrez-les avec `kubectl -n demo rollout restart deployment/frontend`.
+```bash
+jaeger "/api/v3/traces?query.service_name=frontend&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+  | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key|startswith("k8s.")) | "\(.key)=\(.value.stringValue)"] | unique | .[]' | sort
+```
+
+```text
+k8s.container.name=backend
+k8s.container.name=frontend
+k8s.deployment.name=backend
+k8s.deployment.name=frontend
+k8s.namespace.name=application-a
+k8s.namespace.name=application-b
+k8s.node.name=cluster-worker
+```
+
+Ces attributs viennent de deux sources complémentaires : l'**agent** les ajoute par le processor `k8s_attributes` pour les données qu'il reçoit, et l'**operator** les injecte dans `OTEL_RESOURCE_ATTRIBUTES` au moment de la création du pod, avec `k8s.container.name` et `k8s.deployment.name`. Le namespace, lui, apparaît dans les deux chemins, ce qui explique qu'il soit présent même sur un pod instrumenté avant l'**agent**.
+
+Le troisième signal, les métriques, n'est pas exporté dans ce TP : il n'y a pas de backend de métriques dans le cluster, et le pipeline `metrics` du chart reste sur l'exporter `debug`. L'attribut y serait identique, puisque les métriques du SDK portent la même ressource que les traces. C'est le TP1, avec Prometheus, qui montre ce signal de bout en bout.
+
+Le résultat à retenir est donc celui-ci : `k8s.namespace.name` accompagne les logs et les traces, et il est posé de la même façon pour toutes les applications du cluster. C'est ce qui rend possible la question « cette ligne appartient-elle à l'application A ou à l'application B ? », alors que les deux portent les mêmes noms de service.
+
+**NB** : si les pods redémarrent mais qu'aucune trace n'apparaît, vérifiez que l'init container est présent (`kubectl -n application-a describe pod -l app=frontend`). S'il manque, l'annotation n'est pas sur le modèle de pod ou l'`Instrumentation` a été créée après les pods : dans ce second cas, redémarrez-les avec `kubectl -n application-a rollout restart deployment/frontend`.
 
 ## Cleanup
 
@@ -896,7 +969,7 @@ Supprimez les releases Helm et les espaces de noms du lab :
 ```bash
 helm uninstall otel-agent otel-gateway -n observability
 helm uninstall operator -n opentelemetry-operator-system
-kubectl delete namespace demo observability opentelemetry-operator-system
+kubectl delete namespace application-a application-b observability opentelemetry-operator-system
 ```
 
 Supprimez ensuite le cluster, qui rend la mémoire et libère le port `TCP/8080` de `clt-N` :
@@ -919,25 +992,25 @@ La seconde commande n'affiche plus rien : plus aucun cluster ne tourne sur la ma
 La ressource `Instrumentation` accepte des attributs ajoutés à toutes les données des pods instrumentés, dans `spec.resource.resourceAttributes`. Ajoutons l'environnement de déploiement :
 
 ```bash
-kubectl -n demo patch instrumentation demo --type merge -p \
+kubectl -n application-a patch instrumentation demo --type merge -p \
   '{"spec":{"resource":{"resourceAttributes":{"deployment.environment.name":"tp3"}}}}'
 ```
 
 Ces attributs sont posés à la création du pod : redémarrez les déploiements pour que les nouveaux pods en héritent.
 
 ```bash
-kubectl -n demo rollout restart deployment/frontend deployment/backend
-kubectl -n demo rollout status deployment/frontend
+kubectl -n application-a rollout restart deployment/frontend deployment/backend
+kubectl -n application-a rollout status deployment/frontend
 ```
 
 Contrôlez la variable d'environnement injectée :
 
 ```bash
-kubectl -n demo get pods -l app=frontend \
+kubectl -n application-a get pods -l app=frontend \
   -o jsonpath='{range .items[*].spec.containers[0].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]}{.value}{"\n"}{end}'
 ```
 
-Elle commence maintenant par `deployment.environment.name=tp3,` suivi des attributs `k8s.*` ajoutés par l'**operator**. Générez du trafic (`for i in $(seq 10); do app /api/orders > /dev/null; done`) et retrouvez l'attribut dans la ressource des traces, dans Jaeger.
+Elle commence maintenant par `deployment.environment.name=tp3,` suivi des attributs `k8s.*` ajoutés par l'**operator**. Générez du trafic (`for i in $(seq 10); do appA /api/orders > /dev/null; done`) et retrouvez l'attribut dans la ressource des traces, dans Jaeger.
 
 ### 2. Déployer un **collector** avec la ressource `OpenTelemetryCollector`
 

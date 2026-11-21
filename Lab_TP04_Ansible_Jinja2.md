@@ -716,7 +716,7 @@ Le résumé indique `failed=0` et `changed=0` : le fichier déployé correspond 
 
 ## 5. Étendre le parc : 4 serveurs, 4 configurations
 
-Votre animateur a provisionné trois serveurs éphémères Debian pour votre groupe : `srv2-N` (adresse privée `10.20.N.4`), `srv3-N` (`10.20.N.5`) et `srv4-N` (`10.20.N.6`). Vous allez les intégrer dans l'inventaire, et générer pour chacun une configuration différente, sans écrire un seul playbook de plus.
+Votre animateur a provisionné trois serveurs éphémères Debian pour votre groupe, aux adresses privées `10.20.N.4`, `10.20.N.5` et `10.20.N.6`. Vous allez les intégrer dans l'inventaire, et générer pour chacun une configuration différente, sans écrire un seul playbook de plus.
 
 D'abord, vérifiez que la connexion fonctionne et que le système est bien Debian :
 
@@ -742,7 +742,7 @@ Remplacez `10.20.N.4`, `10.20.N.5` et `10.20.N.6` par les adresses privées comm
 
 > [!TIP]
 >
-> L'IP privée de `srv2-N` vaut `10.20.N.4`, celle de `srv3-N` vaut `10.20.N.5`, et celle de `srv4-N` vaut `10.20.N.6` : DigitalOcean attribue les adresses privées de façon consécutive depuis le début du sous-réseau.
+> DigitalOcean attribue les adresses privées de façon consécutive dans le VPC, mais pas nécessairement dans l'ordre des noms de machines : la première créée peut être `.4` et la suivante `.6`. Votre animateur vous communique la correspondance, et les alias de l'inventaire servent justement à ne pas dépendre des noms.
 
 La sortie attendue pour le ping est `SUCCESS` sur les quatre machines, et pour `setup`, `ansible_distribution: Debian`.
 
@@ -752,7 +752,15 @@ La structure de l'inventaire est nouvelle :
 - `[ephemere]` contient les trois serveurs Debian, chacun sous un **alias** parlant (`srv-frontend`, `srv-backend`, `srv-database`), avec `ansible_host` qui indique l'adresse IP réelle ;
 - `[collector:children]` est un **groupe de groupes** : il regroupe `otel` et `ephemere`, pour que le playbook s'applique à tous.
 
-Créez maintenant les variables par serveur. Le serveur principal conserve son réglage de la partie 4 (métriques activées). Les trois nouveaux serveurs reçoivent trois profils différents :
+La partie 4 s'est terminée avec les métriques système désactivées sur le serveur principal. Réactivez-les, puisque cette partie compare des profils de collecte :
+
+```bash
+cat > host_vars/$SRV_HOST.yml <<'EOF'
+otelcol_hostmetrics_enabled: true
+EOF
+```
+
+Créez maintenant les variables des trois serveurs éphémères, avec trois profils différents :
 
 ```bash
 cat > host_vars/srv-frontend.yml <<'EOF'
@@ -791,11 +799,11 @@ Lancez le playbook :
 ansible-playbook playbook.yml
 ```
 
-Le résumé montre quatre serveurs traités en même temps : `srv-0.monlab.top` reste à `changed=0` (idempotence, rien n'a changé pour lui), les trois serveurs Debian passent de `absent` à installé, configuré et démarré (`changed=4` chacun) :
+Le résumé montre quatre serveurs traités en même temps. `srv-0.monlab.top` passe à `changed=2`, parce que vous venez de réactiver ses métriques : sa configuration change et son service redémarre. Les trois serveurs Debian passent de `absent` à installé, configuré et démarré (`changed=4` chacun) :
 
 ```text
 PLAY RECAP *********************************************************************
-srv-0.monlab.top           : ok=5    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+srv-0.monlab.top           : ok=6    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 srv-backend                : ok=6    changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 srv-database               : ok=6    changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 srv-frontend               : ok=6    changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
@@ -818,21 +826,23 @@ srv-database |    timeout: 10s   hostmetrics: ...        value: "database"
 srv-0.monlab.top | timeout: 2s   hostmetrics: ...        value: "tp4"
 ```
 
+Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables. Le fichier `prometheus/prometheus.yml` fourni contient pour cela un bloc `otlp` qui promeut quatre attributs en labels : `service.name`, `service.instance.id`, `deployment.environment.name` et `host.name`. C'est le pendant OTLP de ce que l'exporter `prometheus` faisait seul en scrape [au TP1](Lab_TP01_Socle.md).
+
 Attendez une minute, puis interrogez Prometheus pour voir les métriques des serveurs d'infrastructure :
 
 ```bash
 sleep 60
 curl -s -G "http://localhost:9090/api/v1/query" \
   --data-urlencode "query=system_cpu_load_average_1m" \
-  | jq -r '.data.result[] | "\(.metric.instance) [\(.metric.job)] : \(.value[1])"'
+  | jq -r '.data.result[] | "\(.metric.host_name) [\(.metric.deployment_environment_name)] : \(.value[1])"'
 ```
 
-La sortie affiche une série par serveur qui envoie des métriques système, avec le rôle entre crochets :
+La sortie affiche une série par serveur qui envoie des métriques système, avec le rôle entre crochets. Le frontend n'y figure pas, puisque ses métriques système sont désactivées :
 
 ```text
 srv-0 [tp4] : 0.19
-srv3-0 [backend] : 0.05
-srv4-0 [database] : 0.13
+srv4-0 [backend] : 0.05
+srv3-0 [database] : 0.13
 ```
 
 `srv-frontend` n'apparaît pas : la variable `otelcol_hostmetrics_enabled: false` a supprimé le receiver `hostmetrics` et le pipeline `metrics` de sa configuration.

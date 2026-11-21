@@ -1,2 +1,13 @@
 global:
   scrape_interval: 15s
+
+# Prometheus reçoit ici des métriques en OTLP, poussées par le collector.
+# Dans ce mode, les attributs de ressource ne deviennent pas des labels
+# automatiquement : sans ce bloc, les collectors de tous les serveurs
+# produisent la même série, sans moyen de les distinguer.
+otlp:
+  promote_resource_attributes:
+    - service.name
+    - service.instance.id
+    - deployment.environment.name
+    - host.name

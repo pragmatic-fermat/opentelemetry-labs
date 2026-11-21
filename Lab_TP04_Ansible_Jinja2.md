@@ -735,34 +735,40 @@ Le dossier `~/tp04` peut être conservé : le playbook, le template et les `host
 
 À vous de jouer, si le temps le permet. Chaque exercice est guidé pas à pas.
 
-### 1. Plusieurs endpoints sur un même **collector**
+### 1. Un **collector** pour la préproduction et la production
 
-Jusqu'ici, un **collector** servait un seul usage. En production, une même passerelle sert souvent plusieurs équipes ou plusieurs environnements, chacune avec son endpoint et ses réglages. C'est un cas où la boucle Jinja2 change tout : sans elle, il faudrait recopier les blocs à la main.
+Le cas d'usage est celui d'une équipe qui exploite deux environnements, `preprod` et `prod`, avec un seul **collector** plutôt que deux machines à maintenir. Les contraintes ne sont pas les mêmes :
 
-Vous allez décrire deux locataires dans une variable, et laisser le template générer les receivers, les processors et les pipelines correspondants.
+- la production doit être vue vite : lots courts (1 seconde) et métriques système collectées, parce que la capacité de ces serveurs compte ;
+- la préproduction peut attendre : lots longs (10 secondes), pas de métriques système, pour ne pas payer le coût d'une collecte dont personne ne se sert ;
+- les deux flux doivent rester **séparés et identifiables** : ports différents, donc règles de pare-feu différentes, et un attribut `tenant` qui permet de retrouver l'origine de chaque donnée dans le backend.
 
-Ajoutez le dictionnaire à la fin de `host_vars/$SRV_HOST.yml` :
+C'est exactement ce qu'un template Jinja2 rend confortable : on décrit les deux environnements une fois, et le reste est généré. Sans boucle, il faudrait recopier six blocs de configuration à la main, avec le risque d'en oublier un.
+
+Ajoutez la description des deux locataires à la fin de `host_vars/$SRV_HOST.yml` :
 
 ```bash
-cat >> ~/tp04/host_vars/$SRV_HOST.yml <<'EOF'
+cd ~/tp04
+cat >> host_vars/$SRV_HOST.yml <<'EOF'
 otelcol_tenants:
-  - name: production
+  - name: prod
+    environment: production
     port_grpc: 4317
     port_http: 4318
+    batch_timeout: 1s
     hostmetrics: true
-  - name: staging
+  - name: preprod
+    environment: preproduction
     port_grpc: 5317
     port_http: 5318
+    batch_timeout: 10s
     hostmetrics: false
 EOF
 ```
 
-Chaque locataire a ses ports OTLP et son propre choix de collecte système : le premier reçoit des métriques, le second seulement des traces.
-
 Écrivez un second template, à côté du premier :
 
 ```bash
-cd ~/tp04
 cat > templates/config-tenants.yaml.j2 <<'EOF'
 {{ ansible_managed | comment }}
 receivers:
@@ -794,9 +800,15 @@ processors:
       - key: tenant
         value: {{ t.name | to_json }}
         action: upsert
+      - key: deployment.environment.name
+        value: {{ t.environment | to_json }}
+        action: upsert
+      - key: service.instance.id
+        value: "otelcol-{{ t.name }}"
+        action: upsert
+  batch/{{ t.name }}:
+    timeout: {{ t.batch_timeout }}
 {% endfor %}
-  batch:
-    timeout: {{ otelcol_batch_timeout }}
 
 exporters:
   otlp_grpc/jaeger:
@@ -811,84 +823,129 @@ service:
 {% for t in otelcol_tenants %}
     traces/{{ t.name }}:
       receivers: [otlp/{{ t.name }}]
-      processors: [memory_limiter, resource/{{ t.name }}, batch]
+      processors: [memory_limiter, resource/{{ t.name }}, batch/{{ t.name }}]
       exporters: [otlp_grpc/jaeger]
 {% if t.hostmetrics %}
     metrics/{{ t.name }}:
       receivers: [hostmetrics/{{ t.name }}]
-      processors: [memory_limiter, resource/{{ t.name }}, batch]
+      processors: [memory_limiter, resource/{{ t.name }}, batch/{{ t.name }}]
       exporters: [otlp_http/prometheus]
 {% endif %}
 {% endfor %}
 EOF
 ```
 
-Trois constructions se combinent ici : la boucle `{% for %}` produit un bloc par locataire, la condition `{% if t.hostmetrics %}` n'ajoute le receiver et le pipeline `metrics` que pour ceux qui en veulent, et l'accès `{{ t.port_grpc }}` lit un champ du dictionnaire en cours d'itération. Le nom de chaque composant est suffixé par `{{ t.name }}`, ce qui garantit l'unicité exigée par le **collector**.
+Quatre constructions se combinent ici :
 
-Rendez le template sur `clt-N` et validez-le avant de le déployer :
+- la boucle `{% for t in otelcol_tenants %}` produit un bloc par environnement ;
+- la condition `{% if t.hostmetrics %}` n'ajoute le receiver et le pipeline `metrics` que pour ceux qui en veulent ;
+- l'accès `{{ t.port_grpc }}` et `{{ t.batch_timeout }}` lit les champs de l'élément en cours d'itération ;
+- le suffixe `{{ t.name }}` garantit l'unicité des noms de composants, exigée par le **collector**.
+
+L'attribut `service.instance.id` mérite une explication : c'est lui qui devient l'étiquette `instance` dans Prometheus. Sans lui, les séries de métriques arrivent sans étiquette et deviennent impossibles à attribuer à un environnement.
+
+Rendez le template sur `clt-N` et validez-le avant de déployer :
 
 ```bash
-cd ~/tp04
-ansible localhost -m ansible.builtin.template   -a "src=templates/config-tenants.yaml.j2 dest=/tmp/config-tenants.yaml" -e @group_vars/all.yml -e @host_vars/$SRV_HOST.yml
-docker run --rm -v /tmp/config-tenants.yaml:/config.yaml:ro   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0   validate --config=/config.yaml
+ansible localhost -m ansible.builtin.template \
+  -a "src=templates/config-tenants.yaml.j2 dest=/tmp/config-tenants.yaml" -e @group_vars/all.yml
+docker run --rm -v /tmp/config-tenants.yaml:/config.yaml:ro \
+  ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0 \
+  validate --config=/config.yaml
 echo "code retour : $?"
 ```
 
-Le rendu contient les composants de chaque locataire, et les pipelines se lisent en clair :
+Le rendu montre les pipelines de chaque environnement, et la différence entre les deux :
 
 ```yaml
 service:
   pipelines:
-    traces/production:
-      receivers: [otlp/production]
-      processors: [memory_limiter, resource/production, batch]
+    traces/prod:
+      receivers: [otlp/prod]
+      processors: [memory_limiter, resource/prod, batch/prod]
       exporters: [otlp_grpc/jaeger]
-    metrics/production:
-      receivers: [hostmetrics/production]
-      processors: [memory_limiter, resource/production, batch]
+    metrics/prod:
+      receivers: [hostmetrics/prod]
+      processors: [memory_limiter, resource/prod, batch/prod]
       exporters: [otlp_http/prometheus]
-    traces/staging:
-      receivers: [otlp/staging]
-      processors: [memory_limiter, resource/staging, batch]
+    traces/preprod:
+      receivers: [otlp/preprod]
+      processors: [memory_limiter, resource/preprod, batch/preprod]
       exporters: [otlp_grpc/jaeger]
 ```
 
-`production` a deux pipelines, `staging` un seul : la condition `{% if t.hostmetrics %}` a suffi à produire cette différence.
+`prod` a deux pipelines, `preprod` un seul : la condition a suffi à produire cette différence.
 
 Déployez cette configuration en pointant la tâche sur le nouveau template :
 
 ```bash
-cd ~/tp04
 sed -i 's|src: config.yaml.j2|src: config-tenants.yaml.j2|' playbook.yml
 ansible-playbook playbook.yml | grep -A3 'PLAY RECAP'
 ```
 
-La tâche `Déployer la configuration` passe en `changed` et le handler redémarre le service, puisque le fichier a changé.
+```text
+srv-N.monlab.top           : ok=6    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+```
 
-Envoyez maintenant une trace sur chaque endpoint, et constatez qu'elles arrivent toutes les deux dans Jaeger, avec un attribut qui les distingue :
+Les quatre ports OTLP sont en écoute, deux par environnement :
 
 ```bash
-docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
-  traces --otlp-endpoint $SRV_HOST:4317 --otlp-insecure --rate 10 --traces 3 --service tenant-production
-docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
-  traces --otlp-endpoint $SRV_HOST:5317 --otlp-insecure --rate 10 --traces 3 --service tenant-staging
-sleep 5
-curl -s 'http://localhost:16686/api/v3/traces?query.service_name=tenant-staging&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
-  | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key=="tenant") | .value.stringValue] | unique | .[]'
+ansible otel -m ansible.builtin.shell -a "ss -ltn | grep -E ':(4317|4318|5317|5318) '"
 ```
 
 ```text
-staging
+LISTEN 0      4096               *:5318            *:*
+LISTEN 0      4096               *:5317            *:*
+LISTEN 0      4096               *:4318            *:*
+LISTEN 0      4096               *:4317            *:*
 ```
 
-Le même test sur `tenant-production` renvoie `production`. Un seul **collector**, deux endpoints, deux politiques, et un attribut `tenant` qui permet de trier les données dans le backend.
+Envoyez maintenant trois traces sur chaque endpoint, sous le même nom de service : c'est la situation réelle d'une application déployée dans les deux environnements.
 
-**NB** : ce modèle a une limite bien réelle, à connaître avant de le déployer en production. Les locataires partagent le même processus et donc le même `memory_limiter` : si l'un sature son endpoint, le limiteur peut rejeter aussi les données de l'autre. C'est le problème du voisin bruyant, et c'est la raison pour laquelle on isole parfois la production sur un **collector** distinct. Le TP9 traite ces questions de passerelle de production.
+```bash
+docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
+  traces --otlp-endpoint $SRV_HOST:4317 --otlp-insecure --rate 10 --traces 3 --service checkout-web
+docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
+  traces --otlp-endpoint $SRV_HOST:5317 --otlp-insecure --rate 10 --traces 3 --service checkout-web
+sleep 5
+```
+
+Dans Jaeger, le même service apparaît deux fois, distingué par les attributs que le template a posés :
+
+```bash
+curl -s 'http://localhost:16686/api/v3/traces?query.service_name=checkout-web&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
+  | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key=="tenant" or .key=="deployment.environment.name") | "\(.key)=\(.value.stringValue)"] | unique | .[]'
+```
+
+```text
+deployment.environment.name=preproduction
+deployment.environment.name=production
+tenant=preprod
+tenant=prod
+```
+
+C'est la valeur du modèle : un seul pipeline de collecte, et des données attribuables à leur environnement sans ambiguïté, ce qui permet de répondre à « quelle est la latence en production ? » sans mélanger la préproduction.
+
+Vérifiez enfin la différence de traitement sur les métriques. Après une trentaine de secondes, seul `prod` envoie des séries système :
+
+```bash
+sleep 35
+curl -s -G http://localhost:9090/api/v1/query \
+  --data-urlencode 'query=count by (instance) ({__name__=~"system_cpu.*"})' \
+  | jq -r '.data.result[] | "instance=\(.metric.instance) : \(.value[1]) series"'
+```
+
+```text
+instance=otelcol-prod : 12 series
+```
+
+`preprod` n'apparaît pas : sa variable `hostmetrics: false` a supprimé le receiver et le pipeline `metrics` de sa configuration. Une seule variable change, et le template produit deux comportements.
+
+**NB** : ce modèle a une limite bien réelle, à connaître avant de le déployer en production. Les deux environnements partagent le même processus et donc le même `memory_limiter` : si la préproduction sature son endpoint, le limiteur peut rejeter aussi les données de production. C'est le problème du voisin bruyant, et c'est pourquoi certains parcs isolent la production sur un **collector** distinct. Le TP9 traite ces questions de passerelle de production.
 
 Revenez à la configuration du TP avant de continuer :
 
 ```bash
-cd ~/tp04
 sed -i 's|src: config-tenants.yaml.j2|src: config.yaml.j2|' playbook.yml
 ansible-playbook playbook.yml | grep -A3 'PLAY RECAP'
 ```

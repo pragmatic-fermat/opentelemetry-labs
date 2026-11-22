@@ -1,0 +1,13 @@
+# Backend de traces du TP1, sur srv-N.
+#
+# Jaeger tout-en-un, stockage en mémoire : les traces disparaissent si le
+# conteneur redémarre. Backend de démonstration, sans authentification ni TLS.
+name: tp01-srv
+
+services:
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    restart: unless-stopped

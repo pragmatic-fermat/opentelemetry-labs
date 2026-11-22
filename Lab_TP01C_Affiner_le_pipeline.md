@@ -78,7 +78,7 @@ On obtient, à quelques unités près selon le moment :
 11
 ```
 
-Onze des quatorze spans de la minute sont des sondes. Ce bruit a deux coûts, que la slide « Coûts » du cours résume : il consomme du stockage pour des données qui n'aideront jamais personne, et il pollue les recherches : un chemin différent par commande (`/orders/39211`, puis `/orders/48151`) crée autant de valeurs distinctes que de commandes passées, ce qui rend les regroupements impossibles.
+Onze des dix-sept spans de la minute sont des sondes : onze de sondes, six pour les deux commandes. Ce bruit a deux coûts, que la slide « Coûts » du cours résume : il consomme du stockage pour des données qui n'aideront jamais personne, et il pollue les recherches : un chemin différent par commande (`/orders/39211`, puis `/orders/48151`) crée autant de valeurs distinctes que de commandes passées, ce qui rend les regroupements impossibles.
 
 Les trois parties qui suivent traitent ces trois problèmes, un processor à la fois, avec un avant et un après visibles dans Jaeger.
 

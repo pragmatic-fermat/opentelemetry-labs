@@ -17,8 +17,8 @@ Ce lab est le dernier des trois du TP1. Il se déroule dans le terminal web de `
 - [2. Les premiers processors](#2-les-premiers-processors)
 - [3. Supprimer les sondes avec le filter](#3-supprimer-les-sondes-avec-le-filter)
 - [4. Masquer et normaliser avec transform et OTTL](#4-masquer-et-normaliser-avec-transform-et-ottl)
-- [Cleanup](#cleanup)
 - [Extra](#extra)
+- [Cleanup](#cleanup)
 
 # Détail
 
@@ -188,7 +188,7 @@ Le processor `filter` supprime les données qui vérifient une condition écrite
 >
 > Dans cette version du **collector**, le processor `filter` attend une liste `trace_conditions`, et les chemins OTTL commencent par le nom du contexte, par exemple `span.attributes["clé"]`.
 
-Ajoutez un processor `filter/healthchecks` à la fin de `processors.yaml`, sans toucher au reste, avec `>>` à la place de `>`. Les deux espaces devant le nom du processor sont nécessaires : l'entrée doit avoir la même indentation que les processors déjà présents.
+Ajoutez un processor `filter/healthchecks` à la fin de `processors.yaml`, sans toucher au reste, avec `>>` à la place de `>`. L'indentation de deux espaces devant le nom du processor est nécessaire : l'entrée doit avoir la même indentation que les processors déjà présents.
 
 ```bash
 cat >> otelcol/processors.yaml <<'EOF'
@@ -342,6 +342,66 @@ Dans l'interface de Jaeger, le même span porte maintenant un nom lisible et des
 
 Le pipeline du **collector** a maintenant sa forme finale : un receiver, cinq processors dans un ordre justifié, deux exporters dont l'un envoie vers une machine distante. Ce que l'application a produit a été filtré, enrichi, masqué et normalisé avant de quitter sa machine.
 
+## Extra
+
+À vous de jouer, si le temps le permet. Le **collector** et Jaeger tournent encore : l'exercice part de la configuration finale de la partie 4.
+
+### Marquer les erreurs en OTTL
+
+Les traces en erreur ont été visibles à deux reprises dans ce TP : la panne d'`inventory` [au TP1B](Lab_TP01B_Collector_vers_Jaeger.md#5-diagnostiquer-à-distance), les commandes refusées par le métier [au TP1A](Lab_TP01A_Voir_la_valeur.md#3-une-panne-franche). Un système de supervision qui voudrait compter ces traces chercherait un attribut bien choisi, plutôt qu'à relire chaque span.
+
+Ajoutez un processor `transform/slo` à la suite de la configuration actuelle, avec `>>` à la place de `>` :
+
+```bash
+cat >> otelcol/processors.yaml <<'EOF'
+  transform/slo:
+    error_mode: ignore
+    trace_statements:
+      - set(span.attributes["slo.violation"], true) where span.status.code == STATUS_CODE_ERROR
+EOF
+```
+
+Placez-le dans le pipeline, après `transform/normalize` et avant `batch` :
+
+```bash
+cat > otelcol/service.yaml <<'EOF'
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform/normalize, transform/slo, batch]
+      exporters: [debug, otlp_http/jaeger]
+EOF
+```
+
+Validez et redémarrez le **collector** :
+
+```bash
+./check.sh
+docker compose restart otelcol
+```
+
+Attendez quelques secondes, puis provoquez une erreur en éteignant `inventory`, et passez une commande :
+
+```bash
+sleep 5
+./order.sh coffee 1 alice
+docker compose stop inventory
+./order.sh coffee 1 alice
+sleep 3
+```
+
+Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), les spans en erreur du service `shop` portent l'attribut `slo.violation` à `true`, et les commandes réussies ne le portent pas. Le filtre de la liste de Jaeger permet de ne garder que ces traces, en ajoutant `slo.violation=true` dans le champ des attributs.
+
+En ligne de commande :
+
+```bash
+curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+  | jq -r '.result.resourceSpans[] | .scopeSpans[].spans[] | select(.status.code==2) | [.attributes[] | select(.key=="slo.violation") | .value.boolValue] | join("")'
+```
+
+On obtient `true` pour chaque span en erreur.
+
 ## Cleanup
 
 Le cleanup arrête tout ce que le TP1 a démarré, sur les deux machines.
@@ -378,105 +438,3 @@ ports 4318 et 16686 libres
 ```
 
 Les images Docker restent en place, et le dépôt `/root/opentelemetry-labs` n'est pas touché : chaque lab se prépare lui-même à partir du clone.
-
-## Extra
-
-À vous de jouer, si le temps le permet.
-
-### Marquer les erreurs en OTTL
-
-Les traces en erreur ont été visibles à deux reprises dans ce TP : la panne d'`inventory` [au TP1B](Lab_TP01B_Collector_vers_Jaeger.md#5-diagnostiquer-à-distance), les commandes refusées par le métier [au TP1A](Lab_TP01A_Voir_la_valeur.md#3-une-panne-franche). Un système de supervision qui voudrait compter ces traces chercherait un attribut bien choisi, plutôt qu'à relire chaque span.
-
-Le cleanup a arrêté la stack. Reprenez-la : les fichiers fournis depuis le clone, la configuration finale du **collector**, puis Jaeger sur `srv-N`.
-
-```bash
-mkdir -p ~/tp01 && cp -r ~/opentelemetry-labs/config/tp01/. ~/tp01/
-cd ~/tp01
-mkdir -p otelcol
-cat > otelcol/receivers.yaml <<'EOF'
-receivers:
-  otlp:
-    protocols:
-      http:
-        endpoint: 0.0.0.0:4318
-EOF
-cat > otelcol/exporters.yaml <<EOF
-exporters:
-  debug:
-    verbosity: detailed
-  otlp_http/jaeger:
-    endpoint: http://$SRV_HOST:4318
-EOF
-cat > otelcol/processors.yaml <<'EOF'
-processors:
-  memory_limiter:
-    check_interval: 1s
-    limit_mib: 256
-    spike_limit_mib: 64
-  resource:
-    attributes:
-      - key: deployment.environment.name
-        value: tp1
-        action: upsert
-      - key: lab.id
-        value: ${env:LAB_ID}
-        action: upsert
-  batch:
-    timeout: 2s
-EOF
-cat > otelcol/service.yaml <<'EOF'
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
-      exporters: [debug, otlp_http/jaeger]
-EOF
-echo 'OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4318' > .env
-docker compose --profile otelcol up -d
-ssh root@$SRV_HOST 'mkdir -p ~/tp01 && cp /root/opentelemetry-labs/config/tp01/compose-srv.yaml ~/tp01/ && cd ~/tp01 && docker compose -f compose-srv.yaml up -d'
-```
-
-Ajoutez [à la partie 4](#4-masquer-et-normaliser-avec-transform-et-ottl) un processor qui marque d'un attribut les spans en erreur :
-
-```bash
-cat >> otelcol/processors.yaml <<'EOF'
-  transform/slo:
-    error_mode: ignore
-    trace_statements:
-      - set(span.attributes["slo.violation"], true) where span.status.code == STATUS_CODE_ERROR
-EOF
-cat > otelcol/service.yaml <<'EOF'
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [memory_limiter, resource, transform/slo, batch]
-      exporters: [debug, otlp_http/jaeger]
-EOF
-./check.sh
-docker compose up -d otelcol
-```
-
-Attendez quelques secondes, puis provoquez une erreur en éteignant `inventory`, et passez une commande :
-
-```bash
-sleep 5
-./order.sh coffee 1 alice
-docker compose stop inventory
-./order.sh coffee 1 alice
-sleep 3
-```
-
-Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), les spans en erreur du service `shop` portent l'attribut `slo.violation` à `true`, et les commandes réussies ne le portent pas. Le filtre de la liste de Jaeger permet de ne garder que ces traces, en ajoutant `slo.violation=true` dans le champ des attributs.
-
-En ligne de commande :
-
-```bash
-curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
-  | jq -r '.result.resourceSpans[] | .scopeSpans[].spans[] | select(.status.code==2) | [.attributes[] | select(.key=="slo.violation") | .value.boolValue] | join("")'
-```
-
-On obtient `true` pour chaque span en erreur.
-
-Terminez par le [Cleanup](#cleanup), qui est le même qu'à la fin du TP.

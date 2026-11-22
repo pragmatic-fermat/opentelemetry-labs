@@ -335,7 +335,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces
 
 Les traces de l'application, les cinq traces de `demo` et le span de `manuel` sont parties vers Jaeger. Ouvrez l'interface dans votre navigateur, sur `http://$SRV_HOST:16686` : choisissez le service `shop`, cliquez sur **Find Traces**, puis sur une trace pour lire son waterfall. Les trois spans du TP1A s'y retrouvent, avec leurs durées et leur hiérarchie.
 
-![Traces du service shop dans Jaeger](img/tp01-jaeger-demo.png)
+![Trace du service shop dans Jaeger, avec ses trois spans](img/tp01-jaeger-shop.png)
 
 En ligne de commande, les mêmes vérifications passent par l'API v3 de Jaeger, appelée depuis `clt-N`. Le nombre de traces du service `shop`, puis le nom du span envoyé avec `curl` :
 

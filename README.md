@@ -8,7 +8,7 @@ Labs à concevoir et rédiger : 1, 3, 4, 5, 6, 7, 10 et 11 (numérotation d'orig
 
 | TP | Titre | Contenu |
 |---|---|---|
-| [TP1](Lab_TP01_Socle.md) | Socle | Backend Jaeger/Grafana, premier Collector, processors (batch, filtrage, OTTL) |
+| [TP1](Lab_TP01_Socle.md) | Socle (1A, 1B, 1C) | Backend Jaeger/Grafana, premier Collector, processors (batch, filtrage, OTTL) |
 | [TP3](Lab_TP03_Kubernetes.md) | Kubernetes | Collector en agent et gateway (Helm), OTel Operator et auto-instrumentation par annotation |
 | [TP4](Lab_TP04_Ansible_Jinja2.md) | Ansible + Jinja2 | Déploiement du Collector sur VM Linux, puis modification de la configuration |
 | [TP5](tp05-nodejs-nginx/) | Node.js + Nginx | Auto-instrumentation, export OTLP vers Jaeger, trace de bout en bout |

@@ -30,7 +30,7 @@ Le TP1 se déroule sur deux machines : `clt-N` et `srv-N`, où N est votre numé
 
 `clt-N` joue le rôle du serveur applicatif : c'est là que tournent l'application et le **collector**. `srv-N` joue le rôle du serveur d'observabilité : c'est là que tourne Jaeger. Cette répartition est celle de tout le TP1, et c'est elle qui permet de diagnostiquer l'application sans se connecter à sa machine.
 
-Vous travaillez depuis le terminal web de `clt-N`, dans `/root`. Le dépôt des labs y est déjà cloné, dans `/root/opentelemetry-labs`. Les commandes destinées à `srv-N` passent par SSH depuis `clt-N` : la clé de `root` y donne accès sans mot de passe, vous n'ouvrez jamais le terminal de `srv-N` dans ce TP.
+Vous travaillez depuis le terminal web de `clt-N`, dans `/root`. Le dépôt des labs y est déjà cloné, dans `/root/opentelemetry-labs`. Les commandes destinées à `srv-N` passent par SSH depuis `clt-N` : la clé de `root` y donne accès sans mot de passe.
 
 Un formulaire demande un nom d'utilisateur et le mot de passe communiqué par l'animateur. Vous pouvez copier-coller entre votre poste et le terminal web : Ctrl+Maj+C et Ctrl+Maj+V dans Firefox, Ctrl+Shift+C et Ctrl+Shift+V dans Chrome, ou le clic droit selon le navigateur.
 

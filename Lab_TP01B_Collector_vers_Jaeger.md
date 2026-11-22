@@ -1,6 +1,6 @@
 # Lab TP1B : Un **collector**, de l'application vers Jaeger
 
-Ce lab est le deuxième des trois du TP1. Il se déroule dans le terminal web de `clt-N`, dans le dossier `~/tp01` qui a servi [au TP1A](Lab_TP01A_Voir_la_valeur.md). Jaeger démarre sur `srv-N`, mais toujours depuis `clt-N`, par SSH : vous n'ouvrez jamais le terminal de `srv-N` dans ce TP.
+Ce lab est le deuxième des trois du TP1. Il se déroule dans le terminal web de `clt-N`, dans le dossier `~/tp01` qui a servi [au TP1A](Lab_TP01A_Voir_la_valeur.md). Jaeger démarre sur `srv-N`, mais toujours depuis `clt-N`, par SSH.
 
 # Objectifs
 

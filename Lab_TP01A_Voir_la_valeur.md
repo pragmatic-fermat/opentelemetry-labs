@@ -1,14 +1,14 @@
-# Lab TP1A : Voir la valeur de la télémétrie, en console
+# Lab TP1A : Lecture de la télémétrie en console
 
-Ce lab est le premier des trois du TP1. Il se déroule sur `clt-N`, dans le dossier `~/tp01` préparé à la [Mise en place du TP1](Lab_TP01_Socle.md#mise-en-place). Aucun **collector**, aucun backend : l'application seule, et sa télémétrie sur la sortie standard.
+Ce premier lab du TP1 se déroule sur `clt-N`, dans le dossier `~/tp01` préparé lors de la [mise en place](Lab_TP01_Socle.md#mise-en-place). L'application s'exécute ici sans **collector** ni backend, en écrivant directement sa télémétrie sur sa sortie standard.
 
 # Objectifs
 
 À la fin du lab, vous saurez :
 
-- lire les spans qu'une application instrumentée écrit sur sa sortie standard ;
-- distinguer un span racine d'un span enfant et reconstituer une trace avec `jq` ;
-- retrouver une panne et une lenteur dans la sortie console, sans autre outil.
+- lire les spans émis par une application instrumentée sur sa sortie standard ;
+- identifier le span racine et ses enfants pour reconstituer une trace avec `jq` ;
+- localiser une panne et un ralentissement à partir des données brutes en console.
 
 # Contenu
 
@@ -17,17 +17,15 @@ Ce lab est le premier des trois du TP1. Il se déroule sur `clt-N`, dans le doss
 - [2. Une commande, une trace](#2-une-commande-une-trace)
 - [3. Une panne franche](#3-une-panne-franche)
 - [4. Une lenteur](#4-une-lenteur)
-- [Ce que la console ne fait pas](#ce-que-la-console-ne-fait-pas)
+- [Limites de l'export console](#limites-de-lexport-console)
 
 # Détail
 
 ## Environnement
 
-L'application tient dans le dossier `app/` du TP : deux services Python, `shop` et `inventory`. `shop` reçoit les commandes (`POST /orders`), `inventory` répond aux demandes de stock (`GET /stock/<sku>`). Les deux sont déjà instrumentées avec le SDK OpenTelemetry, et leurs spans sortent sur la sortie standard des conteneurs, un objet JSON par ligne.
+L'application se compose de deux services Python situés dans le dossier `app/` : `shop`, qui gère les commandes (`POST /orders`), et `inventory`, qui fournit l'état des stocks (`GET /stock/<sku>`). Les deux services intègrent le SDK OpenTelemetry configuré pour afficher chaque span sous forme de ligne JSON sur la sortie standard des conteneurs. Aucune configuration OpenTelemetry n'est demandée dans ce lab : l'objectif est d'examiner directement les données produites par l'instrumentation.
 
-L'application est déjà instrumentée : le SDK est en place, vous ne configurez rien d'OpenTelemetry dans ce lab, vous lisez ce que l'instrumentation produit.
-
-Le schéma suivant montre le chemin des données dans ce lab : une commande traverse les deux services, et chaque span finit sur la sortie standard du conteneur qui l'a produit.
+Le schéma suivant illustre le flux : lors d'une commande, les requêtes traversent `shop` et `inventory`, et chaque service émet ses spans dans ses propres journaux.
 
 ```mermaid
 ---
@@ -56,7 +54,7 @@ inventory running
 shop running
 ```
 
-Le fichier `.env` n'existe pas à ce stade : c'est ce qui fait sortir les spans sur la console. Ne le créez pas [avant le TP1B](Lab_TP01B_Collector_vers_Jaeger.md#2-lapplication-parle-au-collector).
+En l'absence de fichier `.env`, le SDK utilise l'export console par défaut. La configuration d'export OTLP sera mise en place [au TP1B](Lab_TP01B_Collector_vers_Jaeger.md#2-lapplication-parle-au-collector).
 
 Passez une commande avec `order.sh`, qui appelle `shop` et affiche la réponse suivie du code HTTP. Articles connus : `coffee` (stock 12), `tea` (stock 0), `mug` (stock 3) :
 
@@ -71,13 +69,13 @@ On obtient :
  [201]
 ```
 
-La commande a réussi. Maintenant, lisez la sortie des deux conteneurs :
+Affichez les journaux des deux conteneurs :
 
 ```bash
 docker compose logs --no-log-prefix --since 1m shop inventory
 ```
 
-On obtient un mélange de lignes. Les unes sont des logs applicatifs classiques, horodatés ; les autres sont des objets JSON, un par span :
+La sortie regroupe les logs applicatifs horodatés et les spans émis au format JSON :
 
 ```text
 2026-11-22 05:09:22,235 INFO shop.orders [6bfdff188ca025b3179e4f0aacb62cac] order received sku=coffee qty=2 customer=alice
@@ -87,21 +85,21 @@ On obtient un mélange de lignes. Les unes sont des logs applicatifs classiques,
 {"name": "load_stock", "service": "inventory", "trace_id": "6bfdff188ca025b3179e4f0aacb62cac", "span_id": "e7b35943b10c6480", "parent_span_id": "cd3cd18b4c336ea4", "duration_ms": 44.39, "status": "UNSET", "attributes": {"http.request.method": "GET", "http.route": "/stock/coffee", "inventory.sku": "coffee", "inventory.stock": 12}, "events": []}
 ```
 
-Trois objets JSON, un par span produit par la commande :
+La commande a généré trois spans distincts :
 
-- `handle_request`, sur `shop` : le traitement de la requête entrante, sans parent (`parent_span_id` à `null`) ;
-- `GET inventory`, sur `shop` : l'appel HTTP vers l'autre service, avec `handle_request` pour parent ;
-- `load_stock`, sur `inventory` : le traitement de la demande de stock, enfant de `handle_request`.
+- `handle_request` sur `shop` correspond au traitement de la requête HTTP entrante. Il ne possède pas de parent (`parent_span_id` vaut `null`).
+- `GET inventory` sur `shop` représente l'appel HTTP client vers le service de stock, rattaché à `handle_request`.
+- `load_stock` sur `inventory` correspond à la lecture du stock en base par le second service, rattaché au même span parent.
 
-Ces trois spans partagent le même `trace_id`. C'est la trace : une commande = une trace, qui traverse les deux services. Les logs applicatifs portent aussi l'identifiant, entre crochets : la même commande, vue par les logs et par les traces.
+Ces trois spans partagent la même valeur de `trace_id`, ce qui permet de reconstituer l'ensemble du parcours à travers les deux services. Les lignes de log applicatif intègrent également cet identifiant entre crochets, assurant la corrélation entre logs et traces.
 
 > [!NOTE]
 >
-> Les spans sont des objets JSON distincts pour une raison pratique : `jq` peut les lire un par un, au milieu des lignes de log qui ne sont pas du JSON. C'est une mise en forme de ce lab, pas une pratique recommandée : en production, les spans partent vers un **collector**, pas vers une console.
+> L'écriture des spans en JSON sur la sortie standard permet de les analyser facilement avec `jq`. En environnement de production, les spans sont généralement transmis directement à un **collector** via OTLP plutôt qu'écrits dans les journaux locaux.
 
 ## 2. Une commande, une trace
 
-La sortie mélangée se lit mal à l'œil. Filtrez-la avec `jq` : l'option `-R` lit l'entrée ligne par ligne, `fromjson?` transforme en objet les lignes qui sont du JSON et ignore silencieusement les autres.
+Pour isoler les spans dans ces journaux, utilisez `jq` : l'option `-R` traite l'entrée ligne par ligne, et la fonction `fromjson?` convertit les lignes JSON valides en ignorant les entrées textuelles.
 
 Listez les spans, avec leur nom, leur service, leur parent, leur durée et leur statut :
 
@@ -118,7 +116,7 @@ On obtient, dans l'ordre d'écriture :
 {"name":"load_stock","service":"inventory","parent_span_id":"cd3cd18b4c336ea4","duration_ms":44.39,"status":"UNSET"}
 ```
 
-Le span `handle_request` n'a pas de parent : c'est le span racine de la trace. Les deux autres portent son `span_id` dans leur `parent_span_id` : ce sont ses enfants. La hiérarchie se lit ainsi : `shop` a reçu la requête, a appelé `inventory`, qui a répondu.
+Le span `handle_request` ne possède pas de parent : il constitue la racine de la trace. Les deux autres spans référencent son identifiant dans leur champ `parent_span_id`. On retrouve ainsi la chronologie de l'appel : `shop` a reçu la requête entrante puis a sollicité `inventory` pour vérifier la disponibilité de l'article.
 
 Reconstituez maintenant la trace complète de la dernière commande. D'abord son identifiant, puis tous les spans qui le portent :
 
@@ -139,9 +137,9 @@ trace_id=6bfdff188ca025b3179e4f0aacb62cac
 {"name":"handle_request","service":"shop","parent_span_id":null,"duration_ms":49.54}
 ```
 
-Les durées se lisent de la plus courte à la plus longue en remontant vers la racine : le temps de `shop` (49,54 ms) contient l'appel vers `inventory` (48,86 ms), qui contient le traitement côté `inventory` (44,39 ms). Trois millisecondes séparent le racine de son enfant : c'est le temps passé dans `shop` lui-même.
+La durée totale de la requête dans `shop` (49,54 ms) englobe l'appel réseau vers `inventory` (48,86 ms), qui contient lui-même l'exécution de la requête de stock (44,39 ms). L'écart entre le span racine et le span client correspond au temps de traitement propre au service `shop`.
 
-Passez une commande qui échoue côté métier, avec un article en stock insuffisant :
+Testez à présent une commande dont la quantité demandée dépasse le stock disponible :
 
 ```bash
 ./order.sh mug 5 bob
@@ -167,25 +165,25 @@ docker compose logs --no-log-prefix shop \
 {"status":"ERROR","events":[{"name":"stock.insufficient","attributes":{"stock":3}}]}
 ```
 
-Une commande refusée par le métier est une trace en erreur, avec la raison dans un événement. Rien de tout cela n'était visible dans la réponse HTTP, qui se résumait à un code 409.
+La trace indique un statut `ERROR`, et l'événement `stock.insufficient` précise le niveau de stock disponible (`3`), complétant l'information fournie par le code HTTP 409 renvoyé au client.
 
 ## 3. Une panne franche
 
-Le scénario : les utilisateurs signalent des erreurs, et personne ne sait pourquoi. Éteignez brutalement le service `inventory`, comme si le processus avait crashé :
+Pour observer le comportement de l'instrumentation lors d'une indisponibilité de service, arrêtez le conteneur `inventory` avant d'envoyer une nouvelle commande :
 
 ```bash
 docker compose stop inventory
 ./order.sh coffee 1 alice
 ```
 
-On obtient une erreur 502, sans autre explication :
+Le service `shop` renvoie une erreur HTTP 502 :
 
 ```text
 {"error":"inventory unavailable"}
  [502]
 ```
 
-C'est le code que voit l'utilisateur. La télémétrie, elle, sait pourquoi. Retrouvez le span en erreur :
+Pour identifier l'origine du problème à partir de la télémétrie, extrayez les spans marqués en erreur :
 
 ```bash
 docker compose logs --no-log-prefix shop inventory \
@@ -199,9 +197,9 @@ On obtient :
 {"name":"handle_request","service":"shop","attributes":{"http.request.method":"POST","http.route":"/orders","url.path":"/orders/52561","order.sku":"coffee","order.qty":1,"user.email":"alice@example.com","http.response.status_code":502}}
 ```
 
-Deux spans en erreur : le racine, et l'appel vers `inventory`. Le 502 est celui que `shop` renvoie à l'utilisateur ; la cause, une connexion impossible vers `inventory`, est dans le span en erreur et dans le log applicatif.
+Deux spans sont en erreur : la racine `handle_request` et l'appel client `GET inventory`. Le code 502 correspond à la réponse formulée par `shop`, tandis que la cause technique réside dans l'échec de liaison vers `inventory`.
 
-Retrouvez aussi la ligne de log correspondante, grâce à l'identifiant de trace que portent les logs. Le filtre `' (INFO|ERROR) '` garde les lignes de log, qui portent le niveau entouré d'espaces, et écarte les lignes JSON, où le statut est écrit `"ERROR"` entre guillemets :
+Retrouvez la ligne de log correspondante grâce à l'identifiant de trace. Le filtre `' (INFO|ERROR) '` sélectionne les lignes de log applicatif portant leur niveau de gravité entouré d'espaces et écarte les lignes JSON, où le statut est écrit `"ERROR"` entre guillemets :
 
 ```bash
 TRACE=$(docker compose logs --no-log-prefix shop \
@@ -216,7 +214,7 @@ On obtient :
 2026-11-22 18:43:32,077 ERROR shop.orders [cf7348e901f1da10aefca980be88e73d] inventory unavailable: HTTPConnectionPool(host='inventory', port=8081): Max retries exceeded with url: /stock/coffee (Caused by NameResolutionError("HTTPConnection(host='inventory', port=8081): Failed to resolve 'inventory' ([Errno -3] Temporary failure in name resolution)"))
 ```
 
-Le log dit la même chose que le span, avec plus de détail : `shop` n'a pas pu joindre `inventory`, faute de résolution du nom. La panne est bien celle du scénario, et non une erreur de la commande.
+Le journal applicatif fournit le détail de l'exception réseau : `shop` n'a pas pu résoudre le nom d'hôte `inventory`. La trace et le log permettent ainsi de distinguer une panne d'infrastructure d'une erreur de saisie ou de traitement de commande.
 
 Redémarrez `inventory` pour la suite :
 
@@ -226,9 +224,9 @@ docker compose start inventory
 
 ## 4. Une lenteur
 
-Deuxième scénario, le plus courant : les utilisateurs trouvent l'application lente, mais votre propre test est rapide. `inventory` dispose d'un mode lent, activé par la variable `INVENTORY_DELAY_MS` : le service attend alors ce nombre de millisecondes avant de répondre, à l'intérieur de son span.
+Le service `inventory` permet de simuler un temps de traitement élevé via la variable d'environnement `INVENTORY_DELAY_MS`. Lorsqu'elle est définie, le service introduit une pause artificielle avant de répondre, à l'intérieur de son span.
 
-Ajoutez trois secondes de délai, puis passez une commande :
+Configurez un délai de trois secondes sur `inventory` :
 
 ```bash
 INVENTORY_DELAY_MS=3000 docker compose up -d inventory
@@ -241,7 +239,7 @@ sleep 5
 ./order.sh coffee 1 alice
 ```
 
-La commande met maintenant trois secondes à répondre. Retrouvez le coupable en triant les spans par durée décroissante :
+Exécutez la requête suivante pour trier les spans par durée décroissante :
 
 ```bash
 docker compose logs --no-log-prefix shop inventory \
@@ -270,22 +268,20 @@ On obtient :
 ]
 ```
 
-Le span le plus lent est le racine, mais il ne fait que contenir les autres : la lenteur vient de `load_stock`, sur `inventory`, à 3 050 ms. L'appel HTTP et le traitement de la commande n'ajoutent que quelques millisecondes. C'est le raisonnement que permettent les durées imbriquées des spans : remonter du symptôme à la cause.
+Le span racine `handle_request` affiche la durée totale la plus élevée (environ 3 062 ms), mais la décomposition montre que l'essentiel de ce temps est consommé par `load_stock` dans `inventory` (environ 3 050 ms). L'analyse de l'imbrication des durées permet ainsi de localiser le service responsable du ralentissement.
 
-Remettez le service dans son état rapide, en supprimant la variable du conteneur :
+Remettez le service dans son état initial en supprimant la variable :
 
 ```bash
 docker compose up -d inventory
 ```
 
-## Ce que la console ne fait pas
+## Limites de l'export console
 
-Ce lab a répondu à deux questions, chacune en quelques commandes : pourquoi ces erreurs, pourquoi cette lenteur. La télémétrie en console suffit quand on sait déjà où regarder.
+L'affichage des spans dans les journaux suffit pour tester une application locale à faible trafic. En environnement partagé ou en production, cette approche présente plusieurs limites :
 
-Elle ne suffit plus dès que la question change de forme. Posez-vous celle-ci :
+- Les journaux sont volatils et disparaissent avec les conteneurs.
+- La recherche d'une trace spécifique parmi des flux concurrents devient complexe et coûteuse en ressources.
+- L'analyse textuelle avec des outils comme `jq` ne remplace pas une interface dédiée capable de représenter graphiquement la hiérarchie des spans et de filtrer par attributs, durées ou statuts.
 
-> Que se passe-t-il avec 50 requêtes par seconde et dix services ?
-
-La console ne garde rien : les traces défilent et disparaissent avec les conteneurs. Elle ne cherche rien : impossible de retrouver la trace d'un client qui a appelé à 14 h 03. Et elle ne montre rien d'autre qu'une suite de lignes : pas d'arbre graphique, pas de comparaison entre services, pas de recherche par durée ou par statut.
-
-La réponse à cette question tient en deux briques : un **collector**, qui reçoit les données de l'application, et un backend, qui les garde et les interroge. C'est le sujet du [TP1B](Lab_TP01B_Collector_vers_Jaeger.md).
+Pour répondre à ces besoins, l'architecture OpenTelemetry sépare l'émission de la télémétrie de son stockage : un **collector** reçoit les données des applications et les achemine vers un backend d'observabilité. Cette mise en œuvre fait l'objet du [TP1B](Lab_TP01B_Collector_vers_Jaeger.md).

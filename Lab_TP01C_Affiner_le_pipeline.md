@@ -1,14 +1,14 @@
-# Lab TP1C : Affiner le pipeline
+# Lab TP1C : Filtrage et transformation des traces dans le pipeline
 
-Ce lab est le dernier des trois du TP1. Il se déroule dans le terminal web de `clt-N`, dans le dossier `~/tp01` qui a servi [au TP1B](Lab_TP01B_Collector_vers_Jaeger.md). L'application, le **collector** et Jaeger tournent toujours.
+Ce troisième lab du TP1 se déroule dans le terminal web de `clt-N`, dans le dossier `~/tp01` utilisé lors du [TP1B](Lab_TP01B_Collector_vers_Jaeger.md). L'application, le **collector** et Jaeger restent actifs.
 
 # Objectifs
 
 À la fin du lab, vous saurez :
 
-- ajouter les processors `memory_limiter`, `batch` et `resource`, et expliquer pourquoi leur ordre compte ;
-- supprimer des spans avec le processor `filter`, et vérifier leur disparition dans Jaeger ;
-- masquer une adresse électronique et normaliser un chemin avec le processor `transform` et le langage OTTL.
+- intégrer et ordonner les processors `memory_limiter`, `resource` et `batch` dans un pipeline de traces ;
+- éliminer les spans de vérification de santé avec le processor `filter` ;
+- anonymiser des données sensibles et normaliser des attributs de requête avec le processor `transform` en syntaxe OTTL.
 
 # Contenu
 
@@ -24,13 +24,13 @@ Ce lab est le dernier des trois du TP1. Il se déroule dans le terminal web de `
 
 ## Environnement
 
-Les machines et le dossier `~/tp01` sont ceux du [TP1B](Lab_TP01B_Collector_vers_Jaeger.md) : les trois labs s'enchaînent sur les mêmes machines. Le pipeline du **collector** comporte pour l'instant un receiver `otlp` et deux exporters (`debug` et `otlp_http/jaeger`), et aucun processor.
+L'environnement reprend l'état final du [TP1B](Lab_TP01B_Collector_vers_Jaeger.md) : le pipeline du **collector** comprend le receiver `otlp`, les exporters `debug` et `otlp_http/jaeger`, et aucun processor.
 
-Les processors de ce lab s'exécutent tous sur `clt-N`, dans le **collector**, avant l'envoi vers `srv-N` : ce qui part vers le serveur d'observabilité part déjà traité.
+Les processors configurés dans ce lab s'exécutent sur `clt-N`, dans le **collector**, avant transmission des données à `srv-N`.
 
 ## 1. Du bruit dans Jaeger
 
-Ouvrez Jaeger dans le navigateur (`http://$SRV_HOST:16686`). Il contient encore les traces des parties précédentes, dont les sondes que vous allez ajouter maintenant : pour lire un avant et un après sans mélanger, repartez d'un Jaeger vide. Les traces sont en mémoire, un redémarrage du conteneur suffit, toujours depuis `clt-N`, par SSH :
+Ouvrez Jaeger dans le navigateur (`http://$SRV_HOST:16686`). Afin de comparer clairement les traces avant et après l'ajout des processors, redémarrez Jaeger pour vider son stockage en mémoire :
 
 ```bash
 ssh root@$SRV_HOST 'cd ~/tp01 && docker compose -f compose-srv.yaml restart jaeger'
@@ -49,7 +49,7 @@ On obtient :
 {"services":["jaeger"]}
 ```
 
-Ajoutez maintenant du bruit, le genre qui s'accumule dans les installations réelles. Le dossier contient un service de sondes, activé par le profil `health`, qui appelle la route `/health` de `shop` toutes les cinq secondes :
+Démarrez le service de sondes inclus dans le profil `health`, qui interroge l'endpoint `/health` de `shop` toutes les cinq secondes :
 
 ```bash
 docker compose --profile health up -d
@@ -63,13 +63,13 @@ Laissez tourner une minute, puis passez deux commandes :
 sleep 5
 ```
 
-Dans Jaeger, cherchez les traces du service `shop` de la dernière minute. Vous voyez les traces des deux commandes, entourées d'une douzaine de traces de sondes par minute. Ouvrez la trace d'une commande : son span racine s'appelle `handle_request`, un nom qui ne dit rien de la requête, et ses attributs montrent une adresse électronique en clair (`alice@example.com`) et un chemin qui porte un identifiant (`/orders/39211`, différent à chaque commande).
+Dans Jaeger, affichez les traces récentes du service `shop`. On observe que les traces des deux commandes sont mêlées à de nombreuses traces générées par les sondes régulières. En examinant la trace d'une commande, on constate également que le span racine porte un nom générique (`handle_request`), que l'adresse électronique du client apparaît en clair (`alice@example.com`) et que le chemin de requête intègre un identifiant variable (`/orders/39211`).
 
 > [!NOTE]
 >
-> Ces trois choix, le nom `handle_request`, l'attribut `user.email` et le chemin avec identifiant, sont des choix de démonstration : ils fabriquent le bruit que ce lab retire. Ce ne sont pas des conventions sémantiques à imiter dans vos applications.
+> Ces éléments (le nom `handle_request`, le champ `user.email` non masqué et l'identifiant dans le chemin) sont intégrés volontairement dans l'application d'exemple afin d'illustrer les opérations de nettoyage réalisables dans le **collector**.
 
-En ligne de commande, le décompte du bruit :
+En ligne de commande, le décompte des traces de sondes sur la dernière minute s'obtient avec :
 
 ```bash
 curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
@@ -82,13 +82,13 @@ On obtient, à quelques unités près selon le moment :
 11
 ```
 
-Onze des dix-sept spans de la minute sont des sondes, les six autres sont les deux commandes. Ce bruit a deux coûts, que la slide « Coûts » du cours résume : il consomme du stockage pour des données qui n'aideront jamais personne, et il pollue les recherches : un chemin différent par commande (`/orders/39211`, puis `/orders/48151`) crée autant de valeurs distinctes que de commandes passées, ce qui rend les regroupements impossibles.
+Sur la période observée, la majorité des spans collectés correspond aux vérifications de santé, tandis que seuls quelques spans représentent des commandes réelles. Ce volume de données superflues augmente la consommation de stockage du backend et complique l'exploitation des recherches. Par ailleurs, la présence d'identifiants variables dans les chemins d'URL (`/orders/39211`, `/orders/48151`) empêche d'agréger facilement les métriques ou les traces par type d'opération.
 
-Les trois parties qui suivent traitent ces trois problèmes, un processor à la fois, avec un avant et un après visibles dans Jaeger.
+Les sections suivantes détaillent comment traiter ces points dans le pipeline de traces à l'aide de processors spécifiques.
 
 ## 2. Les premiers processors
 
-Les processors transforment les données entre le receiver et les exporters. Ils s'exécutent dans l'ordre où ils sont listés dans le pipeline, et cet ordre a des conséquences.
+Les processors modifient les données entre la réception et l'exportation. Ils s'exécutent séquentiellement selon leur ordre de déclaration dans le pipeline.
 
 Depuis `~/tp01`, réécrivez `otelcol/processors.yaml` avec trois processors :
 
@@ -160,7 +160,7 @@ deployment.environment.name=tp1
 lab.id=0
 ```
 
-Ces attributs posés par le **collector** accompagnent toutes les données qui le traversent, même si l'application ne les connaît pas : c'est ainsi qu'on étiquette un environnement entier sans toucher aux applications.
+Ces attributs permettent d'identifier l'environnement d'exécution de manière centralisée au niveau du **collector**, sans modifier le code des applications.
 
 Observez maintenant l'effet du `batch`. Passez `timeout` à `15s` avec `sed`, redémarrez le **collector**, puis passez une commande et suivez les logs :
 
@@ -184,7 +184,7 @@ docker compose restart otelcol
 
 ## 3. Supprimer les sondes avec le filter
 
-Les sondes de santé (`/health`, `/ready`) produisent beaucoup de spans qui n'apportent rien à l'analyse : vous venez de le voir dans Jaeger.
+Les requêtes de vérification de santé génèrent un volume de traces répétitives qui n'apportent généralement pas d'information utile lors de l'analyse d'incidents.
 
 Le processor `filter` supprime les données qui vérifient une condition écrite en OTTL, le langage de transformation d'OpenTelemetry. Si une des conditions de la liste est vraie, la donnée est supprimée.
 
@@ -239,7 +239,7 @@ On obtient :
 {"sondes":0,"commandes":1}
 ```
 
-Les sondes ont disparu, la commande est passée. Dans l'interface de Jaeger, la liste des traces du service `shop` ne contient plus que les commandes.
+Les spans de sondes sont désormais filtrés avant transmission. Dans l'interface de Jaeger, la liste des traces pour `shop` ne contient plus que les requêtes applicatives réelles.
 
 > [!NOTE]
 >
@@ -247,7 +247,7 @@ Les sondes ont disparu, la commande est passée. Dans l'interface de Jaeger, la 
 
 ## 4. Masquer et normaliser avec transform et OTTL
 
-Restent deux problèmes, visibles sur la trace de commande de [la partie 1](#1-du-bruit-dans-jaeger) : une adresse électronique en clair, et un chemin différent à chaque commande.
+Les traces de commandes présentent encore deux aspects à corriger : l'exposition d'une donnée personnelle en clair (`user.email`) et le manque d'uniformité du chemin d'URL (`url.path`).
 
 Le processor `transform` modifie les données avec des instructions OTTL. Pour chaque signal, il attend une liste d'instructions (`trace_statements` pour les traces) exécutées dans l'ordre. Une instruction peut se terminer par une clause `where`, qui limite son application aux données qui vérifient la condition.
 
@@ -268,7 +268,7 @@ On obtient le nom du span, l'adresse en clair et le chemin avec son identifiant 
 {"name":"handle_request","email":"alice@example.com","path":"/orders/39211"}
 ```
 
-Ce sont les données brutes, telles que l'application les a produites. Dans l'interface de Jaeger, le détail du span montre ces valeurs :
+Il s'agit des attributs initiaux émis par l'application, visibles dans le panneau de détails du span sous Jaeger :
 
 ![Attributs bruts du span, adresse électronique en clair et chemin avec identifiant](img/tp01-transform-avant.png)
 
@@ -338,21 +338,21 @@ On obtient :
 {"name":"POST /orders/{id}","email":"***@example.com","path":"/orders/{id}"}
 ```
 
-Comparé à l'état de départ, on obtient exactement ce qui était visé : l'adresse électronique est masquée, le chemin porte `{id}` au lieu de l'identifiant réel, et le span racine s'appelle `POST /orders/{id}` pour toutes les commandes du même endpoint. Les traces de commandes se regroupent désormais dans les recherches.
+L'adresse électronique est désormais anonymisée, le chemin d'URL est standardisé avec le motif `{id}`, et le nom du span racine reprend la méthode HTTP et la route normalisée (`POST /orders/{id}`). Cette uniformité facilite les regroupements et les requêtes par endpoint dans les outils d'observabilité.
 
-Dans l'interface de Jaeger, le même span porte maintenant un nom lisible et des attributs masqués :
+Le panneau de détails de Jaeger reflète ces modifications :
 
 ![Attributs du span après transform, adresse électronique masquée et chemin normalisé](img/tp01-transform-apres.png)
 
-Le pipeline du **collector** a maintenant sa forme finale : un receiver, cinq processors dans un ordre justifié, deux exporters dont l'un envoie vers une machine distante. Ce que l'application a produit a été filtré, enrichi, masqué et normalisé avant de quitter sa machine.
+Le pipeline complet applique ainsi les règles de contrôle et de mise en conformité des traces au niveau du **collector** local, avant leur acheminement vers le serveur d'observabilité.
 
 ## Extra
 
-À vous de jouer, si le temps le permet. Le **collector** et Jaeger tournent encore : l'exercice part de la configuration finale de la partie 4.
+Cet exercice optionnel prolonge la configuration établie à la partie 4 pour ajouter un indicateur explicite sur les spans en échec.
 
 ### Marquer les erreurs en OTTL
 
-Les traces en erreur ont été visibles à deux reprises dans ce TP : la panne d'`inventory` [au TP1B](Lab_TP01B_Collector_vers_Jaeger.md#5-diagnostiquer-à-distance), les commandes refusées par le métier [au TP1A](Lab_TP01A_Voir_la_valeur.md#3-une-panne-franche). Un système de supervision qui voudrait compter ces traces chercherait un attribut bien choisi, plutôt qu'à relire chaque span.
+Dans les scénarios précédents ([TP1A](Lab_TP01A_Voir_la_valeur.md#3-une-panne-franche) et [TP1B](Lab_TP01B_Collector_vers_Jaeger.md#5-diagnostiquer-à-distance)), le statut d'erreur était porté par le code standard du span. Pour faciliter le filtrage dans certaines interfaces ou alimenter des tableaux de bord, il est parfois utile d'ajouter un attribut booléen dédié sur les spans concernés.
 
 Depuis `clt-N` et le dossier `~/tp01`, ajoutez un processor `transform/slo` à la suite de la configuration actuelle, avec `>>` à la place de `>` :
 

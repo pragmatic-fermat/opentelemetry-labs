@@ -1,16 +1,16 @@
-# Lab TP1B : Un **collector**, de l'application vers Jaeger
+# Lab TP1B : Acheminement des traces vers Jaeger avec un **collector**
 
-Ce lab est le deuxième des trois du TP1. Il se déroule dans le terminal web de `clt-N`, dans le dossier `~/tp01` qui a servi [au TP1A](Lab_TP01A_Voir_la_valeur.md). Jaeger démarre sur `srv-N`, mais toujours depuis `clt-N`, par SSH.
+Ce deuxième lab du TP1 se déroule dans le terminal web de `clt-N`, dans le dossier `~/tp01` utilisé lors du [TP1A](Lab_TP01A_Voir_la_valeur.md). Jaeger s'exécute sur `srv-N`, démarré depuis `clt-N` par SSH.
 
 # Objectifs
 
 À la fin du lab, vous saurez :
 
-- écrire la configuration d'un **collector** : un receiver OTLP, un exporter, un pipeline de traces, et la valider avant de démarrer ;
-- faire passer l'application de la console au **collector**, en ne changeant qu'une variable d'environnement ;
-- envoyer un span à la main, sans SDK, avec une requête `curl` ;
-- exporter vers Jaeger, sur une machine distante, et y retrouver les traces de l'application ;
-- diagnostiquer une panne et une lenteur après coup, depuis Jaeger, sans ouvrir de session sur le serveur applicatif.
+- configurer un **collector** de base (receiver OTLP, exporter, pipeline de traces) et valider sa configuration avant démarrage ;
+- basculer l'export de l'application vers le **collector** via une variable d'environnement ;
+- émettre un span OTLP manuellement via une requête HTTP directe ;
+- acheminer les traces vers un backend Jaeger distant et visualiser leur hiérarchie ;
+- exploiter les filtres de recherche et la vue en cascade de Jaeger pour analyser des erreurs et des temps de réponse.
 
 # Contenu
 
@@ -25,9 +25,9 @@ Ce lab est le deuxième des trois du TP1. Il se déroule dans le terminal web de
 
 ## Environnement
 
-Les machines et le dossier `~/tp01` sont ceux du [TP1A](Lab_TP01A_Voir_la_valeur.md) : les deux labs s'enchaînent sur les mêmes machines. L'application tourne toujours, ses spans sortent toujours sur la console.
+L'environnement de travail reste identique à celui du [TP1A](Lab_TP01A_Voir_la_valeur.md). L'application continue de fonctionner et ses traces sont pour le moment dirigées vers la console des conteneurs.
 
-Le schéma suivant montre la cible de ce lab : un **collector** apparaît à côté de l'application, sur `clt-N`, et envoie les traces à Jaeger, sur `srv-N`. Le navigateur consulte Jaeger directement.
+Le schéma ci-dessous illustre l'architecture cible : un **collector** local reçoit les traces applicatives sur `clt-N` et les relaie vers Jaeger sur `srv-N`. L'interface de Jaeger est consultée depuis un navigateur.
 
 ```mermaid
 ---
@@ -53,7 +53,7 @@ flowchart LR
   B([Navigateur]) -->|TCP/16686| J
 ```
 
-Le **collector** reste à côté de l'application : c'est sa place quand il ne sert qu'à transmettre. Le backend, lui, est ailleurs : il collecte les données de plusieurs applications et survit à leur recréation.
+Le **collector** s'exécute sur le même hôte que l'application afin de recevoir les données localement et de les relayer vers le backend d'observabilité, déployé sur un serveur dédié.
 
 ## 1. Un premier **collector**
 
@@ -183,7 +183,7 @@ On obtient :
 
 ## 2. L'application parle au **collector**
 
-L'application écrit ses spans sur la console depuis [le TP1A](Lab_TP01A_Voir_la_valeur.md), parce que la variable `OTEL_EXPORTER_OTLP_ENDPOINT` n'est pas définie. Dès qu'elle l'est, le SDK envoie les spans en OTLP/HTTP vers l'adresse qu'elle contient : c'est la seule chose qui change.
+Dans le lab précédent, l'application exportait ses spans sur la console car aucune variable de destination n'était configurée. Dès que `OTEL_EXPORTER_OTLP_ENDPOINT` est définie, le SDK bascule automatiquement ses exports vers le protocole OTLP/HTTP à l'adresse indiquée.
 
 Le compose lit cette variable dans le fichier `.env` du dossier. Créez-le, puis relancez les services avec le profil du **collector** :
 
@@ -210,15 +210,15 @@ spans sur la console : 0
 spans dans le collector : 3
 ```
 
-Trois spans : `handle_request`, `GET inventory` et `load_stock`, exactement ceux de [la partie 2 du TP1A](Lab_TP01A_Voir_la_valeur.md#2-une-commande-une-trace). Mêmes données, autre chemin : rien n'a changé dans l'application, seulement l'adresse d'export.
+On retrouve les trois spans `handle_request`, `GET inventory` et `load_stock`. Les données produites par l'application restent identiques, seul le canal de transmission a changé.
 
 > [!NOTE]
 >
-> Désormais, tout ce que vous verrez passer dans les logs du **collector** a déjà quitté l'application. Les processors que vous ajouterez [au TP1C](Lab_TP01C_Affiner_le_pipeline.md#2-les-premiers-processors) s'exécutent sur `clt-N`, avant l'envoi vers le serveur d'observabilité : ce qui doit être masqué peut l'être avant de partir.
+> Les données visibles dans les journaux du **collector** ont déjà quitté l'application. Les processors abordés dans le [TP1C](Lab_TP01C_Affiner_le_pipeline.md#2-les-premiers-processors) permettront d'agir sur ce flux au niveau de `clt-N` avant son expédition vers le serveur d'observabilité.
 
 ## 3. Un span sans SDK
 
-Jusqu'ici, les spans ont été produits par le SDK OpenTelemetry embarqué dans l'application. Un SDK fabrique un document JSON conforme au format OTLP, avec un identifiant de trace, un identifiant de span et des horodatages, puis l'envoie au **collector**. Sans SDK, on peut fabriquer ce document à la main et le poster : c'est ce que fait cette commande, tapée sur `clt-N`, pour voir ce qu'il y a derrière l'instrumentation.
+Dans les étapes précédentes, les spans étaient générés par le SDK OpenTelemetry intégré dans le code Python. Le format OTLP reposant sur des structures standardisées en JSON ou Protobuf, il est également possible d'envoyer un span manuellement via une requête HTTP directe vers le port 4318 du **collector**.
 
 ```bash
 NOW=$(date +%s%N)
@@ -253,13 +253,13 @@ On obtient :
 1
 ```
 
-Le span existe, sans SDK, sans bibliothèque, sans instrumentation : seulement un POST JSON. C'est exactement ce qu'un SDK envoie, à ceci près qu'il le fait pour chaque opération de l'application. Vous le retrouverez dans Jaeger à [la partie 4](#4-jaeger-sur-la-machine-dobservabilité).
+Cette requête illustre le format sous-jacent de l'OTLP : le SDK applicatif automatise la création de cette structure JSON (identifiants, horodatages, attributs) pour chaque opération instrumentée. Ce span apparaîtra dans Jaeger [à la partie 4](#4-jaeger-sur-la-machine-dobservabilité).
 
 ## 4. Jaeger, sur la machine d'observabilité
 
-Le **collector** affiche tout ce qu'il reçoit, mais ne garde rien : ses logs défilent, et il faut être connecté à la machine applicative pour les lire. Le backend, lui, garde et interroge.
+L'exporter `debug` utilisé jusqu'ici affiche les spans reçus dans les logs du **collector**, sans persistance. Pour stocker et indexer ces traces, il est nécessaire de raccorder le **collector** à un backend d'observabilité.
 
-Jaeger est fourni, tout-en-un, avec un stockage en mémoire. Son compose est un fichier à part, `compose-srv.yaml`, destiné à `srv-N`. Démarrez-le depuis `clt-N`, par SSH :
+Jaeger est déployé avec une persistance en mémoire à l'aide du fichier `compose-srv.yaml` sur `srv-N`. Démarrez-le depuis `clt-N` par SSH :
 
 ```bash
 ssh root@$SRV_HOST 'mkdir -p ~/tp01 && cp /root/opentelemetry-labs/config/tp01/compose-srv.yaml ~/tp01/ && cd ~/tp01 && docker compose -f compose-srv.yaml up -d'
@@ -273,11 +273,11 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://$SRV_HOST:4318/v1/traces
   -H 'Content-Type: application/x-protobuf' --data-binary ''
 ```
 
-On obtient `200` deux fois. Le premier port sert au navigateur, le second au **collector**.
+Les deux requêtes renvoient le code HTTP 200, confirmant que le port web (16686) et le port de réception OTLP (4318) sont accessibles.
 
 > [!NOTE]
 >
-> Jaeger est un backend de démonstration : sans authentification, sans TLS, joignable sur les ports publiés de la machine. En production, il serait derrière TLS, sur le réseau privé, avec une authentification devant. Il stocke les traces en mémoire : elles disparaissent si le conteneur redémarre.
+> Jaeger est déployé ici dans une configuration simplifiée de travaux pratiques : sans authentification, sans chiffrement TLS et avec stockage volatil en mémoire vive. En production, le backend est sécurisé et s'appuie sur une base de données persistante.
 
 Branchez le **collector** sur ce backend. Toujours sur `clt-N`, ajoutez un exporter `otlp_http/jaeger` à la fin de `exporters.yaml`, avec `>>` à la place de `>` :
 
@@ -333,7 +333,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces
 }'
 ```
 
-Les traces de l'application, les cinq traces de `demo` et le span de `manuel` sont parties vers Jaeger. Ouvrez l'interface depuis votre poste, dans le navigateur, sur `http://$SRV_HOST:16686` : choisissez le service `shop`, cliquez sur **Find Traces**, puis sur une trace pour lire son waterfall. Les trois spans du TP1A s'y retrouvent, avec leurs durées et leur hiérarchie.
+Les traces de l'application, les traces de test émises par `telemetrygen` et le span manuel sont désormais stockés dans Jaeger. Ouvrez l'interface depuis votre poste, dans le navigateur, sur `http://$SRV_HOST:16686` : sélectionnez le service `shop`, cliquez sur **Find Traces**, puis ouvrez une trace pour afficher sa vue en cascade. On y retrouve les trois spans avec leurs relations hiérarchiques et leurs durées respectives.
 
 ![Trace du service shop dans Jaeger, avec ses trois spans](img/tp01-jaeger-shop.png)
 
@@ -359,13 +359,13 @@ hello
 
 ## 5. Diagnostiquer à distance
 
-Reprenez les deux scénarios du [TP1A](Lab_TP01A_Voir_la_valeur.md), mais cette fois sans regarder la console : pas de `docker compose logs`, pas de `jq` sur la sortie des conteneurs. Tout se passe dans le navigateur, sur `http://$SRV_HOST:16686`, et tout se passe après coup : les traces y sont déjà quand vous cherchez.
+Reprenez les deux scénarios du [TP1A](Lab_TP01A_Voir_la_valeur.md) en vous appuyant cette fois sur l'interface web de Jaeger (`http://$SRV_HOST:16686`), sans consulter les journaux des conteneurs.
 
-Un mot sur le rôle de chacun. Les commandes qui suivent, toujours tapées sur `clt-N`, arrêtent `inventory` ou activent son mode lent : elles simulent ce qui se passe en production, ou ce qu'un collègue provoque sur une machine où vous n'avez pas accès. Une fois l'incident déclenché, vous jouez l'astreinte : laissez l'onglet du terminal de côté, et ne touchez plus qu'au navigateur, ouvert sur votre poste.
+Les commandes exécutées sur `clt-N` simulent des incidents en production (panne de service ou latence anormale). L'analyse s'effectue ensuite exclusivement depuis l'interface web de Jaeger sur votre poste, sans consulter les journaux des serveurs applicatifs.
 
 ### La panne
 
-Éteignez `inventory`, puis passez une commande qui échoue :
+Arrêtez le service `inventory`, puis envoyez une commande :
 
 ```bash
 docker compose stop inventory
@@ -373,9 +373,9 @@ docker compose stop inventory
 sleep 5
 ```
 
-On obtient `502`. Dans l'interface de Jaeger, cherchez les traces du service `shop` des deux dernières minutes : la trace fautive porte un point d'exclamation, signe d'un span en erreur. Ouvrez-la : le span `GET inventory` est en erreur, et son parent `handle_request` l'est aussi. La cause est visible sans avoir rien vu en direct.
+La requête échoue avec un code HTTP 502. Dans l'interface de Jaeger, recherchez les traces du service `shop` sur les deux dernières minutes. La trace en échec se signale par un marqueur d'erreur. En l'ouvrant, on constate que le span client `GET inventory` est en erreur, ce qui a propagé le statut d'erreur sur le span parent `handle_request`.
 
-En ligne de commande, la même trace se retrouve par son statut :
+En ligne de commande, la même trace s'obtient via l'API de Jaeger :
 
 ```bash
 curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
@@ -401,9 +401,9 @@ sleep 5
 sleep 5
 ```
 
-Dans l'interface de Jaeger, la trace de cette commande sort du lot : sa durée, trois secondes, la rend immédiatement repérable dans la liste. Le waterfall montre où sont passées ces trois secondes : dans `load_stock`, sur `inventory`. Le raisonnement du [TP1A](Lab_TP01A_Voir_la_valeur.md#4-une-lenteur), mais dans une interface qui garde et qui trie.
+Dans Jaeger, la trace correspondant à cette commande affiche une durée supérieure à trois secondes. Le diagramme en cascade met en évidence la répartition du temps : l'attente se concentre dans l'opération `load_stock` sur le service `inventory`.
 
-En ligne de commande, la recherche de Jaeger sait filtrer par durée. La commande suivante place la durée en tête de ligne, arrondie à la milliseconde, pour que `sort -rn` puisse trier dessus :
+En ligne de commande, la recherche de Jaeger permet d'isoler cette trace par durée minimale. La commande suivante place la durée en début de ligne pour trier facilement le résultat :
 
 ```bash
 curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)&query.minDuration=2s" \
@@ -425,15 +425,15 @@ La racine et l'appel HTTP affichent la même durée arrondie : l'un contient l'a
 docker compose up -d inventory
 ```
 
-### Ce que ce chemin change
+### Bilan de l'acheminement des traces
 
-Reprenez la question posée à la fin du [TP1A](Lab_TP01A_Voir_la_valeur.md#ce-que-la-console-ne-fait-pas) : que se passe-t-il avec 50 requêtes par seconde et dix services ?
+L'utilisation conjointe du **collector** et d'un backend dédié répond aux limites de l'analyse en console observées dans le [TP1A](Lab_TP01A_Voir_la_valeur.md#limites-de-lexport-console) :
 
-- Les traces sont **gardées** : celle de 14 h 03 se retrouve autant que celle d'il y a une minute, sans être connecté à la machine au moment où elle a eu lieu.
-- Elles sont **recherchables** : par service, par durée, par statut d'erreur.
-- Elles sont **lisibles** : le waterfall montre l'arbre des spans, et l'imbrication des durées remonte du symptôme à la cause.
-- Et le diagnostic est **à distance** : une fois les données envoyées, vous n'avez plus besoin de vous connecter au serveur applicatif. Les commandes de cette partie ont simulé la production ; le diagnostic, lui, n'a utilisé que le navigateur.
+- Les traces sont conservées et indexées indépendamment de l'état des conteneurs applicatifs.
+- Les requêtes d'analyse permettent de filtrer rapidement par service, durée d'exécution ou statut d'erreur.
+- La visualisation en cascade restitue la chronologie et les relations parent-enfant sans manipulation manuelle de données textuelles.
+- Le diagnostic s'opère à distance sans accès direct à l'environnement d'exécution applicatif.
 
-L'application, elle, ne connaît que le **collector** : l'adresse d'un exporter est sa seule connaissance du système d'observabilité. Changer de backend ne la concerne pas.
+De plus, l'application reste découplée du backend d'observabilité : elle communique uniquement avec son **collector** local. Une modification d'infrastructure ou de backend de stockage s'effectue dans la configuration du **collector**, sans impacter le code ni le déploiement applicatif.
 
-La suite, [le TP1C](Lab_TP01C_Affiner_le_pipeline.md), part d'un constat que vous avez peut-être déjà fait dans Jaeger : il y a du bruit.
+Le [TP1C](Lab_TP01C_Affiner_le_pipeline.md) aborde la suite de ce traitement : l'application de filtres et de transformations sur les données en transit dans le **collector**.

@@ -1,20 +1,20 @@
 # Lab TP1 : Socle, premier **collector** et processors
 
-Le TP1 se déroule en trois labs, qui s'enchaînent sur les mêmes machines :
+Le TP1 comprend trois parties consécutives sur le même environnement :
 
-- [TP1A : Voir la valeur](Lab_TP01A_Voir_la_valeur.md) : la télémétrie d'une application s'affiche dans la console, sans **collector** ni backend. Vous lisez et analysez les spans en ligne de commande.
-- [TP1B : Un **collector**, de l'application vers Jaeger](Lab_TP01B_Collector_vers_Jaeger.md) : un **collector** basique reçoit les traces de l'application et les envoie à Jaeger, sur une autre machine. Vous diagnostiquez à distance, depuis le navigateur.
-- [TP1C : Affiner le pipeline](Lab_TP01C_Affiner_le_pipeline.md) : Jaeger montre du bruit. Vous le retirez avec les processors `filter`, `transform` et le langage OTTL, avec un avant et un après visibles.
+- [TP1A : Voir la valeur](Lab_TP01A_Voir_la_valeur.md) aborde la lecture directe des spans générés par une application sur sa sortie standard, sans composant intermédiaire.
+- [TP1B : Un **collector**, de l'application vers Jaeger](Lab_TP01B_Collector_vers_Jaeger.md) met en place un **collector** local pour transférer ces traces vers une instance Jaeger distante.
+- [TP1C : Affiner le pipeline](Lab_TP01C_Affiner_le_pipeline.md) introduit des processors pour filtrer les requêtes de santé et restructurer les attributs avec OTTL.
 
 # Objectifs
 
 À la fin du TP1, vous saurez :
 
-- lire la télémétrie d'une application instrumentée, retrouver un span racine, ses enfants, une panne et une lenteur, d'abord dans la console puis dans l'interface de Jaeger ;
-- écrire la configuration d'un **collector** : un receiver OTLP, des exporters, et un pipeline de traces ;
-- diagnostiquer une application à distance, depuis un serveur d'observabilité, sans ouvrir de session sur le serveur applicatif ;
-- ajouter les processors `memory_limiter`, `batch` et `resource`, et expliquer pourquoi leur ordre compte ;
-- supprimer des spans avec le processor `filter`, puis masquer et normaliser des attributs avec le processor `transform` et le langage OTTL.
+- analyser les traces d'une application instrumentée (identification du span racine, hiérarchie des spans, repérage d'erreurs et de latences) dans la console puis dans Jaeger ;
+- configurer un **collector** de base avec son receiver OTLP, ses exporters et son pipeline de traces ;
+- consulter et analyser des traces à distance via l'interface Jaeger ;
+- ordonner et paramétrer les processors (`memory_limiter`, `resource`, `batch`) dans un pipeline de traces ;
+- filtrer des spans indésirables avec `filter` et restructurer des attributs avec `transform` en syntaxe OTTL.
 
 # Contenu
 
@@ -28,7 +28,7 @@ Le TP1 se déroule en trois labs, qui s'enchaînent sur les mêmes machines :
 
 Le TP1 se déroule sur deux machines : `clt-N` et `srv-N`, où N est votre numéro de participant.
 
-`clt-N` joue le rôle du serveur applicatif : c'est là que tournent l'application et le **collector**. `srv-N` joue le rôle du serveur d'observabilité : c'est là que tourne Jaeger. Cette répartition est celle de tout le TP1, et c'est elle qui permet de diagnostiquer l'application sans se connecter à sa machine.
+`clt-N` héberge l'application et le **collector**. `srv-N` héberge le backend Jaeger. Cette séparation permet d'observer et d'analyser le comportement de l'application depuis le serveur d'observabilité.
 
 Vous travaillez depuis le terminal web de `clt-N`, dans `/root`. Le dépôt des labs y est déjà cloné, dans `/root/opentelemetry-labs`. Les commandes destinées à `srv-N` passent par SSH depuis `clt-N` : la clé de `root` y donne accès sans mot de passe.
 
@@ -144,12 +144,12 @@ flowchart LR
   B([Navigateur]) -->|TCP/16686| J
 ```
 
-Le chemin des données évolue au fil des labs. En 1A, les spans sortent sur la console des conteneurs, et le schéma se réduit à l'application. En 1B, le **collector** apparaît à côté de l'application et envoie vers Jaeger, sur `srv-N`. En 1C, le pipeline du **collector** se remplit de processors, qui s'exécutent tous sur `clt-N`, avant l'envoi : les données partent déjà traitées vers le serveur d'observabilité.
+L'architecture évolue progressivement : dans le lab 1A, les conteneurs écrivent directement leurs spans dans leurs journaux. Le lab 1B introduit le **collector** sur `clt-N` pour expédier les données vers Jaeger sur `srv-N`. Enfin, le lab 1C insère plusieurs processors dans le **collector** afin de nettoyer et enrichir les traces localement avant leur envoi.
 
 ## Le signal traces
 
-Ce TP ne traite que le signal traces. Les métriques et les logs d'application arrivent plus tard dans la formation : chaque lab se concentre sur un sujet, et les trois signaux n'ont rien à gagner à être vus en même temps.
+Ce TP se concentre sur les traces. Les métriques et les logs d'application sont abordés dans les TP suivants afin d'étudier chaque signal séparément.
 
-Le backend, Jaeger, ne sert qu'à montrer les résultats : il est fourni, tout-en-un, avec un stockage en mémoire. Vous n'écrivez aucune configuration de backend dans ce TP.
+Jaeger est déployé ici comme backend de visualisation avec un stockage en mémoire. Sa configuration est préétablie dans les fichiers du lab.
 
 Commencez par [le TP1A](Lab_TP01A_Voir_la_valeur.md).

@@ -23,9 +23,9 @@ Ce lab est le premier des trois du TP1. Il se déroule sur `clt-N`, dans le doss
 
 ## Environnement
 
-L'application tient dans le dossier `app/` du TP : deux services Python, `shop` et `inventory`. `shop` reçoit les commandes (`POST /orders`), `inventory` répond aux demandes de stock (`GET /stock/<sku>`). Les deux sont instrumentées avec le SDK OpenTelemetry, et leurs spans sortent sur la sortie standard des conteneurs, un objet JSON par ligne.
+L'application tient dans le dossier `app/` du TP : deux services Python, `shop` et `inventory`. `shop` reçoit les commandes (`POST /orders`), `inventory` répond aux demandes de stock (`GET /stock/<sku>`). Les deux sont déjà instrumentées avec le SDK OpenTelemetry, et leurs spans sortent sur la sortie standard des conteneurs, un objet JSON par ligne.
 
-L'application compose les versions futures de vous deux : le SDK est déjà en place, vous ne configurez rien d'OpenTelemetry dans ce lab. Vous lisez ce que l'instrumentation produit.
+L'application est déjà instrumentée : le SDK est en place, vous ne configurez rien d'OpenTelemetry dans ce lab, vous lisez ce que l'instrumentation produit.
 
 Le schéma suivant montre le chemin des données dans ce lab : une commande traverse les deux services, et chaque span finit sur la sortie standard du conteneur qui l'a produit.
 
@@ -139,7 +139,7 @@ trace_id=6bfdff188ca025b3179e4f0aacb62cac
 {"name":"handle_request","service":"shop","parent_span_id":null,"duration_ms":49.54}
 ```
 
-Les durées se lisent de la plus courte à la plus longue en remontant vers le racine : le temps de `shop` (49,54 ms) contient l'appel vers `inventory` (48,86 ms), qui contient le traitement côté `inventory` (44,39 ms). Trois millisecondes séparent le racine de son enfant : c'est le temps passé dans `shop` lui-même.
+Les durées se lisent de la plus courte à la plus longue en remontant vers la racine : le temps de `shop` (49,54 ms) contient l'appel vers `inventory` (48,86 ms), qui contient le traitement côté `inventory` (44,39 ms). Trois millisecondes séparent le racine de son enfant : c'est le temps passé dans `shop` lui-même.
 
 Passez une commande qui échoue côté métier, avec un article en stock insuffisant :
 
@@ -196,25 +196,27 @@ On obtient :
 
 ```text
 {"name":"GET inventory","service":"shop","attributes":{"http.request.method":"GET","server.address":"inventory"}}
-{"name":"handle_request","service":"shop","attributes":{"http.request.method":"POST","http.route":"/orders","url.path":"/orders/49316","order.sku":"coffee","order.qty":1,"user.email":"alice@example.com","http.response.status_code":502}}
+{"name":"handle_request","service":"shop","attributes":{"http.request.method":"POST","http.route":"/orders","url.path":"/orders/52561","order.sku":"coffee","order.qty":1,"user.email":"alice@example.com","http.response.status_code":502}}
 ```
 
-Deux spans en erreur : le racine, et l'appel vers `inventory`. Le message d'erreur complet est dans les logs du SDK, mais l'essentiel est là : la commande a échoué parce que l'appel vers `inventory` a échoué, et non à cause du traitement de la commande.
+Deux spans en erreur : le racine, et l'appel vers `inventory`. Le 502 est celui que `shop` renvoie à l'utilisateur ; la cause, une connexion impossible vers `inventory`, est dans le span en erreur et dans le log applicatif.
 
-Retrouvez aussi la ligne de log correspondante, grâce à l'identifiant de trace que portent les logs :
+Retrouvez aussi la ligne de log correspondante, grâce à l'identifiant de trace que portent les logs. Le filtre `' (INFO|ERROR) '` garde les lignes de log, qui portent le niveau entouré d'espaces, et écarte les lignes JSON, où le statut est écrit `"ERROR"` entre guillemets :
 
 ```bash
 TRACE=$(docker compose logs --no-log-prefix shop \
   | jq -rR 'fromjson? | select(.status=="ERROR") | .trace_id' | tail -1)
-docker compose logs --no-log-prefix shop inventory | grep "$TRACE" | grep INFO
+docker compose logs --no-log-prefix shop inventory | grep "$TRACE" | grep -E ' (INFO|ERROR) '
 ```
 
 On obtient :
 
 ```text
-2026-11-22 05:10:07,510 INFO shop.orders [dbf320184f73b4f509dc3cf1d9e303b9] order received sku=coffee qty=1 customer=alice
-2026-11-22 05:10:07,516 ERROR shop.orders [dbf320184f73b4f509dc3cf1d9e303b9] inventory unavailable: 502 Server Error: ...
+2026-11-22 18:43:32,062 INFO shop.orders [cf7348e901f1da10aefca980be88e73d] order received sku=coffee qty=1 customer=alice
+2026-11-22 18:43:32,077 ERROR shop.orders [cf7348e901f1da10aefca980be88e73d] inventory unavailable: HTTPConnectionPool(host='inventory', port=8081): Max retries exceeded with url: /stock/coffee (Caused by NameResolutionError("HTTPConnection(host='inventory', port=8081): Failed to resolve 'inventory' ([Errno -3] Temporary failure in name resolution)"))
 ```
+
+Le log dit la même chose que le span, avec plus de détail : `shop` n'a pas pu joindre `inventory`, faute de résolution du nom. La panne est bien celle du scénario, et non une erreur de la commande.
 
 Redémarrez `inventory` pour la suite :
 

@@ -108,6 +108,7 @@ Aucun service n'est démarré à ce stade : chaque lab démarre ce dont il a bes
 | **collector** OpenTelemetry (distribution `otelcol-contrib`) | 0.165.0 |
 | telemetrygen | v0.165.0 |
 | Jaeger | 2.23.0 |
+| curl (image des sondes de santé) | 8.11.0 |
 | Application (image `python:3.13.18-slim`, Flask 3.1.3) | SDK OpenTelemetry 1.45.2 |
 
 > [!TIP]

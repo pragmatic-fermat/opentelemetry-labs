@@ -63,7 +63,11 @@ Laissez tourner une minute, puis passez deux commandes :
 sleep 5
 ```
 
-Dans Jaeger, cherchez les traces du service `shop` de la dernière minute. Vous voyez la trace des deux commandes, entourées de dizaines de traces de sondes. Ouvrez la trace d'une commande : son span racine s'appelle `handle_request`, un nom qui ne dit rien de la requête, et ses attributs montrent une adresse électronique en clair (`alice@example.com`) et un chemin qui porte un identifiant (`/orders/39211`, différent à chaque commande).
+Dans Jaeger, cherchez les traces du service `shop` de la dernière minute. Vous voyez les traces des deux commandes, entourées d'une douzaine de traces de sondes par minute. Ouvrez la trace d'une commande : son span racine s'appelle `handle_request`, un nom qui ne dit rien de la requête, et ses attributs montrent une adresse électronique en clair (`alice@example.com`) et un chemin qui porte un identifiant (`/orders/39211`, différent à chaque commande).
+
+> [!NOTE]
+>
+> Ces trois choix, le nom `handle_request`, l'attribut `user.email` et le chemin avec identifiant, sont des choix de démonstration : ils fabriquent le bruit que ce lab retire. Ce ne sont pas des conventions sémantiques à imiter dans vos applications.
 
 En ligne de commande, le décompte du bruit :
 
@@ -78,7 +82,7 @@ On obtient, à quelques unités près selon le moment :
 11
 ```
 
-Onze des dix-sept spans de la minute sont des sondes : onze de sondes, six pour les deux commandes. Ce bruit a deux coûts, que la slide « Coûts » du cours résume : il consomme du stockage pour des données qui n'aideront jamais personne, et il pollue les recherches : un chemin différent par commande (`/orders/39211`, puis `/orders/48151`) crée autant de valeurs distinctes que de commandes passées, ce qui rend les regroupements impossibles.
+Onze des dix-sept spans de la minute sont des sondes, les six autres sont les deux commandes. Ce bruit a deux coûts, que la slide « Coûts » du cours résume : il consomme du stockage pour des données qui n'aideront jamais personne, et il pollue les recherches : un chemin différent par commande (`/orders/39211`, puis `/orders/48151`) crée autant de valeurs distinctes que de commandes passées, ce qui rend les regroupements impossibles.
 
 Les trois parties qui suivent traitent ces trois problèmes, un processor à la fois, avec un avant et un après visibles dans Jaeger.
 
@@ -369,7 +373,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resource, transform/normalize, transform/slo, batch]
+      processors: [memory_limiter, resource, filter/healthchecks, transform/normalize, transform/slo, batch]
       exporters: [debug, otlp_http/jaeger]
 EOF
 ```
@@ -388,7 +392,20 @@ sleep 5
 ./order.sh coffee 1 alice
 docker compose stop inventory
 ./order.sh coffee 1 alice
-sleep 3
+sleep 6
+```
+
+Les sondes de santé tournent toujours : vérifiez qu'aucune n'a traversé le nouveau pipeline, en reprenant le filtre d'[à la partie 3](#3-supprimer-les-sondes-avec-le-filter), sur deux minutes cette fois :
+
+```bash
+curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '2 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+  | jq '[.result.resourceSpans[].scopeSpans[].spans[] | select(.attributes[]? | select(.key=="http.route" and .value.stringValue=="/health"))] | length'
+```
+
+On obtient :
+
+```text
+0
 ```
 
 Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), les spans en erreur du service `shop` portent l'attribut `slo.violation` à `true`, et les commandes réussies ne le portent pas. Le filtre de la liste de Jaeger permet de ne garder que ces traces, en ajoutant `slo.violation=true` dans le champ des attributs.
@@ -400,7 +417,12 @@ curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.star
   | jq -r '.result.resourceSpans[] | .scopeSpans[].spans[] | select(.status.code==2) | [.attributes[] | select(.key=="slo.violation") | .value.boolValue] | join("")'
 ```
 
-On obtient `true` pour chaque span en erreur.
+On obtient `true` pour chaque span en erreur, ici les deux spans de la commande qui a suivi l'arrêt d'`inventory` :
+
+```text
+true
+true
+```
 
 ## Cleanup
 

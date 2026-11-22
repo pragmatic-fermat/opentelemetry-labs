@@ -7,7 +7,7 @@ Ce lab est le deuxième des trois du TP1. Il se déroule dans le terminal web de
 À la fin du lab, vous saurez :
 
 - écrire la configuration d'un **collector** : un receiver OTLP, un exporter, un pipeline de traces, et la valider avant de démarrer ;
-- faire quitter l'application la console pour le **collector**, en ne changeant qu'une variable d'environnement ;
+- faire passer l'application de la console au **collector**, en ne changeant qu'une variable d'environnement ;
 - envoyer un span à la main, sans SDK, avec une requête `curl` ;
 - exporter vers Jaeger, sur une machine distante, et y retrouver les traces de l'application ;
 - diagnostiquer une panne et une lenteur après coup, depuis Jaeger, sans ouvrir de session sur le serveur applicatif.
@@ -359,7 +359,9 @@ hello
 
 ## 5. Diagnostiquer à distance
 
-Reprenez les deux scénarios du [TP1A](Lab_TP01A_Voir_la_valeur.md), mais cette fois sans regarder la console : pas de `docker compose logs`, pas de `jq` sur la sortie des conteneurs. Tout se passe dans le navigateur, sur `http://$SRV_HOST:16686`, comme si vous étiez chez vous, loin du serveur applicatif. Et tout se passe après coup : les traces y sont déjà quand vous cherchez.
+Reprenez les deux scénarios du [TP1A](Lab_TP01A_Voir_la_valeur.md), mais cette fois sans regarder la console : pas de `docker compose logs`, pas de `jq` sur la sortie des conteneurs. Tout se passe dans le navigateur, sur `http://$SRV_HOST:16686`, et tout se passe après coup : les traces y sont déjà quand vous cherchez.
+
+Un mot sur le rôle de chacun. Les commandes qui suivent, arrêter `inventory`, activer son mode lent, simulent ce qui se passe en production, ou ce qu'un collègue provoque sur une machine où vous n'avez pas accès. Une fois l'incident déclenché, vous jouez l'astreinte : laissez l'onglet du terminal de côté, et ne touchez plus qu'au navigateur.
 
 ### La panne
 
@@ -371,7 +373,7 @@ docker compose stop inventory
 sleep 5
 ```
 
-On obtient `502`. Dans l'interface de Jaeger, cherchez les traces du service `shop` des deux dernières minutes : la trace fautive porte un point d'exclamation, signe d'un span en erreur. Ouvrez-la : le span `GET inventory` est en erreur, et son parent `POST /orders/{id}` l'est aussi. La cause est visible sans avoir rien vu en direct.
+On obtient `502`. Dans l'interface de Jaeger, cherchez les traces du service `shop` des deux dernières minutes : la trace fautive porte un point d'exclamation, signe d'un span en erreur. Ouvrez-la : le span `GET inventory` est en erreur, et son parent `handle_request` l'est aussi. La cause est visible sans avoir rien vu en direct.
 
 En ligne de commande, la même trace se retrouve par son statut :
 
@@ -401,23 +403,23 @@ sleep 5
 
 Dans l'interface de Jaeger, la trace de cette commande sort du lot : sa durée, trois secondes, la rend immédiatement repérable dans la liste. Le waterfall montre où sont passées ces trois secondes : dans `load_stock`, sur `inventory`. Le raisonnement du [TP1A](Lab_TP01A_Voir_la_valeur.md#4-une-lenteur), mais dans une interface qui garde et qui trie.
 
-En ligne de commande, la recherche de Jaeger sait filtrer par durée :
+En ligne de commande, la recherche de Jaeger sait filtrer par durée. La commande suivante place la durée en tête de ligne, arrondie à la milliseconde, pour que `sort -rn` puisse trier dessus :
 
 ```bash
 curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)&query.minDuration=2s" \
-  | jq -r '.result.resourceSpans[] | .scopeSpans[].spans[] | "\(.name) \(((.endTimeUnixNano|tonumber) - (.startTimeUnixNano|tonumber))/1000000)ms"' \
+  | jq -r '.result.resourceSpans[] | .scopeSpans[].spans[] | "\(((.endTimeUnixNano|tonumber) - (.startTimeUnixNano|tonumber))/1000000 | round)ms \(.name)"' \
   | sort -rn | head -3
 ```
 
 On obtient :
 
 ```text
-handle_request 3085.499392ms
-GET inventory 3061.4ms
-load_stock 3050.06ms
+3022ms handle_request
+3022ms GET inventory
+3016ms load_stock
 ```
 
-Le span le plus lent est le racine, mais il ne fait que contenir les autres : la cause est `load_stock`. Remettez le service rapide :
+La racine et l'appel HTTP affichent la même durée arrondie : l'un contient l'autre, et ce qui les sépare se compte en microsecondes. La cause est `load_stock`, sur `inventory`. Remettez le service rapide :
 
 ```bash
 docker compose up -d inventory
@@ -430,7 +432,7 @@ Reprenez la question posée à la fin du [TP1A](Lab_TP01A_Voir_la_valeur.md#ce-q
 - Les traces sont **gardées** : celle de 14 h 03 se retrouve autant que celle d'il y a une minute, sans être connecté à la machine au moment où elle a eu lieu.
 - Elles sont **recherchables** : par service, par durée, par statut d'erreur.
 - Elles sont **lisibles** : le waterfall montre l'arbre des spans, et l'imbrication des durées remonte du symptôme à la cause.
-- Et le diagnostic est **à distance** : dans tout ce lab, vous n'avez pas ouvert de session sur le serveur applicatif autrement que pour y démarrer et arrêter des services. Observer ne demande pas de s'y connecter.
+- Et le diagnostic est **à distance** : une fois les données envoyées, vous n'avez plus besoin de vous connecter au serveur applicatif. Les commandes de cette partie ont simulé la production ; le diagnostic, lui, n'a utilisé que le navigateur.
 
 L'application, elle, ne connaît que le **collector** : l'adresse d'un exporter est sa seule connaissance du système d'observabilité. Changer de backend ne la concerne pas.
 

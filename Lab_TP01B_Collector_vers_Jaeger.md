@@ -218,7 +218,7 @@ Trois spans : `handle_request`, `GET inventory` et `load_stock`, exactement ceux
 
 ## 3. Un span sans SDK
 
-Jusqu'ici, les spans ont été produits par le SDK OpenTelemetry embarqué dans l'application. Un SDK fabrique un document JSON conforme au format OTLP, avec un identifiant de trace, un identifiant de span et des horodatages, puis l'envoie au **collector**. Sans SDK, on peut fabriquer ce document à la main et le poster : c'est ce que fait cette commande, pour voir ce qu'il y a derrière l'instrumentation.
+Jusqu'ici, les spans ont été produits par le SDK OpenTelemetry embarqué dans l'application. Un SDK fabrique un document JSON conforme au format OTLP, avec un identifiant de trace, un identifiant de span et des horodatages, puis l'envoie au **collector**. Sans SDK, on peut fabriquer ce document à la main et le poster : c'est ce que fait cette commande, tapée sur `clt-N`, pour voir ce qu'il y a derrière l'instrumentation.
 
 ```bash
 NOW=$(date +%s%N)
@@ -279,7 +279,7 @@ On obtient `200` deux fois. Le premier port sert au navigateur, le second au **c
 >
 > Jaeger est un backend de démonstration : sans authentification, sans TLS, joignable sur les ports publiés de la machine. En production, il serait derrière TLS, sur le réseau privé, avec une authentification devant. Il stocke les traces en mémoire : elles disparaissent si le conteneur redémarre.
 
-Branchez le **collector** sur ce backend. Ajoutez un exporter `otlp_http/jaeger` à la fin de `exporters.yaml`, avec `>>` à la place de `>` :
+Branchez le **collector** sur ce backend. Toujours sur `clt-N`, ajoutez un exporter `otlp_http/jaeger` à la fin de `exporters.yaml`, avec `>>` à la place de `>` :
 
 ```bash
 cat >> otelcol/exporters.yaml <<EOF
@@ -333,7 +333,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces
 }'
 ```
 
-Les traces de l'application, les cinq traces de `demo` et le span de `manuel` sont parties vers Jaeger. Ouvrez l'interface dans votre navigateur, sur `http://$SRV_HOST:16686` : choisissez le service `shop`, cliquez sur **Find Traces**, puis sur une trace pour lire son waterfall. Les trois spans du TP1A s'y retrouvent, avec leurs durées et leur hiérarchie.
+Les traces de l'application, les cinq traces de `demo` et le span de `manuel` sont parties vers Jaeger. Ouvrez l'interface depuis votre poste, dans le navigateur, sur `http://$SRV_HOST:16686` : choisissez le service `shop`, cliquez sur **Find Traces**, puis sur une trace pour lire son waterfall. Les trois spans du TP1A s'y retrouvent, avec leurs durées et leur hiérarchie.
 
 ![Trace du service shop dans Jaeger, avec ses trois spans](img/tp01-jaeger-shop.png)
 
@@ -361,7 +361,7 @@ hello
 
 Reprenez les deux scénarios du [TP1A](Lab_TP01A_Voir_la_valeur.md), mais cette fois sans regarder la console : pas de `docker compose logs`, pas de `jq` sur la sortie des conteneurs. Tout se passe dans le navigateur, sur `http://$SRV_HOST:16686`, et tout se passe après coup : les traces y sont déjà quand vous cherchez.
 
-Un mot sur le rôle de chacun. Les commandes qui suivent, arrêter `inventory`, activer son mode lent, simulent ce qui se passe en production, ou ce qu'un collègue provoque sur une machine où vous n'avez pas accès. Une fois l'incident déclenché, vous jouez l'astreinte : laissez l'onglet du terminal de côté, et ne touchez plus qu'au navigateur.
+Un mot sur le rôle de chacun. Les commandes qui suivent, toujours tapées sur `clt-N`, arrêtent `inventory` ou activent son mode lent : elles simulent ce qui se passe en production, ou ce qu'un collègue provoque sur une machine où vous n'avez pas accès. Une fois l'incident déclenché, vous jouez l'astreinte : laissez l'onglet du terminal de côté, et ne touchez plus qu'au navigateur, ouvert sur votre poste.
 
 ### La panne
 

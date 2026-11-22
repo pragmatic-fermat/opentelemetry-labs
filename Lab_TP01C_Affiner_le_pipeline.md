@@ -30,7 +30,7 @@ Les processors de ce lab s'exécutent tous sur `clt-N`, dans le **collector**, a
 
 ## 1. Du bruit dans Jaeger
 
-Ouvrez Jaeger dans le navigateur (`http://$SRV_HOST:16686`). Il contient encore les traces des parties précédentes, dont les sondes que vous allez ajouter maintenant : pour lire un avant et un après sans mélanger, repartez d'un Jaeger vide. Les traces sont en mémoire, un redémarrage du conteneur suffit :
+Ouvrez Jaeger dans le navigateur (`http://$SRV_HOST:16686`). Il contient encore les traces des parties précédentes, dont les sondes que vous allez ajouter maintenant : pour lire un avant et un après sans mélanger, repartez d'un Jaeger vide. Les traces sont en mémoire, un redémarrage du conteneur suffit, toujours depuis `clt-N`, par SSH :
 
 ```bash
 ssh root@$SRV_HOST 'cd ~/tp01 && docker compose -f compose-srv.yaml restart jaeger'
@@ -224,7 +224,7 @@ docker compose restart otelcol
 sleep 60
 ```
 
-Comptez les spans de sondes arrivés dans Jaeger pendant cette minute, puis vérifiez que la commande passée pendant la même fenêtre est bien arrivée :
+Depuis `clt-N`, comptez les spans de sondes arrivés dans Jaeger pendant cette minute, puis vérifiez que la commande passée pendant la même fenêtre est bien arrivée :
 
 ```bash
 ./order.sh coffee 1 alice
@@ -354,7 +354,7 @@ Le pipeline du **collector** a maintenant sa forme finale : un receiver, cinq pr
 
 Les traces en erreur ont été visibles à deux reprises dans ce TP : la panne d'`inventory` [au TP1B](Lab_TP01B_Collector_vers_Jaeger.md#5-diagnostiquer-à-distance), les commandes refusées par le métier [au TP1A](Lab_TP01A_Voir_la_valeur.md#3-une-panne-franche). Un système de supervision qui voudrait compter ces traces chercherait un attribut bien choisi, plutôt qu'à relire chaque span.
 
-Ajoutez un processor `transform/slo` à la suite de la configuration actuelle, avec `>>` à la place de `>` :
+Depuis `clt-N` et le dossier `~/tp01`, ajoutez un processor `transform/slo` à la suite de la configuration actuelle, avec `>>` à la place de `>` :
 
 ```bash
 cat >> otelcol/processors.yaml <<'EOF'

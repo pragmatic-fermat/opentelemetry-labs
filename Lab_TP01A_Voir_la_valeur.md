@@ -42,7 +42,7 @@ flowchart LR
 
 ## 1. Démarrer l'application
 
-Depuis `~/tp01`, démarrez les deux services :
+Sur `clt-N`, depuis `~/tp01`, démarrez les deux services :
 
 ```bash
 docker compose up -d

@@ -1,5 +1,5 @@
-# Collector du TP7 : reçoit les traces et les logs des deux services en OTLP/HTTP,
-# envoie les traces à Jaeger et les logs à Loki (endpoint OTLP natif de Loki).
+# Collector du TP7 : reçoit les traces des deux services en OTLP/HTTP et OTLP/gRPC,
+# puis les exporte vers Jaeger.
 receivers:
   otlp:
     protocols:
@@ -19,8 +19,6 @@ exporters:
     endpoint: jaeger:4317
     tls:
       insecure: true
-  otlp_http/loki:
-    endpoint: http://loki:3100/otlp
 
 service:
   pipelines:
@@ -28,7 +26,3 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlp_grpc/jaeger, debug]
-    logs:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp_http/loki, debug]

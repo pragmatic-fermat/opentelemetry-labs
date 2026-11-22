@@ -1150,7 +1150,7 @@ k8s.node.name=cluster-worker
 
 Ces attributs viennent de deux sources complémentaires : l'**agent** les ajoute par le processor `k8s_attributes` pour les données qu'il reçoit, et l'**operator** les injecte dans `OTEL_RESOURCE_ATTRIBUTES` au moment de la création du pod, avec `k8s.container.name` et `k8s.deployment.name`. Le namespace, lui, apparaît dans les deux chemins, ce qui explique qu'il soit présent même sur un pod instrumenté avant l'**agent**.
 
-Le troisième signal, les métriques, n'est pas exporté dans ce TP : il n'y a pas de backend de métriques sur `srv-N`, et le pipeline `metrics` du chart reste sur l'exporter `debug`. L'attribut y serait identique, puisque les métriques du SDK portent la même ressource que les traces. C'est [le TP1](Lab_TP01_Socle.md), avec Prometheus, qui montre ce signal de bout en bout.
+Le troisième signal, les métriques, n'est pas exporté dans ce TP : il n'y a pas de backend de métriques sur `srv-N`, et le pipeline `metrics` du chart reste sur l'exporter `debug`. L'attribut y serait identique, puisque les métriques du SDK portent la même ressource que les traces. Les métriques d'application ne sont pas traitées dans ce TP.
 
 Le résultat à retenir est donc celui-ci : `k8s.namespace.name` accompagne les logs et les traces, et il est posé de la même façon pour toutes les applications du cluster. C'est ce qui rend possible la question « cette ligne appartient-elle à l'application A ou à l'application B ? », alors que les deux portent les mêmes noms de service.
 

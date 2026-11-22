@@ -229,15 +229,6 @@ LISTEN 0      4096               *:55679            *:*
 
 Le paquet démarre le service avec sa propre configuration par défaut, qui ouvre les ports 4317 et 4318 (OTLP) mais aussi 1777 et 55679 (pprof et zpages, des interfaces de diagnostic) sur toutes les interfaces. Vous allez la remplacer par une configuration que vous maîtrisez.
 
-> [!WARNING]
->
-> Si la stack du [TP1](Lab_TP01_Socle.md) tourne encore sur `srv-N`, le service échoue au démarrage avec `bind: address already in use` sur le port 4318. Arrêtez-la avant de continuer :
-
-```bash
-ansible otel -b -m ansible.builtin.shell -a 'cd ~/tp01 && docker compose down'
-ansible otel -b -m ansible.builtin.systemd_service -a 'name=otelcol-contrib state=started'
-```
-
 ## 3. Générer la configuration avec Jinja2
 
 Jinja2 est le langage de template d'Ansible. Trois constructions suffisent pour ce TP :

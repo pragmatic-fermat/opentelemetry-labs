@@ -32,8 +32,6 @@ Machine(s) : `clt-N`.
 
 Prérequis : [TP1](Lab_TP01_Socle.md) recommandé : les backends et la configuration du **collector** du TP1 sont réutilisés pour valider le **collector** sur mesure.
 
-Durée prévue : 1/4 j (environ 2 heures de manipulation).
-
 Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 
 ## 1. Comparer les distributions core et contrib

@@ -263,7 +263,7 @@ La commande affiche `stock.insufficient`.
 
 ### Hacher l'identité avant l'export
 
-L'attribut `enduser.id` désigne une personne. Une valeur en clair, conservée des mois dans un backend, est une donnée personnelle exposée. Le masquage du [TP1](Lab_TP01_Socle.md) remplace la valeur par `***` ; ici, vous gardez la corrélation en la remplaçant par l'empreinte de sa valeur : deux commandes du même client portent la même empreinte, sans que son identité apparaisse.
+L'attribut `enduser.id` désigne une personne. Une valeur en clair, conservée des mois dans un backend, est une donnée personnelle exposée. Le masquage vu [au TP1C](Lab_TP01C_Affiner_le_pipeline.md#4-masquer-et-normaliser-avec-transform-et-ottl) remplace la valeur par `***` ; ici, vous gardez la corrélation en la remplaçant par l'empreinte de sa valeur : deux commandes du même client portent la même empreinte, sans que son identité apparaisse.
 
 Le **collector** de la pile lit `otelcol/config.yaml`. Ajoutez-lui un second fichier, que le **collector** fusionne avec le premier : les dictionnaires se complètent, et une liste, comme celle des processors d'un pipeline, est remplacée par la dernière lue.
 

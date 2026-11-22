@@ -1,7 +1,5 @@
 # TP6 - Java, Python et .NET
 
-Durée : 1/4 j
-
 Objet : auto-instrumentation sur Linux.
 
 ## Prérequis

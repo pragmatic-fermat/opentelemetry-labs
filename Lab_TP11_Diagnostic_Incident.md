@@ -31,8 +31,6 @@ Machine(s) : `clt-N` (Docker Compose) ou `k8s-N` (Helm), à confirmer à la réd
 
 Prérequis : [TP1](Lab_TP01_Socle.md) recommandé. Plusieurs TP d'instrumentation sont utiles mais non obligatoires.
 
-Durée prévue : 1/4 j (environ 2 heures de manipulation).
-
 Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 
 ## Ce que ce TP introduit, suppose et laisse

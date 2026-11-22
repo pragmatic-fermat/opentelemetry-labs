@@ -32,8 +32,6 @@ Machine(s) : `clt-N` (Docker Compose) ou `k8s-N`, à confirmer à la rédaction.
 
 Prérequis : [TP1](Lab_TP01_Socle.md) et [TP3](Lab_TP03_Kubernetes.md) recommandés (topologie **agent** et **gateway**).
 
-Durée prévue : 1/4 j (environ 2 heures de manipulation).
-
 Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 
 ## 1. Topologie **agent** et **gateway** de départ

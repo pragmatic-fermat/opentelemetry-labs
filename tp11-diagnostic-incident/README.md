@@ -1,7 +1,5 @@
 # TP11 - Diagnostic d'incident
 
-Durée : 1/4 j
-
 Objet : OpenTelemetry Demo (feature flags).
 
 ## Prérequis

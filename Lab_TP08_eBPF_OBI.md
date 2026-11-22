@@ -31,8 +31,6 @@ Machine(s) : `srv-N` (hôte Linux, noyau compatible à vérifier) et éventuelle
 
 Prérequis : [TP5](Lab_TP05_NodeJS_Nginx.md) ou [TP6](Lab_TP06_Java_Python_DotNet.md) recommandé, pour comparer avec l'auto-instrumentation.
 
-Durée prévue : 1/4 j (environ 2 heures de manipulation).
-
 Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 
 ## 1. Principe et prérequis

@@ -88,7 +88,7 @@ Le **collector** reçoit sa configuration en quatre fichiers, un par section, pa
 
 Pour retrouver les options de chaque composant, consultez son README dans le dépôt [opentelemetry-collector-contrib](https://github.com/open-telemetry/opentelemetry-collector-contrib). L'exporter `debug` est documenté dans le dépôt [opentelemetry-collector](https://github.com/open-telemetry/opentelemetry-collector).
 
-Créez le receiver `otlp`, qui accepte le HTTP (port 4318) sur toutes les interfaces du conteneur :
+Depuis `~/tp01`, créez le receiver `otlp`, qui accepte le HTTP (port 4318) sur toutes les interfaces du conteneur :
 
 ```bash
 mkdir -p otelcol

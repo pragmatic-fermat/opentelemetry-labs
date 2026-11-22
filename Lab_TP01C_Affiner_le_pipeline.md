@@ -90,7 +90,7 @@ Les trois parties qui suivent traitent ces trois problèmes, un processor à la 
 
 Les processors transforment les données entre le receiver et les exporters. Ils s'exécutent dans l'ordre où ils sont listés dans le pipeline, et cet ordre a des conséquences.
 
-Réécrivez `otelcol/processors.yaml` avec trois processors :
+Depuis `~/tp01`, réécrivez `otelcol/processors.yaml` avec trois processors :
 
 - `memory_limiter` protège le **collector** d'un dépassement de mémoire : vérification toutes les secondes, limite de 256 MiB, marge de pic de 64 MiB ;
 - `resource` ajoute deux attributs de ressource à toutes les données : `deployment.environment.name` avec la valeur `tp1`, et `lab.id` avec votre numéro. Le compose transmet déjà `LAB_ID` au conteneur : la syntaxe `${env:LAB_ID}` du **collector** lit cette variable ;

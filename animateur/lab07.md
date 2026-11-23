@@ -34,7 +34,14 @@ Le rejeu complet a été validé deux fois sur `clt-0` : le 22 novembre avec les
   - Côté shop (`app/inventory_client.py`) : l'appel `inject(headers)` insère l'en-tête W3C `traceparent`. La trace distribuée relie les deux services et totalise 4 spans (`POST /orders` -> `GET inventory` -> `GET /stock/{sku}` -> `load_stock`).
   - Test de panne (`docker compose stop inventory`) : la commande retourne 502, et le span client `GET inventory` passe en erreur avec l'événement `exception` capturé automatiquement par le bloc `with`.
 - **Captures d'écran** : les trois captures d'écran réelles du lab ont été prises avec Playwright sur l'interface Jaeger (`img/lab07-jaeger-shop-attributes.png`, `img/lab07-jaeger-trace-complete.png`, `img/lab07-jaeger-panne-exception.png`).
+- **Baggage** : la sous-section de la partie 4 a été rejouée. Le log d'`inventory` montre l'en-tête `baggage: customer.tier=gold`, et l'attribut `customer.tier` est présent sur le span `GET /stock/{sku}`. La trace reste à quatre spans et la panne d'`inventory` produit toujours le 502 et le span client en erreur.
 - **Cleanup** : `docker compose down -v --rmi local` et suppression de `~/lab07`. Tous les ports sont vérifiés libres.
+
+## Points d'attention sur le baggage
+
+- Un baggage n'est pas un attribut de span : il faut le lire dans le contexte reçu et l'écrire explicitement sur le span. L'erreur classique est de croire qu'il apparaît seul dans le backend.
+- Le baggage est transmis à tous les services en aval, y compris des services tiers. Ne pas y placer de donnée personnelle ni de secret.
+- La valeur `customer.tier=gold` du lab est une valeur de démonstration, non personnelle. Le hachage de `enduser.id` montre comment traiter une donnée personnelle avant export.
 
 ## Pièges constatés et corrections appliquées
 

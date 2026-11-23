@@ -1,4 +1,4 @@
-# Lab 4 : Ansible et Jinja2, déploiement du **collector** sur VM
+# Lab 4 : Déploiement et gestion de la configuration du **collector** via Ansible et Jinja2
 
 # Objectifs
 

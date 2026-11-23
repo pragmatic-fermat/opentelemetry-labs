@@ -29,6 +29,8 @@ Créez un workspace relié à ce dépôt (workflow par gestion de versions) et i
 
 Les autres variables (`region_name`, `clt_size`, `srv_size`, `droplet_image`, `ssh_keys`, `vpc_base_range`) ont leur valeur dans `common.auto.tfvars`, que TFC charge automatiquement. Aucun secret ne doit être écrit dans ce dossier : le jeton et le mot de passe se saisissent uniquement dans les variables du workspace.
 
+Les fichiers `cloud-init-clt.yaml` et `cloud-init-srv.yaml` restent en ASCII pur : les commentaires n'utilisent ni accents ni guillemets français. Un passage par TFC puis par l'API DigitalOcean a déjà réencodé ces fichiers en Latin-1, transformant `œ` en caractère de contrôle interdit par YAML et faisant échouer cloud-init. La règle évite de reproduire l'incident.
+
 ## Versions (vérifiées le 2026-11-19)
 
 Les paquets apt (Docker, Ansible, Caddy) sont installés sans épinglage de version : la dernière version des dépôts est utilisée à chaque création de machine. Les binaires téléchargés hors apt restent épinglés.

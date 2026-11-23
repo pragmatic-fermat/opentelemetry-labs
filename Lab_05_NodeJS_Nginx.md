@@ -1,4 +1,4 @@
-# Lab 5 : Node.js et Nginx, une trace de bout en bout
+# Lab 5 : une trace de bout en bout, de Nginx à Node.js en passant par RabbitMQ
 
 # Objectifs
 

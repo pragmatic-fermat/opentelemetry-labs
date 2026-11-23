@@ -18,11 +18,15 @@ Si le groupe est en retard, les parties 2 et 5 sont les plus démonstratives : c
 - Fluent Bit (chart 0.58.3, image 5.1.3) lit les logs des nœuds et les envoie en OTLP/HTTP à la gateway. Le preset `logsCollection` du chart du collector n'est pas utilisé : l'agent ne collecte que les traces.
 - La gateway joint `srv-N` par son nom DNS public. En production, on passerait par le réseau privé du VPC et par TLS.
 
-## Exécution validée
+## Rejeux du 21 et du 23 novembre 2026
 
-Le lab a été rejoué de bout en bout le 21 novembre 2026, sur `clt-0` (cluster KinD neuf) et `srv-0` (machine serveur nettoyée), depuis la branche de la PR. Tout le parcours a été déroulé : création du cluster, Gateway API et Traefik, déploiement des deux applications, backends en Compose sur `srv-0`, gateway, agent, Fluent Bit, requêtes LogsQL, operator, auto-instrumentation, les deux exercices de l'extra, puis le cleanup.
+Le lab a été rejoué intégralement le 23 novembre 2026 sur les machines reconstruites (`clt-0` et `srv-0`), confirmant le rejeu initial du 21 novembre. Tout le parcours a été déroulé : création du cluster KinD (1 control-plane, 3 workers), Gateway API et Traefik (DaemonSet), déploiement des deux applications, backends en Compose sur `srv-0` (Jaeger et VictoriaLogs), gateway, agent, Fluent Bit, requêtes LogsQL, operator, auto-instrumentation, puis cleanup.
 
-Résultats conformes au texte, après les corrections apportées pendant le rejeu :
+Deux corrections ont été apportées lors de ce rejeu :
+- **URL du dépôt Helm open-telemetry** : ajout du trait d'union manquant (`https://open-telemetry.github.io/opentelemetry-helm-charts`), l'ancienne URL sans trait d'union renvoyant une erreur HTTP 404.
+- **Fonction vlogs dans helpers.sh** : la fonction transmet désormais la requête LogsQL à l'endpoint `/select/logsql/query` de VictoriaLogs (`curl -s -G "http://${SRV_HOST}:9428/select/logsql/query" --data-urlencode "query=$1"`), rendant fonctionnelles les commandes `vlogs "_msg: ..."` du lab.
+
+Résultats conformes au texte :
 
 - capture `img/lab03-vlogs-logsql.png` refaite sur la nouvelle chaîne de collecte ;
 - `crd=10`, Traefik sur les quatre nœuds, `Gateway` programmée ;

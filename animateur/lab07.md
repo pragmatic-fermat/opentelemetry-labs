@@ -21,9 +21,9 @@ Le lab se déroule entièrement sur la machine cliente `clt-N` :
 
 Les composants Loki et Grafana ont été retirés de la stack pour concentrer le lab 7 exclusivement sur le signal traces (spans, attributs, événements, erreurs, propagation de contexte W3C et hachage OTTL), conformément aux objectifs du cours.
 
-## Rejeu du 22 novembre 2026 (clt-0)
+## Rejeus du 22 et du 23 novembre 2026 (clt-0)
 
-Le rejeu complet a été validé sur `clt-0` :
+Le rejeu complet a été validé deux fois sur `clt-0` : le 22 novembre avec les chemins d'origine, puis le 23 novembre après la refonte terminologique (dossier `~/lab07`, dossier fourni `config/lab07/`, projet Compose `lab07`, attribut de ressource `deployment.environment.name=lab7`). Les captures d'écran ont été refaites lors du second passage pour refléter la nouvelle valeur.
 
 - **Partie 1 (Démarrage)** : build de l'image Python et démarrage des conteneurs. Les commandes `./order.sh` retournent 201 (coffee), 409 (mug, stock insuffisant) et 404 (pizza, inconnu). Seul le service `jaeger` est enregistré dans Jaeger.
 - **Partie 2 (SDK)** : écriture de `app/telemetry.py`. Le smoke test exécuté via `docker compose exec -T shop python -` produit un span dans Jaeger sous le service `smoke-test`. Les commandes applicatives fonctionnent sans émettre de traces.

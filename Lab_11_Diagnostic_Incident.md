@@ -1,4 +1,4 @@
-# Lab 11 : diagnostic d'incident sur l'OpenTelemetry Demo
+# Lab 11 : Diagnostic d'incident sur l'OpenTelemetry Demo
 
 Statut : objectifs, contenu et concepts rédigés. Les commandes et les résultats attendus restent à écrire.
 

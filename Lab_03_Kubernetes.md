@@ -1,4 +1,4 @@
-# Lab 3 : **collector** sur Kubernetes, **gateway**, **agent** et **operator**
+# Lab 3 : **gateway** et logs sur Kubernetes, avec **agent** et **operator**
 
 # Objectifs
 

@@ -7,6 +7,7 @@
 - configurer le SDK OpenTelemetry pour Python (`Resource`, `TracerProvider`, `BatchSpanProcessor`, `OTLPSpanExporter`) ;
 - créer des spans avec un type (`SpanKind`), des attributs métier et HTTP, des événements et un statut d'erreur ;
 - propager le contexte de trace entre microservices via l'en-tête W3C `traceparent` (`inject` et `extract`) ;
+- faire voyager une donnée métier d'un service à l'autre avec le baggage W3C, et connaître ses limites ;
 - anonymiser des données personnelles sensibles (`enduser.id`) au niveau du **collector** avant export vers le backend ;
 - analyser dans Jaeger la hiérarchie d'une trace distribuée et le comportement lors d'une panne réseau.
 
@@ -491,11 +492,13 @@ docker compose restart shop inventory
 sleep 4
 ```
 
-Vérifiez que la trace relie désormais les deux services et comporte quatre spans :
+Vérifiez que la trace relie désormais les deux services et comporte quatre spans. Récupérez d'abord l'identifiant de la trace de la commande qui vient d'être passée, puis interrogez cette trace :
 
 ```bash
-curl -s "http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
-  | jq -c '[.result.resourceSpans[].resource.attributes[] | select(.key=="service.name") | .value.stringValue] | sort, ([.result.resourceSpans[].scopeSpans[].spans[]] | length)'
+TID=$(curl -s "http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+  | jq -r '[.result.resourceSpans[].scopeSpans[].spans[] | select(.name=="POST /orders")] | sort_by(.startTimeUnixNano) | last | .traceId')
+curl -s "http://localhost:16686/api/v3/traces/$TID" \
+  | jq -c '([.result.resourceSpans[].resource.attributes[] | select(.key=="service.name") | .value.stringValue] | sort), ([.result.resourceSpans[].scopeSpans[].spans[]] | length)'
 ```
 
 On obtient :
@@ -508,6 +511,174 @@ On obtient :
 Dans l'interface web de Jaeger, la trace complète affiche la hiérarchie de bout en bout : `POST /orders` (serveur) appelle `GET inventory` (client), qui déclenche `GET /stock/{sku}` (serveur sur inventory), qui englobe à son tour `load_stock` (interne) :
 
 ![Trace distribuée de bout en bout reliant shop et inventory](img/lab07-jaeger-trace-complete.png)
+
+### Faire voyager une donnée avec le baggage
+
+Le baggage est un ensemble de paires clé-valeur qui voyage dans l'en-tête HTTP `baggage`, à côté de `traceparent`. Il accompagne la trace vers tous les services en aval. Il ne devient pas automatiquement un attribut de span : un service qui veut le voir dans Jaeger doit lire l'entrée dans le contexte reçu et l'écrire lui-même sur son span.
+
+Les propagateurs par défaut du SDK Python incluent `tracecontext` et `baggage`. Ni `telemetry.py` ni `compose.yaml` ne fixent `OTEL_PROPAGATORS` : l'en-tête `baggage` est donc transmis sans réglage supplémentaire.
+
+Côté `shop`, réécrivez `app/inventory_client.py` pour poser une entrée `customer.tier` avant l'appel :
+
+```bash
+cat > app/inventory_client.py <<'EOF'
+"""Client HTTP vers le service inventory pour shop.
+
+Ce module envoie les requêtes GET /stock/<sku>, crée un span client,
+et injecte le contexte de trace et le baggage dans les en-têtes HTTP.
+"""
+
+import os
+
+import requests
+from opentelemetry import baggage, trace
+from opentelemetry.propagate import inject
+from opentelemetry.trace import SpanKind
+
+INVENTORY_URL = os.environ.get("INVENTORY_URL", "http://inventory:8081")
+
+tracer = trace.get_tracer("shop.inventory_client")
+
+
+def get_stock(sku):
+    url = f"{INVENTORY_URL}/stock/{sku}"
+
+    # 1. Création d'un span client représentant l'appel HTTP sortant vers inventory.
+    # SpanKind.CLIENT indique que ce span mesure une requête émise vers un service distant.
+    with tracer.start_as_current_span("GET inventory", kind=SpanKind.CLIENT) as span:
+        span.set_attribute("http.request.method", "GET")
+        span.set_attribute("url.full", url)
+        span.set_attribute("server.address", "inventory")
+
+        # 2. Pose d'une entrée de baggage non personnelle.
+        # set_baggage() ne modifie pas le contexte courant : il renvoie un nouveau contexte.
+        ctx = baggage.set_baggage("customer.tier", "gold")
+
+        # 3. Injection du contexte W3C : inject() écrit 'traceparent' et 'baggage'
+        # dans le dictionnaire headers, en lisant le contexte qui contient le baggage.
+        headers = {}
+        inject(headers, context=ctx)
+
+        # 4. Envoi de la requête réseau avec les en-têtes enrichis.
+        resp = requests.get(url, headers=headers, timeout=2)
+        span.set_attribute("http.response.status_code", resp.status_code)
+
+        # En cas d'erreur HTTP (ex. 502 ou 500), raise_for_status() lève une exception.
+        # Le bloc 'with' intercepte cette exception et marque automatiquement le span en erreur.
+        resp.raise_for_status()
+
+        return resp.json()["stock"]
+EOF
+```
+
+La fonction `set_baggage` renvoie un nouveau contexte, car un contexte OpenTelemetry est immuable. C'est ce contexte, et non celui du span actif, qu'il faut passer à `inject` pour que l'entrée voyage avec `traceparent`.
+
+Côté `inventory`, réécrivez `app/inventory_handler.py` pour lire l'entrée et la copier sur le span serveur :
+
+```bash
+cat > app/inventory_handler.py <<'EOF'
+"""Gestionnaire des requêtes de stock pour le service inventory.
+
+Ce module intercepte GET /stock/<sku>, extrait le contexte parent W3C,
+lit le baggage, crée un span serveur et copie l'entrée de baggage sur ce span.
+"""
+
+import logging
+
+from opentelemetry import baggage, trace
+from opentelemetry.propagate import extract
+from opentelemetry.trace import SpanKind, Status, StatusCode
+
+import stock
+
+logger = logging.getLogger("inventory.handler")
+tracer = trace.get_tracer("inventory")
+
+
+def lookup(sku, headers):
+    # 1. Extraction du contexte de propagation transmis dans les en-têtes HTTP.
+    # Le contexte contient 'traceparent' et, si le service appelant en a posé, 'baggage'.
+    parent_context = extract(headers)
+
+    # 2. Lecture de l'entrée de baggage dans le contexte extrait.
+    tier = baggage.get_baggage("customer.tier", context=parent_context)
+
+    # 3. Journalisation de l'en-tête brut, pour vérifier ce qui arrive sur le réseau.
+    logger.info("baggage recu : %s", headers.get("baggage"))
+
+    # 4. Création du span serveur HTTP, rattaché au contexte parent.
+    with tracer.start_as_current_span(
+        "GET /stock/{sku}",
+        context=parent_context,
+        kind=SpanKind.SERVER,
+    ) as span:
+        span.set_attribute("http.request.method", "GET")
+        span.set_attribute("http.route", "/stock/{sku}")
+        span.set_attribute("inventory.sku", sku)
+
+        # 5. Copie de l'entrée de baggage sur le span.
+        # Sans cette ligne, la donnée a traversé le service mais n'apparaît sur aucun span.
+        if tier:
+            span.set_attribute("customer.tier", tier)
+
+        # 6. Création d'un span interne (SpanKind.INTERNAL par défaut) imbriqué.
+        # Ce sous-span mesure la durée de lecture du stock en mémoire.
+        with tracer.start_as_current_span("load_stock") as load_span:
+            quantity = stock.load_stock(sku)
+            # Attribut booléen indiquant si l'article a été trouvé.
+            load_span.set_attribute("inventory.found", quantity is not None)
+
+        # 7. Traitement de l'erreur si l'article n'existe pas.
+        if quantity is None:
+            span.set_status(Status(StatusCode.ERROR, "unknown sku"))
+            logger.warning("unknown sku=%s", sku)
+            return {"error": "unknown sku"}, 404
+
+        # 8. Enrichissement du span serveur avec la quantité disponible.
+        span.set_attribute("inventory.stock", quantity)
+        logger.info("stock lookup sku=%s stock=%s", sku, quantity)
+        return {"sku": sku, "stock": quantity}, 200
+EOF
+```
+
+Redémarrez les services et passez une commande :
+
+```bash
+docker compose restart shop inventory
+./order.sh coffee 2 alice
+sleep 4
+```
+
+Preuve sur le réseau : le gestionnaire d'`inventory` journalise l'en-tête `baggage` reçu. Affichez la ligne :
+
+```bash
+docker compose logs --no-log-prefix inventory | grep "baggage recu" | tail -1 | cut -d' ' -f3-
+```
+
+On obtient :
+
+```text
+INFO inventory.handler baggage recu : customer.tier=gold
+```
+
+Preuve dans Jaeger : interrogez la trace de la commande et lisez l'attribut sur le span serveur d'`inventory` :
+
+```bash
+curl -s "http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+  | jq -r '.result.resourceSpans[].scopeSpans[].spans[] | select(.name=="GET /stock/{sku}") | .attributes[] | select(.key=="customer.tier") | "\(.key)=\(.value.stringValue)"' | tail -1
+```
+
+On obtient :
+
+```text
+customer.tier=gold
+```
+
+L'attribut n'apparaît pas sur les spans de `shop` : le service a posé le baggage et l'a transmis, mais il ne l'a pas écrit sur ses propres spans.
+
+> [!WARNING]
+>
+> Le baggage est transmis à tous les services en aval, y compris des services tiers, et circule en clair dans un en-tête HTTP. N'y placez ni donnée personnelle ni secret. La valeur `customer.tier=gold` est une valeur de démonstration. Le hachage de `enduser.id` vu plus haut montre comment traiter une donnée personnelle avant export.
 
 ### Comportement lors d'une panne
 
@@ -561,4 +732,5 @@ Cet exercice optionnel permet d'approfondir les capacités de l'instrumentation 
 
 - Instrumentez l'émission de métriques applicatives : créez un `MeterProvider` dans `telemetry.py` et ajoutez un compteur de commandes (`create_counter`) dans `shop_handler.py`.
 - Testez la reprise d'une trace externe en fournissant votre propre en-tête `traceparent` lors d'un appel `curl` (`curl -H 'traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' http://localhost:8080/orders -d '{"sku":"coffee","qty":1}' -H 'Content-Type: application/json'`) et constatez que Jaeger rattache la requête à cet identifiant de trace.
+- Envoyez à la main un en-tête `baggage:` à `inventory` avec `curl` (`curl -H 'baggage: customer.tier=gold' http://localhost:8081/stock/coffee`) et retrouvez l'attribut `customer.tier` dans Jaeger.
 - Configurez un taux d'échantillonnage (sampling) de 20 % via la variable standard `OTEL_TRACES_SAMPLER=parentbased_traceidratio` et `OTEL_TRACES_SAMPLER_ARG=0.2` dans `compose.yaml`.

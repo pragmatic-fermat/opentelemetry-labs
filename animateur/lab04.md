@@ -24,9 +24,17 @@ Deux constats à retenir :
 - les adresses privées changent d'une session à l'autre, et leur ordre ne suit pas celui des noms : trois créations successives ont donné `.4` à `.6`, puis `.7` à `.9`, puis `.10` à `.12`. Le lab ne peut donc pas les écrire en dur, et l'animateur n'a rien à transmettre. Le dossier fournit `discover-ephemere.sh`, que le participant lance sur `clt-N` : il balaie le sous-réseau privé sur le port SSH, reconnaît les machines à leur nom (`srv2-`, `srv3-`, `srv4-`) et écrit les trois alias dans `ephemeres.ini`. Comptez une dizaine de secondes, et jusqu'à une minute juste après la création : le script réessaie quatre fois, le temps que SSH réponde sur les machines neuves.
 - avec l'export OTLP vers Prometheus, les attributs de ressource ne deviennent pas des labels par défaut : les quatre collectors produisaient une seule série `system_cpu_load_average_1m`, sans label. Le fichier `config/lab04/prometheus/prometheus.yml` porte maintenant un bloc `otlp.promote_resource_attributes`, et la requête s'appuie sur `host_name` et `deployment_environment_name`. Le lab 1 n'est pas concerné : il scrape l'exporter `prometheus` du collector, qui convertit les attributs de ressource en labels sans configuration.
 
-## Rejeu du 21 novembre 2026
+## Rejeux du 21 et du 23 novembre 2026
 
-La partie 4 réécrite a été déroulée sur `clt-0` et `srv-0`, du premier déploiement jusqu'à la descente de version de l'extra 5.
+Le lab a été rejoué intégralement le 23 novembre 2026 sur les machines reconstruites (`clt-0` et `srv-0`) :
+- **Partie 1** : démarrage des backends Docker Jaeger (4317, 16686) et Prometheus (9090), génération d'inventaire, ping Ansible `SUCCESS`.
+- **Partie 2** : installation du paquet `.deb` officiel de `otelcol-contrib` 0.165.0, validation de l'idempotence (`ok=4 changed=0` au second passage), ports OTLP et diagnostic actifs sur `srv-0`.
+- **Partie 3** : template Jinja2, rendu local et validation Docker `code retour : 0`, déploiement de la configuration (`changed=2` avec handler), émission de 5 traces via `telemetrygen` reçues dans Jaeger (`ansible-demo`, 10 spans).
+- **Partie 4** : activation de `hostmetrics` via `host_vars`, diff Ansible, collecte de 12 séries `system_cpu` dans Prometheus, passage sans changement (`changed=0`), retour en arrière avec diff inverse, correction automatique de dérive manuelle, rejet de durée invalide par `validate` (`failed=1`, service maintenu en fonctionnement).
+- **Partie 5** : création des 3 machines éphémères Debian (`srv2-0`, `srv3-0`, `srv4-0`) dans le VPC DigitalOcean via `animateur/scripts/lab04-vms-create.sh 1`, découverte automatique par `discover-ephemere.sh`, déploiement simultané des 4 configurations différenciées (`changed=4` sur les 3 Debian, `changed=2` sur le serveur principal), vérification des séries Prometheus (`lab4`, `backend`, `database`), puis destruction via `animateur/scripts/lab04-vms-destroy.sh`.
+- **Cleanup** : désinstallation d'`otelcol-contrib` via APT, suppression des backends Docker et des répertoires de travail. Machines remises à l'état initial.
+
+La partie 4 réécrite avait également été déroulée le 21 novembre 2026 :
 
 - ajout de `hostmetrics` : diff lu, application, `RUNNING HANDLER [Redémarrer otelcol-contrib]` visible, `grep -c hostmetrics` vaut 2, et Prometheus renvoie 12 séries `system_cpu` ;
 - passage suivant : `changed=0`, sans redémarrage ;

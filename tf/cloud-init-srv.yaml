@@ -1,9 +1,9 @@
 #cloud-config
 # Machine srv-N : machine serveur des labs OpenTelemetry.
-# Ubuntu 24.04, Docker et Compose v2 (les labs y déploient leur stack),
-# git, jq et curl. Terminal web (ttyd derrière Caddy).
+# Ubuntu 24.04, Docker et Compose v2 (les labs y deploient leur stack),
+# git, jq et curl. Terminal web (ttyd derriere Caddy).
 #
-# Versions épinglées et vérifiées le 2026-11-19 (voir README.md).
+# Versions epinglees et verifiees le 2026-11-19 (voir README.md).
 package_update: true
 package_upgrade: false
 packages:
@@ -14,16 +14,16 @@ packages:
   - python3
 users:
   # Le terminal web ouvre des sessions directement en root (machines
-  # éphémères) : aucun autre compte n'est nécessaire.
+  # ephemeres) : aucun autre compte n'est necessaire.
   - name: root
     lock-passwd: false
     plain_text_passwd: "${root_password}"
 ssh_pwauth: true
 write_files:
-  # Terminal web : ttyd écoute en local, Caddy le publie en HTTPS sur
+  # Terminal web : ttyd ecoute en local, Caddy le publie en HTTPS sur
   # https://${srv_machine}.${lab_domain} (certificat Let's Encrypt automatique).
   # ttyd sert un simple shell dans le navigateur (avec copier/coller),
-  # protégé par le mot de passe statique de la variable TFC webshell_password.
+  # protege par le mot de passe statique de la variable TFC webshell_password.
   # Service systemd du terminal web : sessions ouvertes directement en root,
   # authentification basic auth (mot de passe de la variable TFC).
   - content: |
@@ -40,17 +40,17 @@ write_files:
       [Install]
       WantedBy=multi-user.target
     path: /etc/systemd/system/ttyd.service
-  # Limites inotify : chaque nœud KinD, et chaque kubelet, consomme des
-  # instances inotify. Les valeurs par défaut (128 instances) saturent dès
-  # qu'un second cluster démarre, et systemd échoue alors avec « Too many
-  # open files ». Valeurs appliquées au démarrage par sysctl --system.
+  # Limites inotify : chaque noeud KinD, et chaque kubelet, consomme des
+  # instances inotify. Les valeurs par defaut (128 instances) saturent des
+  # qu'un second cluster demarre, et systemd echoue alors avec "Too many
+  # open files". Valeurs appliquees au demarrage par sysctl --system.
   - content: |
       fs.inotify.max_user_instances = 512
       fs.inotify.max_user_watches = 524288
     path: /etc/sysctl.d/90-inotify.conf
-  # Clé SSH dédiée aux machines du lab (non personnelle, éphémère).
-  # Permet à clt-N et srv-N de se joindre mutuellement sans mot de passe,
-  # ainsi qu'aux machines éphémères du lab 4 (srv2, srv3).
+  # Cle SSH dediee aux machines du lab (non personnelle, ephemere).
+  # Permet a clt-N et srv-N de se joindre mutuellement sans mot de passe,
+  # ainsi qu'aux machines ephemeres du lab 4 (srv2, srv3).
   - content: |
       -----BEGIN OPENSSH PRIVATE KEY-----
       b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
@@ -77,10 +77,10 @@ write_files:
       [ -f /etc/profile.d/lab-env.sh ] && . /etc/profile.d/lab-env.sh
     path: /etc/bash.bashrc
     append: true
-  # Clone du dépôt des labs. Tant qu'il est privé, la clé de déploiement
-  # GitHub (lecture seule) arrive encodée en base64 par la variable TFC
-  # github_deploy_key : une clé multi-ligne insérée telle quelle casserait
-  # le YAML. Quand le dépôt est public, la variable est vide et le clone
+  # Clone du depot des labs. Tant qu'il est prive, la cle de deploiement
+  # GitHub (lecture seule) arrive encodee en base64 par la variable TFC
+  # github_deploy_key : une cle multi-ligne inseree telle quelle casserait
+  # le YAML. Quand le depot est public, la variable est vide et le clone
   # se fait en HTTPS anonyme.
   - content: |
       #!/bin/bash
@@ -100,31 +100,31 @@ write_files:
     path: /usr/local/sbin/lab-clone.sh
     permissions: "0700"
 runcmd:
-  # Accès SSH root par mot de passe (maintenance d'urgence). Le compte
-  # stagiaire n'a pas de mot de passe et se connecte par clé.
+  # Acces SSH root par mot de passe (maintenance d'urgence). Le compte
+  # stagiaire n'a pas de mot de passe et se connecte par cle.
   - ufw disable
-  # Applique les limites inotify sans attendre le prochain démarrage.
+  # Applique les limites inotify sans attendre le prochain demarrage.
   - sysctl --system
   - sed -i -E 's/^#?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
   - sed -i -E 's/^#?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
   - grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
   - grep -q '^PasswordAuthentication yes' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
   - systemctl restart ssh
-  # Autorise la clé SSH inter-machines du lab.
+  # Autorise la cle SSH inter-machines du lab.
   - grep -q 'lab-inter-vm@opentelemetry-lab' /root/.ssh/authorized_keys 2>/dev/null || echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2xxnRQEhrbsTT6J1W2bdah4GccwZE3d5d1maZ2n+u3 lab-inter-vm@opentelemetry-lab' >> /root/.ssh/authorized_keys
   - chmod 600 /root/.ssh/authorized_keys
-  # Docker Engine et Compose v2 depuis le dépôt officiel Docker : les labs
-  # déploient leur stack sur la machine serveur.
+  # Docker Engine et Compose v2 depuis le depot officiel Docker : les labs
+  # deploient leur stack sur la machine serveur.
   - install -m 0755 -d /etc/apt/keyrings
   - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   - chmod a+r /etc/apt/keyrings/docker.asc
   - echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
   - apt-get update
   - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  # Caddy depuis le dépôt officiel. Le fichier de dépôt Cloudsmith référence
-  # la clé au format binaire .gpg : il faut déblinder la clé téléchargée.
-  # Le Caddyfile est écrit après l'installation du paquet : écrit avant, il
-  # entre en conflit avec le fichier livré par le paquet (échec de dpkg).
+  # Caddy depuis le depot officiel. Le fichier de depot Cloudsmith reference
+  # la cle au format binaire .gpg : il faut deblinder la cle telechargee.
+  # Le Caddyfile est ecrit apres l'installation du paquet : ecrit avant, il
+  # entre en conflit avec le fichier livre par le paquet (echec de dpkg).
   - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt -o /etc/apt/sources.list.d/caddy-stable.list
   - apt-get update
@@ -140,9 +140,9 @@ runcmd:
     }
     EOF
   - systemctl reload caddy || systemctl restart caddy
-  # Terminal web ttyd (shell dans le navigateur), binaire épinglé.
+  # Terminal web ttyd (shell dans le navigateur), binaire epingle.
   - curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o /usr/local/bin/ttyd
   - chmod +x /usr/local/bin/ttyd
   - systemctl enable --now ttyd
-  # Clone du dépôt des labs dans /root (script ci-dessus).
+  # Clone du depot des labs dans /root (script ci-dessus).
   - bash /usr/local/sbin/lab-clone.sh

@@ -516,6 +516,8 @@ Dans l'interface web de Jaeger, la trace complète affiche la hiérarchie de bou
 
 Le baggage est un ensemble de paires clé-valeur qui voyage dans l'en-tête HTTP `baggage`, à côté de `traceparent`. Il accompagne la trace vers tous les services en aval. Il ne devient pas automatiquement un attribut de span : un service qui veut le voir dans Jaeger doit lire l'entrée dans le contexte reçu et l'écrire lui-même sur son span.
 
+Les propagateurs par défaut du SDK Python incluent `tracecontext` et `baggage`. Ni `telemetry.py` ni `compose.yaml` ne fixent `OTEL_PROPAGATORS` : l'en-tête `baggage` est donc transmis sans réglage supplémentaire.
+
 Côté `shop`, réécrivez `app/inventory_client.py` pour poser une entrée `customer.tier` avant l'appel :
 
 ```bash

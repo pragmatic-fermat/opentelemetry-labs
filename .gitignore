@@ -9,8 +9,8 @@ override.tf.json
 secrets.auto.tfvars
 *.tfvars.local
 
-# Document de genèse de la formation (conversation exportée), local et non publié
-Export_Conversation_Formation_OpenTelemetry.md
+# Document de genèse des labs (conversation exportée), local et non publié
+Export_Conversation_OpenTelemetry.md
 
 # Identifiants locaux (mot de passe root des machines de lab)
 creds.txt

@@ -7,7 +7,7 @@ droplet_image = "ubuntu-24-04-x64"
 
 # Poste de travail : 8 Go de RAM (Docker + cluster KinD à venir).
 clt_size = "s-4vcpu-8gb-intel"
-# Machine serveur : le TP1 y déploie la stack Docker (Jaeger, Prometheus,
+# Machine serveur : le lab 1 y déploie la stack Docker (Jaeger, Prometheus,
 # Grafana, Collector), 4 Go de RAM.
 srv_size = "s-2vcpu-4gb"
 

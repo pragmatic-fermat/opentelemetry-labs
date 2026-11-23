@@ -1,0 +1,23 @@
+# Version du Collector installée sur srv-N, et paquets correspondants.
+# Les sommes de contrôle viennent de la page de publication v0.165.0 (vérifiées le 2026-11-18).
+# Si vous changez la version, mettez aussi à jour les deux sommes.
+otelcol_version: "0.165.0"
+otelcol_arch_map:
+  x86_64: amd64
+  aarch64: arm64
+otelcol_checksums:
+  amd64: "sha256:dafb5174344dd15f339fd8208783b17122fb4cd37fa7e5461fb09d99df212b4b"
+  arm64: "sha256:4dcfb6b69dfa10132c593ed5782823eec79dc408a0d68291e1c4adc5879d0948"
+otelcol_deb_url: "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v{{ otelcol_version }}/otelcol-contrib_{{ otelcol_version }}_linux_{{ otelcol_arch_map[ansible_architecture] }}.deb"
+
+# Destination des données : clt-N (Jaeger sur le port 4317, Prometheus sur le port 9090).
+# lookup('env', ...) lit une variable d'environnement de la machine qui lance Ansible.
+otelcol_backend_host: "{{ lookup('ansible.builtin.env', 'CLT_HOST') }}"
+
+# Réglages du Collector utilisés par le template de configuration.
+otelcol_environment: lab4
+otelcol_batch_timeout: 2s
+otelcol_resource_attributes:
+  deployment.environment.name: "{{ otelcol_environment }}"
+  lab.id: "{{ lookup('ansible.builtin.env', 'LAB_ID') }}"
+otelcol_hostmetrics_enabled: false

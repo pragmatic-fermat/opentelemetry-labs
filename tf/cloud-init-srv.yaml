@@ -50,7 +50,7 @@ write_files:
     path: /etc/sysctl.d/90-inotify.conf
   # Clé SSH dédiée aux machines du lab (non personnelle, éphémère).
   # Permet à clt-N et srv-N de se joindre mutuellement sans mot de passe,
-  # ainsi qu'aux machines éphémères du TP4 (srv2, srv3).
+  # ainsi qu'aux machines éphémères du lab 4 (srv2, srv3).
   - content: |
       -----BEGIN OPENSSH PRIVATE KEY-----
       b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
@@ -63,7 +63,7 @@ write_files:
     path: /root/.ssh/id_ed25519
     permissions: "0600"
   - content: |
-      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2xxnRQEhrbsTT6J1W2bdah4GccwZE3d5d1maZ2n+u3 lab-inter-vm@opentelemetry-formation
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2xxnRQEhrbsTT6J1W2bdah4GccwZE3d5d1maZ2n+u3 lab-inter-vm@opentelemetry-lab
     path: /root/.ssh/id_ed25519.pub
     permissions: "0644"
   # Variables d'environnement des labs, disponibles dans tous les terminaux.
@@ -111,7 +111,7 @@ runcmd:
   - grep -q '^PasswordAuthentication yes' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
   - systemctl restart ssh
   # Autorise la clé SSH inter-machines du lab.
-  - grep -q 'lab-inter-vm@opentelemetry-formation' /root/.ssh/authorized_keys 2>/dev/null || echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2xxnRQEhrbsTT6J1W2bdah4GccwZE3d5d1maZ2n+u3 lab-inter-vm@opentelemetry-formation' >> /root/.ssh/authorized_keys
+  - grep -q 'lab-inter-vm@opentelemetry-lab' /root/.ssh/authorized_keys 2>/dev/null || echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2xxnRQEhrbsTT6J1W2bdah4GccwZE3d5d1maZ2n+u3 lab-inter-vm@opentelemetry-lab' >> /root/.ssh/authorized_keys
   - chmod 600 /root/.ssh/authorized_keys
   # Docker Engine et Compose v2 depuis le dépôt officiel Docker : les labs
   # déploient leur stack sur la machine serveur.

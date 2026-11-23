@@ -91,7 +91,7 @@ Les interfaces web sont accessibles depuis votre navigateur, sur la machine serv
 
 - Jaeger : `http://$SRV_HOST:16686` (TCP/16686)
 - Prometheus : `http://$SRV_HOST:9090` (TCP/9090)
-- Grafana : `http://$SRV_HOST:3000` (TCP/3000, compte `admin`, mot de passe `formation`)
+- Grafana : `http://$SRV_HOST:3000` (TCP/3000, compte `admin`, mot de passe `trainingday`)
 
 ## 1. Démarrer les backends
 
@@ -184,7 +184,7 @@ services:
     image: grafana/grafana:13.3.1
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-formation}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-trainingday}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -244,7 +244,7 @@ Vérifiez que chaque service répond :
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:16686/
 curl -s http://localhost:9090/-/ready
 curl -s http://localhost:3000/api/health | jq -r .database
-curl -s -u admin:formation http://localhost:3000/api/datasources | jq -r '.[].name'
+curl -s -u admin:trainingday http://localhost:3000/api/datasources | jq -r '.[].name'
 ```
 
 On obtient :

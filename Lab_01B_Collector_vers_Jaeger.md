@@ -1,4 +1,4 @@
-# Lab 1B : Acheminement des traces vers Jaeger avec un **collector**
+# Lab 1B : Configurer un premier **collector** et exporter vers Jaeger
 
 Ce deuxième lab du lab 1 se déroule dans le terminal web de `clt-N`, dans le dossier `~/lab01` utilisé lors du [lab 1A](Lab_01A_Voir_la_valeur.md). Jaeger s'exécute sur `srv-N`, démarré depuis `clt-N` par SSH.
 

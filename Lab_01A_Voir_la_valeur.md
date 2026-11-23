@@ -1,4 +1,4 @@
-# Lab 1A : Lecture de la télémétrie en console
+# Lab 1A : Lire les spans d'une application en console
 
 Ce premier lab du lab 1 se déroule sur `clt-N`, dans le dossier `~/lab01` préparé lors de la [mise en place](Lab_01_Socle.md#mise-en-place). L'application s'exécute ici sans **collector** ni backend, en écrivant directement sa télémétrie sur sa sortie standard.
 

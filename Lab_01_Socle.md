@@ -2,9 +2,9 @@
 
 Le lab 1 comprend trois parties consécutives sur le même environnement :
 
-- [lab 1A : Voir la valeur](Lab_01A_Voir_la_valeur.md) aborde la lecture directe des spans générés par une application sur sa sortie standard, sans composant intermédiaire.
-- [lab 1B : Un **collector**, de l'application vers Jaeger](Lab_01B_Collector_vers_Jaeger.md) met en place un **collector** local pour transférer ces traces vers une instance Jaeger distante.
-- [lab 1C : Affiner le pipeline](Lab_01C_Affiner_le_pipeline.md) introduit des processors pour filtrer les requêtes de santé et restructurer les attributs avec OTTL.
+- [lab 1A : Lire les spans d'une application en console](Lab_01A_Voir_la_valeur.md) aborde la lecture directe des spans générés par une application sur sa sortie standard, sans composant intermédiaire.
+- [lab 1B : Configurer un premier **collector** et exporter vers Jaeger](Lab_01B_Collector_vers_Jaeger.md) met en place un **collector** local pour transférer ces traces vers une instance Jaeger distante.
+- [lab 1C : Affiner le pipeline du **collector** avec filter, transform et batch](Lab_01C_Affiner_le_pipeline.md) introduit des processors pour filtrer les requêtes de santé et restructurer les attributs avec OTTL.
 
 # Objectifs
 

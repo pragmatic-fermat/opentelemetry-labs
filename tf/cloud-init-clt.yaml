@@ -78,6 +78,15 @@ write_files:
       export CLT_HOST="${clt_machine}.${lab_domain}"
       export SRV_HOST="${srv_machine}.${lab_domain}"
     path: /etc/profile.d/lab-env.sh
+  # Resolutions statiques des deux machines du groupe. Le serveur DNS
+  # interne de DigitalOcean (10.20.0.254) repond NXDOMAIN pour ces noms
+  # lorsqu'ils sont interroges depuis le reseau Docker du host, ce qui
+  # bloque la resolution pour les conteneurs (comme l'export vers Jaeger
+  # du lab 1). Ces noms sont ajoutes a /etc/hosts au demarrage.
+  - content: |
+      ${clt_machine}.${lab_domain}
+      ${srv_machine}.${lab_domain}
+    path: /etc/hosts.d/lab-hosts
   - content: |
       [ -f /etc/profile.d/lab-env.sh ] && . /etc/profile.d/lab-env.sh
     path: /etc/bash.bashrc
@@ -115,6 +124,8 @@ runcmd:
   - grep -q '^PermitRootLogin yes' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
   - grep -q '^PasswordAuthentication yes' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
   - systemctl restart ssh
+  # Resolutions statiques des deux machines du groupe, dans /etc/hosts.
+  - cat /etc/hosts.d/lab-hosts >> /etc/hosts
   # Autorise la cle SSH inter-machines du lab.
   - grep -q 'lab-inter-vm@opentelemetry-lab' /root/.ssh/authorized_keys 2>/dev/null || echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2xxnRQEhrbsTT6J1W2bdah4GccwZE3d5d1maZ2n+u3 lab-inter-vm@opentelemetry-lab' >> /root/.ssh/authorized_keys
   - chmod 600 /root/.ssh/authorized_keys

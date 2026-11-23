@@ -99,7 +99,16 @@ write_files:
       fi
     path: /usr/local/sbin/lab-clone.sh
     permissions: "0700"
+  # Resolutions statiques des deux machines du groupe. Le serveur DNS
+  # interne de DigitalOcean (10.20.0.254) repond NXDOMAIN pour ces noms
+  # lorsqu'ils sont interroges depuis le reseau Docker du host.
+  - content: |
+      ${clt_machine}.${lab_domain}
+      ${srv_machine}.${lab_domain}
+    path: /etc/hosts.d/lab-hosts
 runcmd:
+  # Resolutions statiques des deux machines du groupe, dans /etc/hosts.
+  - cat /etc/hosts.d/lab-hosts >> /etc/hosts
   # Acces SSH root par mot de passe (maintenance d'urgence). Le compte
   # stagiaire n'a pas de mot de passe et se connecte par cle.
   - ufw disable

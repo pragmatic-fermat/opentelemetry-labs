@@ -1,4 +1,4 @@
-# Lab 1C : Filtrage et transformation des traces dans le pipeline
+# Lab 1C : Affiner le pipeline du **collector** avec filter, transform et batch
 
 Ce troisième lab du lab 1 se déroule dans le terminal web de `clt-N`, dans le dossier `~/lab01` utilisé lors du [lab 1B](Lab_01B_Collector_vers_Jaeger.md). L'application, le **collector** et Jaeger restent actifs.
 

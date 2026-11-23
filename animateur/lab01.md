@@ -7,9 +7,9 @@ Le lab 1 se déroule en trois labs qui s'enchaînent sur les mêmes machines : 1
 | Lab | Durée observée |
 |---|---|
 | Mise en place (commune, page d'entrée) | 10 min, dont 5 de téléchargements déjà en cache |
-| 1A. Voir la valeur | 35 min |
-| 1B. Collector vers Jaeger | 65 min |
-| 1C. Affiner le pipeline | 70 min |
+| 1A. Lire les spans d'une application en console | 35 min |
+| 1B. Configurer un premier collector et exporter vers Jaeger | 65 min |
+| 1C. Affiner le pipeline du collector avec filter, transform et batch | 70 min |
 | Cleanup + extra | 15 min |
 
 Total observé : environ 3 h 15 avec l'extra, 3 h sans. Cible de 3 h tenable si l'extra est laissé en autonomie.

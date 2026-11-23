@@ -64,7 +64,7 @@ resource "digitalocean_vpc" "group" {
   ip_range = cidrsubnet(var.vpc_base_range, 8, count.index)
 }
 
-# Machine clt-N : poste de travail des labs. Le cluster Kubernetes des TP
+# Machine clt-N : poste de travail des labs. Le cluster Kubernetes des labs
 # suivants sera un cluster KinD sur cette machine, d'où 8 Go de RAM et un swap.
 resource "digitalocean_droplet" "clt" {
   count      = var.group_count

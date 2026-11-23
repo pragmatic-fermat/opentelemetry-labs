@@ -1,6 +1,6 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-# Nom unique, commun à tous les TP Kubernetes : une machine n'héberge
+# Nom unique, commun à tous les labs Kubernetes : une machine n'héberge
 # qu'un seul cluster, et cluster-create.sh supprime le précédent.
 name: cluster
 nodes:

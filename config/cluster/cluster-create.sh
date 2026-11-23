@@ -1,7 +1,7 @@
 #!/bin/bash
-# Lance le cluster KinD des TP Kubernetes.
+# Lance le cluster KinD des labs Kubernetes.
 #
-# Le cluster porte toujours le même nom, « cluster », quel que soit le TP :
+# Le cluster porte toujours le même nom, « cluster », quel que soit le lab :
 # une machine n'en héberge qu'un. Le script supprime donc les clusters
 # existants avant de le recréer, y compris ceux d'un ancien nom, ce qui
 # efface releases Helm, espaces de noms et données qu'ils contenaient.

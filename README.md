@@ -4,8 +4,6 @@ Labs OpenTelemetry, du socle Collector jusqu'au diagnostic d'incident.
 
 ## Programme
 
-Labs à concevoir et rédiger : 1, 3, 4, 5, 6, 7, 10 et 11 (numérotation d'origine conservée).
-
 | Lab | Titre | Contenu |
 |---|---|---|
 | [lab 1](Lab_01_Socle.md) | Socle, premier **collector** et processors | Trois parties 1A, 1B, 1C : backend Jaeger/Grafana, premier **collector**, processors (batch, filtrage, OTTL) |

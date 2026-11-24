@@ -95,10 +95,12 @@ write_files:
       if [ -n "$key_b64" ]; then
         install -d -m 700 /root/.ssh
         printf '%s' "$key_b64" | base64 -d > /root/.ssh/id_ed25519_labs
+        echo "" >> /root/.ssh/id_ed25519_labs
         chmod 600 /root/.ssh/id_ed25519_labs
         printf 'Host github.com\n  IdentityFile /root/.ssh/id_ed25519_labs\n  StrictHostKeyChecking accept-new\n' > /root/.ssh/config
         chmod 600 /root/.ssh/config
-        git clone git@github.com:pragmatic-fermat/opentelemetry-labs.git /root/opentelemetry-labs
+        git clone git@github.com:pragmatic-fermat/opentelemetry-labs.git /root/opentelemetry-labs || \
+          git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git /root/opentelemetry-labs
       else
         git clone https://github.com/pragmatic-fermat/opentelemetry-labs.git /root/opentelemetry-labs
       fi

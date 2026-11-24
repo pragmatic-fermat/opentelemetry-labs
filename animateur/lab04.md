@@ -119,3 +119,17 @@ Deux points d'exploitation pour l'animateur :
 
 - **DNS interne en retard sur un environnement neuf.** Pendant une dizaine de minutes, `srv-2` et les serveurs Debian n'ont pas résolu `clt-2.monlab.top`, alors que les serveurs autoritaires de DigitalOcean et le résolveur public répondaient correctement : les résolveurs internes conservaient la réponse négative émise avant la création de l'enregistrement. Les exporters du **collector** échouaient sur `dial tcp: lookup clt-2.monlab.top: no such host`, donc plus aucune métrique ni trace. Contournement utilisé et documenté dans le lab : exporter `CLT_HOST` avec l'adresse privée de `clt-N` avant `ansible-playbook`.
 - **Labels `job` et `instance`.** Ils n'apparaissent que si la ressource porte `service.name` et `service.instance.id`. Le template les pose désormais (`otelcol_environment` et `ansible_hostname`), ce qui rend l'écran du participant conforme à la capture du lab : `instance=srv2-2 job=backend`, `instance=srv4-2 job=database`, `instance=srv-2 job=lab4`.
+
+## Rejeu du 24 novembre 2026, groupe 5 (clt-5 et srv-5)
+
+Second rejeu le même jour, sur le groupe 5 (`clt-5`, `srv-5`, et les Debian `srv2-5`, `srv3-5`, `srv4-5` dans `vpc-5`). Les parties 1 à 5 donnent les mêmes résultats que pour le groupe 2, avec `lab.id=5` et `host.name=srv-5`.
+
+Les trois écarts corrigés ci-dessus se reproduisent à l'identique :
+
+- fin de fichier `exporters: [otlp_http/prometheus]` après la dérive corrigée ;
+- `changed=2` après la suppression de la ligne `otelcol_batch_timeout` fautive ;
+- échec de `ansible otel -a 'command -v otelcol-contrib'` sur `No such file or directory: b'command'`.
+
+Le DNS interne a répondu correctement cette fois : `clt-5.monlab.top` résolvait depuis `srv-5` dès la fin de `cloud-init`, et depuis les Debian éphémères avant la partie 5. Le retard observé sur le groupe 2 reste donc ponctuel.
+
+Après application de la note de la partie 5, les séries portent bien `instance` et `job` (`instance=srv-5 job=lab4`, `instance=srv4-5 job=backend`, `instance=srv3-5 job=database`), ce qui confirme que l'intégration de `service.name` et `service.instance.id` dans le template rend l'écran du participant conforme à la capture.

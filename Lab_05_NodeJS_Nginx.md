@@ -70,7 +70,7 @@ flowchart LR
   C([curl]) -->|TCP/8080| NG["Nginx ingress<br/><i>span racine (module otel)</i>"]
   NG -->|TCP/4000| MS["messenger<br/><i>spans HTTP, Express, pg, publish</i>"]
   MS -->|TCP/5432| DB1[(messenger-db<br/>PostgreSQL)]
-  MS -->|TCP/5672| MQ[(RabbitMQ<br/><i>transport du contexte</i>)]
+  MS -->|TCP/5672| MQ[("RabbitMQ<br/><i>transport du contexte</i>")]
   MQ -->|TCP/5000| NO["notifier<br/><i>spans chat_queue, pg</i>"]
   NO -->|TCP/5433| DB2[(notifier-db<br/>PostgreSQL)]
   MS -.->|OTLP| JA[(Jaeger<br/>TCP/4318)]
@@ -80,10 +80,10 @@ flowchart LR
 
 Chaque composant ne produit pas ses spans de la même façon, et le lab le montre progressivement :
 
-- **Nginx** embarque le module `ngx_otel_module` : c'est lui qui crée le span racine de la trace (partie 5) ;
-- **messenger** et **notifier** produisent leurs spans par le SDK Node.js et l'auto-instrumentation : HTTP, Express, PostgreSQL, et `publish` / `chat_queue process` pour RabbitMQ (parties 2 à 4) ;
-- **RabbitMQ** ne produit aucun span : il transporte les messages et les en-têtes qui contiennent le contexte (partie 4) ;
-- **Jaeger** reçoit tout en OTLP, directement, ou en passant par un **collector** qui masque les données sensibles (partie 6).
+- **Nginx** embarque le module `ngx_otel_module` : c'est lui qui crée le span racine de la trace ([partie 5](#5-nginx-devant-lapplication)) ;
+- **messenger** et **notifier** produisent leurs spans par le SDK Node.js et l'auto-instrumentation : HTTP, Express, PostgreSQL, et `publish` / `chat_queue process` pour RabbitMQ ([parties 2](#2-auto-instrumenter-messenger) à [4](#4-instrumenter-notifier)) ;
+- **RabbitMQ** ne produit aucun span : il transporte les messages et les en-têtes qui contiennent le contexte ([partie 4](#4-instrumenter-notifier)) ;
+- **Jaeger** reçoit tout en OTLP, directement, ou en passant par un **collector** qui masque les données sensibles ([partie 6](#6-données-applicatives-et-masquage)).
 
 Le message suit ces étapes : une requête HTTP arrive sur `messenger`, qui joue le rôle de producteur (publisher), écrit dans sa base puis publie un événement dans RabbitMQ, le courtier de messages (broker) ; `notifier`, le consommateur (subscriber), lit l'événement dans la file (queue), écrit dans sa propre base et simule l'envoi d'un SMS. Sans télémétrie, il faut lire les logs de deux processus dans deux terminaux.
 
@@ -394,7 +394,7 @@ Rejouez une requête, puis regardez Jaeger dans votre navigateur, sur `http://$C
 
 > [!NOTE]
 >
-> Les instrumentations automatiques couvrent HTTP, Express, PostgreSQL et le client `amqplib` de RabbitMQ. C'est cette dernière qui posera un span `publish <default>` à la publication, et qui fera voyager le contexte dans les en-têtes du message. Le détail du lien entre les deux services est traité à la partie 4.
+> Les instrumentations automatiques couvrent HTTP, Express, PostgreSQL et le client `amqplib` de RabbitMQ. C'est cette dernière qui posera un span `publish <default>` à la publication, et qui fera voyager le contexte dans les en-têtes du message. Le détail du lien entre les deux services est traité [à la partie 4](#4-instrumenter-notifier).
 
 ## 3. Nommer le service et lire le waterfall
 
@@ -763,7 +763,7 @@ docker ps --format '{{.Names}}' | grep -E 'ingress|jaeger|rabbitmq|messenger-db|
 
 La seconde commande supprime aussi les volumes des deux bases PostgreSQL : les données créées pendant le lab ne survivent pas au lab. La dernière commande confirme qu'il ne reste aucun conteneur du [lab 5](Lab_05_NodeJS_Nginx.md).
 
-Le dossier `~/lab05` peut être conservé si vous voulez rejouer le lab : les dépôts clonés et les fichiers `tracing.mjs` et `request-logger.mjs` évitent de tout réinstaller. Les autres lab ne le réutilisent pas.
+Le dossier `~/lab05` peut être conservé si vous voulez rejouer le lab : les dépôts clonés et les fichiers `tracing.mjs` et `request-logger.mjs` évitent de tout réinstaller. Les autres labs ne le réutilisent pas.
 
 > [!NOTE]
 >

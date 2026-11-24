@@ -29,7 +29,7 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 Machine(s) : `srv-N` (hôte Linux, noyau compatible à vérifier) et éventuellement `k8s-N`.
 
-Prérequis : [lab 5](Lab_05_NodeJS_Nginx.md) ou [lab 6](Lab_06_Java_Python_DotNet.md) recommandé, pour comparer avec l'auto-instrumentation.
+Prérequis : [lab 5](Lab_05_NodeJS_Nginx.md) ou [lab 6](Lab_06_Java_Python_DotNet_PHP.md) recommandé, pour comparer avec l'auto-instrumentation.
 
 Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 

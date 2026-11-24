@@ -36,4 +36,21 @@ Le rejeu complet a été validé sur `clt-0` :
 
 - **Compatibilité RabbitMQ 4 et amqplib** : RabbitMQ 4 exige une taille minimale de trame AMQP (`frame_max`) de 8192 octets. La version `amqplib@0.10.9` résout ce point par rapport aux versions plus anciennes.
 - **Port 4319 pour le collector de masquage** : le **collector** de la partie 6 écoute sur le port 4319 pour ne pas entrer en conflit avec le port OTLP 4318 déjà utilisé par Jaeger sur `clt-N`.
-- **Gestion des processus en arrière-plan** : en formation, les participants utilisent plusieurs onglets du terminal web ou des fenêtres tmux pour suivre les logs de `messenger` et `notifier`.
+- **Gestion des processus en arrière-plan** : en séance, les participants utilisent plusieurs onglets du terminal web ou des fenêtres tmux pour suivre les logs de `messenger` et `notifier`.
+- **Version d'asdf** : rester sur la branche `v0.15.0`. La branche `v0.16.x` conserve l'ancien `asdf.sh` et un binaire intermédiaire, si bien que chaque appel à `node` ou `npm` imprime un avertissement de migration d'une vingtaine de lignes, qui rend les sorties du lab illisibles.
+- **Attributs HTTP** : les conventions `http.*` se lisent sur le span serveur (`POST /conversations/:conversationId/messages`), pas sur les spans Express (`router - ...`, `middleware - ...`), qui portent `express.name` et `express.type`.
+- **Requête de la partie 3** : utiliser une requête qui envoie un message. `GET /health` ne traverse aucune requête PostgreSQL et ne montre donc pas les spans `pg.*`.
+
+## Rejeu du 24 novembre 2026 (clt-0)
+
+Second rejeu complet sur une machine reconstruite par cloud-init, sans cluster KinD résiduel après suppression préalable (`kind delete cluster --name cluster`, qui libère le port 8080).
+
+- **Partie 1** : `asdf` en `v0.15.0`, Node.js 22.23.5 et npm 10.9.9 conformes. Dépôts clonés aux commits épinglés (`d20437a`, `0c27d64`, `56aa89e`), les deux `.tool-versions` demandant bien 19.3.0 avant le `asdf local`. `docker compose ps` affiche les cinq conteneurs, `amqplib` passe en 0.10.9, les deux bases s'initialisent, les deux services écoutent sur 4000 et 5000, et les deux requêtes `curl` renvoient les réponses attendues.
+- **Partie 2** : le service `messenger` apparaît dans Jaeger avec une trace par requête.
+- **Partie 3** : ressource enrichie (`service.name`, `deployment.environment.name=lab5`, `lab.id=0`). Spans observés : `middleware - query`, `middleware - corsMiddleware`, `middleware - jsonParser`, `router - /conversations`, `pg-pool.connect`, `pg.query:SELECT messenger_dev`, `publish <default>`.
+- **Partie 4** : la trace `f4065dd830a247fc` porte `messenger : publish <default>` et `notifier : chat_queue process`. La propagation par en-têtes AMQP est confirmée.
+- **Partie 5** : image `nginx:1.30.7-otel` récupérée, module chargé. La trace `aa741ae4cca08afe` porte les trois services `messenger-lb`, `messenger` et `notifier`.
+- **Partie 6** : l'événement `request.body` apparaît avec `0612345678` en clair, puis `[numero masque]` après passage par le **collector** sur 4319. Les deux événements coexistent dans Jaeger.
+- **Cleanup** : `docker rm -f otelcol` puis `docker compose down -v`, plus aucun conteneur du lab.
+
+Constats de ce rejeu, corrigés dans l'énoncé : l'avertissement `asdf` en `v0.16.7`, la note de la partie 2 qui affirmait que RabbitMQ n'était pas instrumenté, l'attribution erronée des attributs `http.*` aux spans Express, l'emploi de `GET /health` à la partie 3 alors que la trace décrite contient des spans PostgreSQL, et la mention d'un `~/lab05` réutilisé au lab 7, qui ne le référence pas.

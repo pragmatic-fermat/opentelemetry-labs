@@ -39,7 +39,7 @@ Versions utilisées dans ce lab :
 |---|---|
 | Node.js (installé par asdf pendant le lab) | v22.23.5 |
 | npm | 10.9.9 |
-| asdf | v0.16.7 |
+| asdf | v0.15.0 |
 | `@opentelemetry/sdk-node` | 0.301.2 |
 | `@opentelemetry/auto-instrumentations-node` | 0.83.1 |
 | `@opentelemetry/exporter-trace-otlp-proto` | 0.301.2 |
@@ -67,28 +67,39 @@ L'application se compose de deux services Node.js qui communiquent par RabbitMQ,
 title: lab 5, composants et trajet d'un message
 ---
 flowchart LR
-  C([curl]) -->|TCP/8080| NG["Nginx<br/>ingress"]
-  NG -->|TCP/4000| MS["messenger<br/>Node.js"]
+  C([curl]) -->|TCP/8080| NG["Nginx ingress<br/><i>span racine (module otel)</i>"]
+  NG -->|TCP/4000| MS["messenger<br/><i>spans HTTP, Express, pg, publish</i>"]
   MS -->|TCP/5432| DB1[(messenger-db<br/>PostgreSQL)]
-  MS -->|TCP/5672| MQ[(RabbitMQ)]
-  MQ -->|TCP/5000| NO["notifier<br/>Node.js"]
+  MS -->|TCP/5672| MQ[("RabbitMQ<br/><i>transport du contexte</i>")]
+  MQ -->|TCP/5000| NO["notifier<br/><i>spans chat_queue, pg</i>"]
   NO -->|TCP/5433| DB2[(notifier-db<br/>PostgreSQL)]
   MS -.->|OTLP| JA[(Jaeger<br/>TCP/4318)]
   NO -.->|OTLP| JA
   NG -.->|OTLP/gRPC| JA
 ```
 
+Chaque composant ne produit pas ses spans de la même façon, et le lab le montre progressivement :
+
+- **Nginx** embarque le module `ngx_otel_module` : c'est lui qui crée le span racine de la trace ([partie 5](#5-nginx-devant-lapplication)) ;
+- **messenger** et **notifier** produisent leurs spans par le SDK Node.js et l'auto-instrumentation : HTTP, Express, PostgreSQL, et `publish` / `chat_queue process` pour RabbitMQ ([parties 2](#2-auto-instrumenter-messenger) à [4](#4-instrumenter-notifier)) ;
+- **RabbitMQ** ne produit aucun span : il transporte les messages et les en-têtes qui contiennent le contexte ([partie 4](#4-instrumenter-notifier)) ;
+- **Jaeger** reçoit tout en OTLP, directement, ou en passant par un **collector** qui masque les données sensibles ([partie 6](#6-données-applicatives-et-masquage)).
+
 Le message suit ces étapes : une requête HTTP arrive sur `messenger`, qui joue le rôle de producteur (publisher), écrit dans sa base puis publie un événement dans RabbitMQ, le courtier de messages (broker) ; `notifier`, le consommateur (subscriber), lit l'événement dans la file (queue), écrit dans sa propre base et simule l'envoi d'un SMS. Sans télémétrie, il faut lire les logs de deux processus dans deux terminaux.
 
 Installez d'abord Node.js, avec le gestionnaire de versions `asdf`, comme pour l'application d'origine : la machine ne fournit pas de Node.js, et il faut une version récente pour l'auto-instrumentation actuelle. Le paquet distribué par Ubuntu est trop ancien.
 
 ```bash
-git clone https://github.com/asdf-vm/asdf.git /root/.asdf --branch v0.16.7
+git clone https://github.com/asdf-vm/asdf.git /root/.asdf --branch v0.15.0
 . /root/.asdf/asdf.sh
 asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
 asdf install nodejs 22.23.5
 asdf global nodejs 22.23.5
 ```
+
+> [!NOTE]
+>
+> La branche `v0.15.0` est la dernière version écrite en Bash. La branche `v0.16.x` réécrit `asdf` en Go, mais le dépôt y conserve les anciens fichiers Shell ainsi qu'un binaire obsolète : chaque appel à `node` ou `npm` affiche alors un avertissement de migration de vingt lignes, qui noie les sorties du lab. `v0.15.0` reste silencieuse et fournit exactement les mêmes commandes.
 
 `asdf` télécharge la version demandée et la rend disponible par des raccourcis (`shims`) placés en tête du `PATH`. Rendez ce `PATH` permanent, pour que les terminaux suivants, et les commandes lancées par les outils, retrouvent Node.js :
 
@@ -239,7 +250,7 @@ docker compose -f compose.yaml up -d --build
 >
 > La pile démarre son propre Jaeger, neuf, et ne réutilise rien d'un lab précédent. Si un conteneur d'un lab antérieur tourne encore et occupe `TCP/4317` ou `TCP/4318`, le démarrage échoue sur `port is already allocated` : listez les conteneurs avec `docker ps`, puis arrêtez la pile concernée avec `docker compose down` depuis son dossier.
 
-Démarrez l'infrastructure, puis vérifiez l'état des conteneurs :
+Contrôlez l'état des conteneurs :
 
 ```bash
 docker compose -f compose.yaml ps --format 'table {{.Name}}\t{{.Status}}'
@@ -383,7 +394,7 @@ Rejouez une requête, puis regardez Jaeger dans votre navigateur, sur `http://$C
 
 > [!NOTE]
 >
-> Les instrumentations automatiques couvrent HTTP, Express et PostgreSQL. RabbitMQ n'est pas couvert par l'auto-instrumentation : vous verrez à la partie 4 ce que cela implique pour le lien entre les deux services.
+> Les instrumentations automatiques couvrent HTTP, Express, PostgreSQL et le client `amqplib` de RabbitMQ. C'est cette dernière qui posera un span `publish <default>` à la publication, et qui fera voyager le contexte dans les en-têtes du message. Le détail du lien entre les deux services est traité [à la partie 4](#4-instrumenter-notifier).
 
 ## 3. Nommer le service et lire le waterfall
 
@@ -421,19 +432,27 @@ Relancez le messenger :
 node --import ./tracing.mjs index.mjs
 ```
 
-Envoyez une requête, puis ouvrez la trace dans Jaeger et dépliez-la. Vous voyez les spans produits par les bibliothèques : le span serveur de la requête HTTP entrante, un span client vers PostgreSQL, et des spans internes de Express.
+Envoyez un message, puis ouvrez sa trace dans Jaeger et dépliez-la. Vous voyez les spans produits par les bibliothèques : le span serveur de la requête HTTP entrante, des spans internes d'Express, un span client vers PostgreSQL, et le span de publication dans RabbitMQ.
 
 ```bash
-curl -s http://localhost:8080/health
+curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
+  -d '{"content": "Trace du waterfall"}' \
+  http://localhost:8080/conversations/1/messages
 ```
 
-Dans la trace dépliée, les spans portent des noms parlants : `middleware - query`, `middleware - corsMiddleware`, `middleware - jsonParser` pour Express, `router - /conversations` pour la route, et `pg-pool.connect`, `pg.query:SELECT messenger_dev` pour le client PostgreSQL. La hiérarchie (indentation) montre quel span a appelé lequel.
+Dans la trace dépliée, les spans portent des noms parlants : `middleware - query`, `middleware - corsMiddleware`, `middleware - jsonParser` pour Express, `router - /conversations` pour la route, `pg-pool.connect`, `pg.query:SELECT messenger_dev` pour le client PostgreSQL, et `publish <default>` pour RabbitMQ. La hiérarchie (indentation) montre quel span a appelé lequel.
+
+> [!NOTE]
+>
+> La requête `GET /health` ne suffit pas à voir les spans PostgreSQL : elle ne touche aucune donnée. Utilisez une requête qui envoie un message, comme ci-dessus.
 
 > [!NOTE]
 >
 > `LAB_ID` est une variable d'environnement de la machine, définie par le terminal web. Contrôlez avec `echo $LAB_ID` : sa valeur apparaît dans les attributs de la ressource, ce qui permet de trier les traces d'un participant parmi celles des autres.
 
-Les attributs du span `router - /conversations` s'appellent `http.request.method`, `http.response.status_code` et `url.path`. Ce sont les noms des conventions sémantiques stables d'OpenTelemetry. Les parcs instrumentés avec des versions plus anciennes, et parfois une instrumentation écrite à la main, portent encore les noms précédents (`http.method`, `http.status_code`, `http.target`) : c'est la raison pour laquelle une recherche sur `http.method` peut ne rien renvoyer alors que la donnée existe. [Le lab 7](Lab_07_Instrumentation_Manuelle.md) vous fera écrire ces attributs à la main, avec les noms actuels.
+Les spans d'Express, comme `router - /conversations` et `middleware - query`, portent les attributs `express.name` et `express.type`.
+
+Les conventions sémantiques HTTP (`http.request.method`, `http.response.status_code`, `url.path`, `http.route`) se trouvent sur le span serveur de la requête, celui dont le nom reprend la méthode et la route, par exemple `POST /conversations/:conversationId/messages`. Ce sont les noms des conventions sémantiques stables d'OpenTelemetry. Les parcs instrumentés avec des versions plus anciennes, et parfois une instrumentation écrite à la main, portent encore les noms précédents (`http.method`, `http.status_code`, `http.target`) : c'est la raison pour laquelle une recherche sur `http.method` peut ne rien renvoyer alors que la donnée existe. [Le lab 7](Lab_07_Instrumentation_Manuelle.md) vous fera écrire ces attributs à la main, avec les noms actuels.
 
 > [!NOTE]
 >
@@ -495,6 +514,26 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
 
 ![Waterfall d'une trace unique traversant messenger, RabbitMQ et notifier dans Jaeger](img/lab05-jaeger-trace-waterfall.png)
 
+Vous pouvez vérifier ce lien sans passer par l'interface, en regroupant les spans par `traceId` et en listant les services présents dans chaque trace :
+
+```bash
+MIN=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+MAX=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)
+curl -s "http://localhost:16686/api/v3/traces?query.service_name=notifier&query.startTimeMin=$MIN&query.startTimeMax=$MAX" \
+  | jq -r '.result.resourceSpans[]
+      | "\(.scopeSpans[0].spans[0].traceId[:16]) \([.resource.attributes[] | select(.key=="service.name") | .value.stringValue][0])"' \
+  | sort -u
+```
+
+On obtient un identifiant de trace porté par les deux services :
+
+```text
+f4065dd830a247fc messenger
+f4065dd830a247fc notifier
+```
+
+Les identifiants des traces du seul notifier apparaissent avec un seul service. La ligne commune est celle qui prouve la propagation : le même identifiant se retrouve chez le producteur et chez le consommateur.
+
 > [!NOTE]
 >
 > La trace unique s'explique par la composition du bundle. `@opentelemetry/auto-instrumentations-node` embarque l'instrumentation de `amqplib` : à la publication, le messenger pose un span `publish <default>` et écrit le contexte dans les en-têtes du message ; à la consommation, le notifier lit ces en-têtes et continue la trace avec son span `chat_queue process`. Sans cette instrumentation, par exemple avec un `amqplib` brut, l'en-tête ne serait pas posé et le notifier apparaîtrait dans une trace séparée. Retenez pour l'instant qu'une trace séparée signifie une propagation manquante, pas une collecte en panne.
@@ -552,6 +591,24 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
 ```
 
 Dans Jaeger, un nouveau service `messenger-lb` apparaît. Ouvrez la trace : le span de Nginx est la racine (en bleu), les spans du messenger s'y rattachent (en orange), puis ceux du notifier à travers RabbitMQ (en violet). La trace complète traverse désormais les trois services.
+
+```bash
+curl -s http://localhost:16686/api/v3/services | jq -c '.services'
+MIN=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+MAX=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)
+curl -s "http://localhost:16686/api/v3/traces?query.service_name=messenger-lb&query.startTimeMin=$MIN&query.startTimeMax=$MAX" \
+  | jq -r '.result.resourceSpans[]
+      | "\(.scopeSpans[0].spans[0].traceId[:16]) \([.resource.attributes[] | select(.key=="service.name") | .value.stringValue][0])"' \
+  | sort -u
+```
+
+La liste des services contient bien `messenger-lb`, et la trace de Nginx porte les trois services :
+
+```text
+aa741ae4cca08afe messenger
+aa741ae4cca08afe messenger-lb
+aa741ae4cca08afe notifier
+```
 
 ![Trace de bout en bout traversant Nginx (messenger-lb), messenger et notifier dans Jaeger](img/lab05-jaeger-nginx.png)
 
@@ -706,11 +763,11 @@ docker ps --format '{{.Names}}' | grep -E 'ingress|jaeger|rabbitmq|messenger-db|
 
 La seconde commande supprime aussi les volumes des deux bases PostgreSQL : les données créées pendant le lab ne survivent pas au lab. La dernière commande confirme qu'il ne reste aucun conteneur du [lab 5](Lab_05_NodeJS_Nginx.md).
 
-Le dossier `~/lab05` peut être conservé : les dépôts clonés, les fichiers `tracing.mjs` et `request-logger.mjs` servent au [lab 7](Lab_07_Instrumentation_Manuelle.md).
+Le dossier `~/lab05` peut être conservé si vous voulez rejouer le lab : les dépôts clonés et les fichiers `tracing.mjs` et `request-logger.mjs` évitent de tout réinstaller. Les autres labs ne le réutilisent pas.
 
 > [!NOTE]
 >
-> À la [partie 6](#6-données-applicatives-et-masquage), `tracing.mjs` pointe vers le **collector** sur le port 4319, qui est arrêté par ce cleanup. Pour repartir sur Jaeger directement au lab suivant, remettez l'URL d'origine :
+> À la [partie 6](#6-données-applicatives-et-masquage), `tracing.mjs` pointe vers le **collector** sur le port 4319, qui est arrêté par ce cleanup. Pour revenir à un export direct vers Jaeger, remettez l'URL d'origine :
 
 ```bash
 cd ~/lab05/messenger/app

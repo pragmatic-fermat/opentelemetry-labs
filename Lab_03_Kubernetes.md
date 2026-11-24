@@ -1049,7 +1049,7 @@ On obtient des lignes JSON, une par entrée de log :
 {"_msg":"GET /api/orders","_time":"2026-11-21T18:16:02Z","k8s.container.name":"frontend","k8s.namespace.name":"application-b","k8s.node.name":"cluster-worker2","k8s.pod.name":"frontend-84d7c6f9b5-xl2mq",...}
 ```
 
-Trois champs méritent l'attention : `_msg`, qui porte la ligne applicative, `_time`, et les champs `k8s.*` posés par Fluent Bit. Ce sont des attributs de l'enregistrement de log, et non des labels de flux (stream) : VictoriaLogs les indexe de la même façon, sans imposer de liste de labels à configurer.
+Trois champs méritent l'attention : `_msg` (le message applicatif), `_time` (l'horodatage), et les attributs `k8s.*` insérés par Fluent Bit. Dans VictoriaLogs, ces champs font partie intégrante du record de log lui-même, plutôt que d'être cantonnés à des stream labels : ils sont automatiquement indexés et interrogeables à l'identique, sans configuration préalable de schéma.
 
 > [!NOTE]
 >
@@ -1059,7 +1059,7 @@ Ouvrez maintenant l'interface dans le navigateur, sur `http://$SRV_HOST:9428`. E
 
 ![Interface vmui de VictoriaLogs, requête sur les deux namespaces d'application](img/lab03-vlogs-logsql.png)
 
-Le panneau **Stream fields** de gauche reste vide : Fluent Bit n'envoie aucun attribut de ressource, donc VictoriaLogs n'a aucun label de flux à proposer. C'est une différence avec Loki, où les labels forment le point d'entrée de chaque requête. Ici, les champs `k8s.*` sont des attributs d'enregistrement : ils s'interrogent en les nommant, comme dans les requêtes suivantes.
+Le panneau **Stream fields** de gauche reste vide : Fluent Bit transmet ces métadonnées sous forme d'attributs de log au niveau du record, et non comme attributs de ressource, donc VictoriaLogs n'affiche aucun stream label prédéfini. La différence avec Loki est notable : dans Loki, chaque requête exige obligatoirement un sélecteur de labels en point d'entrée (`{job="...", namespace="..."}`). Avec VictoriaLogs, chaque champ d'un log record est directement indexé : on filtre n'importe quel attribut `k8s.*` par son nom dans la requête LogsQL, sans devoir renseigner un stream label au préalable.
 
 Dans le champ de requête, saisissez successivement les requêtes suivantes. Le langage s'appelle **LogsQL** ; il s'écrit comme une suite de filtres sur des champs, séparés par des espaces, et les valeurs contenant des caractères spéciaux vont entre guillemets.
 

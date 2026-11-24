@@ -54,9 +54,11 @@ N clt-N.<domaine> srv-N.<domaine>
 
 ### Mise en place
 
-Le lab 1 se prépare lui-même : rien ne doit rester d'un autre lab sur les machines.
+Chaque lab est autonome et ne nécessite aucun prérequis : les machines sont reconstruites entre les séances. Nous faisons donc place nette avant de démarrer.
 
-Récupérez les fichiers fournis depuis le clone des labs, dans un dossier de travail :
+Toutes les commandes de cette section s'exécutent sur `clt-N`, depuis le terminal web, dans `/root`. Celles qui visent `srv-N` sont lancées depuis `clt-N` par SSH.
+
+Sur `clt-N`, récupérez les fichiers fournis depuis le clone des labs, dans un dossier de travail :
 
 ```bash
 rm -rf ~/lab01
@@ -72,7 +74,7 @@ On obtient :
 app  check.sh  compose-srv.yaml  compose.yaml  order.sh  tg.sh
 ```
 
-Construisez l'image de l'application et récupérez les images des outils. Les versions sont épinglées, les téléchargements ne se reproduiront pas en séance :
+Sur `clt-N`, construisez l'image de l'application et récupérez les images des outils. Les versions sont épinglées :
 
 ```bash
 docker compose build
@@ -81,13 +83,7 @@ docker pull ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:
 docker pull curlimages/curl:8.11.0
 ```
 
-Récupérez l'image de Jaeger sur la machine serveur, où elle sera démarrée [au lab 1B](Lab_01B_Collector_vers_Jaeger.md) :
-
-```bash
-ssh root@$SRV_HOST 'docker pull jaegertracing/jaeger:2.23.0'
-```
-
-Vérifiez que la connexion SSH vers `srv-N` fonctionne sans mot de passe :
+Depuis `clt-N`, vérifiez que la connexion SSH vers `srv-N` fonctionne sans mot de passe :
 
 ```bash
 ssh root@$SRV_HOST hostname
@@ -97,6 +93,12 @@ On obtient le nom de la machine serveur :
 
 ```text
 srv-N
+```
+
+Depuis `clt-N`, récupérez l'image de Jaeger sur `srv-N`, où elle sera démarrée [au lab 1B](Lab_01B_Collector_vers_Jaeger.md) :
+
+```bash
+ssh root@$SRV_HOST 'docker pull jaegertracing/jaeger:2.23.0'
 ```
 
 Aucun service n'est démarré à ce stade : chaque lab démarre ce dont il a besoin.
@@ -144,7 +146,13 @@ flowchart LR
   B([Navigateur]) -->|TCP/16686| J
 ```
 
-L'architecture évolue progressivement : dans le lab 1A, les conteneurs écrivent directement leurs spans dans leurs journaux. Le lab 1B introduit le **collector** sur `clt-N` pour expédier les données vers Jaeger sur `srv-N`. Enfin, le lab 1C insère plusieurs processors dans le **collector** afin de nettoyer et enrichir les traces localement avant leur envoi.
+L'architecture évolue au fil des trois parties.
+
+Dans le lab 1A, les conteneurs écrivent directement leurs spans dans leur sortie standard, que l'on consulte avec `docker logs`.
+
+Le lab 1B introduit le **collector** sur `clt-N` pour expédier les données vers Jaeger sur `srv-N`.
+
+Le lab 1C insère plusieurs processors dans le **collector** afin de nettoyer et enrichir les traces localement avant leur envoi.
 
 ## Le signal traces
 

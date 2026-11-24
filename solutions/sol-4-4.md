@@ -56,6 +56,6 @@ ansible-playbook playbook.yml
 
 **Liens de navigation**
 
-- [Retour au lab 4](../Lab_04_Ansible_Jinja2.md#5-revenir-à-une-version-antérieure-du-binaire)
+- [Retour au lab 4](../Lab_04_Ansible_Jinja2.md#4-revenir-à-une-version-antérieure-du-binaire)
 - [Solution précédente (Extra 3)](sol-4-3.md)
 - [Retour au répertoire solutions](../solutions/)

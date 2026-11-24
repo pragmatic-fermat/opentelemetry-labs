@@ -45,7 +45,7 @@ Vous verrez alors des métriques telles que :
 
 **Liens de navigation**
 
-- [Retour au lab 4](../Lab_04_Ansible_Jinja2.md#3-activer-le-scraper-network-du-receiver-hostmetrics-extra)
+- [Retour au lab 4](../Lab_04_Ansible_Jinja2.md#2-activer-le-scraper-network-du-receiver-hostmetrics-extra)
 - [Solution suivante (Extra 3)](sol-4-3.md)
 - [Retour au répertoire solutions](../solutions/)
 

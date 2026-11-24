@@ -102,3 +102,20 @@ Pour illustrer le déploiement sur plusieurs cibles avec des configurations Jinj
    ./animateur/scripts/lab04-vms-destroy.sh
    ```
    Le script supprime toutes les droplets portant le tag `lab04-ephemere`.
+
+## Rejeu du 24 novembre 2026, groupe 2 (clt-2 et srv-2)
+
+Rejeu intégral sur un environnement neuf (`clt-2`, `srv-2` sous Ubuntu 24.04, trois serveurs Debian `srv2-2`, `srv3-2`, `srv4-2` dans `vpc-2`). Les parties 1 à 5 se déroulent comme prévu : inventaire, `ping`, première exécution en `changed=2` puis `changed=0`, rendu du template avec `endpoint: clt-2.monlab.top:4317`, cinq traces reçues avec `lab.id=2` et `host.name=srv-2`, activation des métriques en `changed=2`, dérive manuelle détectée puis corrigée, valeur `"deux secondes"` refusée par `validate`, découverte des trois Debian en onze secondes, quatre configurations déployées, séries Prometheus par serveur.
+
+Écarts constatés et corrigés dans l'énoncé :
+
+- après la correction de la dérive, le fichier se termine par `exporters: [otlp_http/prometheus]` et non par le pipeline `traces`, puisque les métriques système sont encore activées à ce stade ;
+- après la suppression de la ligne `otelcol_batch_timeout` fautive, le playbook renvoie `changed=2` et non `changed=0` : la valeur `hostmetrics` repasse à `false`, la configuration change et le service redémarre ;
+- la commande de contrôle du Cleanup utilisait `command -v` sans `-m ansible.builtin.shell` : Ansible échouait sur `No such file or directory: b'command'`. La partie 1 utilise déjà le module `shell`, le Cleanup est aligné ;
+- le dossier `~/lab04` n'est pas réutilisé par le lab suivant, la phrase qui l'affirmait est retirée ;
+- la sortie de la comparaison des quatre configurations est produite avec `-o`, qui remplace les retours à la ligne par `\n` : l'exemple est réécrit tel qu'il s'affiche.
+
+Deux points d'exploitation pour l'animateur :
+
+- **DNS interne en retard sur un environnement neuf.** Pendant une dizaine de minutes, `srv-2` et les serveurs Debian n'ont pas résolu `clt-2.monlab.top`, alors que les serveurs autoritaires de DigitalOcean et le résolveur public répondaient correctement : les résolveurs internes conservaient la réponse négative émise avant la création de l'enregistrement. Les exporters du **collector** échouaient sur `dial tcp: lookup clt-2.monlab.top: no such host`, donc plus aucune métrique ni trace. Contournement utilisé et documenté dans le lab : exporter `CLT_HOST` avec l'adresse privée de `clt-N` avant `ansible-playbook`.
+- **Labels `job` et `instance`.** Ils n'apparaissent que si la ressource porte `service.name` et `service.instance.id`. Le template les pose désormais (`otelcol_environment` et `ansible_hostname`), ce qui rend l'écran du participant conforme à la capture du lab : `instance=srv2-2 job=backend`, `instance=srv4-2 job=database`, `instance=srv-2 job=lab4`.

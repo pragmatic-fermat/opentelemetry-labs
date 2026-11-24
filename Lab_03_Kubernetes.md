@@ -123,69 +123,87 @@ Les interfaces des backends sont servies directement par `srv-N` :
 
 ## 1. Préparer le cluster et les applications
 
-Les deux machines jouent un rôle distinct : `clt-N` porte le cluster et ce que l'on observe, `srv-N` porte les backends. Le schéma suivant montre l'ensemble du dispositif, y compris les briques de télémétrie installées dans les parties suivantes. Les couleurs séparent les éléments : en bleu l'application A, en vert l'application B, en ambre les briques de télémétrie, en violet les backends :
+Les deux machines jouent un rôle distinct : `clt-N` porte le cluster et ce que l'on observe, `srv-N` porte les backends. Le schéma suivant montre l'architecture complète du dispositif : les quatre nœuds du cluster, les agents déployés sur chaque worker, la **gateway** positionnée au-dessus des nœuds pour centraliser les flux, et les backends distants sur `srv-N` :
 
 ```mermaid
 ---
-title: Les deux machines du lab 3
+title: Architecture du lab 3 : les 4 nœuds, les agents et la gateway
 ---
-flowchart LR
-  B([Navigateur])
-
-  subgraph CLT["Machine cliente clt-N"]
+flowchart TB
+  subgraph CLT["Machine cliente clt-N (Cluster KinD 4 nœuds)"]
     direction TB
-    subgraph K["cluster KinD"]
-      direction TB
-      CP["control-plane<br/>Traefik, port 8080"]
-      subgraph NA["namespace application-a"]
-        direction TB
-        FA[frontend A]
-        BA[backend A]
-        FA --> BA
-      end
-      subgraph NB["namespace application-b"]
-        direction TB
-        FB[frontend B]
-        BB[backend B]
-        FB --> BB
-      end
-      AG[otel-agent<br/>DaemonSet]
-      FLB[fluent-bit<br/>DaemonSet]
-      GW[otel-gateway<br/>Deployment]
+
+    subgraph GW_LAYER["Niveau passerelle centralisée (Deployment Kubernetes)"]
+      GW["otel-gateway<br/>(Deployment dans le namespace observability)"]
     end
+
+    subgraph NODES["Nœuds du cluster Kubernetes"]
+      direction LR
+
+      subgraph CP["Nœud 1 : cluster-control-plane"]
+        TRF["Traefik<br/>(Gateway API, port 8080)"]
+      end
+
+      subgraph W1["Nœud 2 : cluster-worker"]
+        direction TB
+        App1["Pods application A / B"]
+        AG1["otel-agent<br/>(DaemonSet)"]
+        FB1["fluent-bit<br/>(DaemonSet)"]
+        App1 -->|OTLP local| AG1
+        App1 -.->|logs sur disque| FB1
+      end
+
+      subgraph W2["Nœud 3 : cluster-worker2"]
+        direction TB
+        App2["Pods application A / B"]
+        AG2["otel-agent<br/>(DaemonSet)"]
+        FB2["fluent-bit<br/>(DaemonSet)"]
+        App2 -->|OTLP local| AG2
+        App2 -.->|logs sur disque| FB2
+      end
+
+      subgraph W3["Nœud 4 : cluster-worker3"]
+        direction TB
+        App3["Pods application A / B"]
+        AG3["otel-agent<br/>(DaemonSet)"]
+        FB3["fluent-bit<br/>(DaemonSet)"]
+        App3 -->|OTLP local| AG3
+        App3 -.->|logs sur disque| FB3
+      end
+    end
+
+    AG1 & AG2 & AG3 -->|"traces OTLP (enrichies k8s.*)"| GW
+    FB1 & FB2 & FB3 -->|"logs OTLP HTTP"| GW
+    TRF -.->|"routage HTTP :8080"| App1 & App2 & App3
   end
 
-  subgraph SRV["Machine serveur srv-N"]
+  subgraph SRV["Machine serveur srv-N (Backends)"]
     direction TB
-    J[(Jaeger<br/>TCP/16686 et 4318)]
-    VL[(VictoriaLogs<br/>TCP/9428)]
+    J[("Jaeger<br/>(traces TCP/4318 et UI TCP/16686)")]
+    VL[("VictoriaLogs<br/>(logs TCP/9428)")]
   end
 
-  B -->|"app-a et app-b, TCP/8080"| CP
-  CP --> FA
-  CP --> FB
-  FA -->|OTLP| AG
-  BA -->|OTLP| AG
-  FB -->|OTLP| AG
-  BB -->|OTLP| AG
-  FLB -->|"logs, OTLP"| GW
-  AG -->|"traces, OTLP"| GW
-  GW -->|"traces, TCP/4318"| J
-  GW -->|"logs, TCP/9428"| VL
-  B -->|TCP/16686| J
-  B -->|TCP/9428| VL
+  GW -->|"export traces (OTLP/HTTP)"| J
+  GW -->|"export logs (OTLP/HTTP)"| VL
 
-  classDef appa fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
-  classDef appb fill:#dcfce7,stroke:#15803d,color:#14532d
-  classDef telemetry fill:#fef3c7,stroke:#b45309,color:#78350f
+  B([Navigateur]) -->|"HTTP :8080"| TRF
+  B -->|"UI :16686"| J
+  B -->|"UI :9428"| VL
+
+  classDef app fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef agent fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef gateway fill:#fed7aa,stroke:#c2410c,color:#7c2d12
   classDef backend fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
-  class FA,BA appa
-  class FB,BB appb
-  class AG,FLB,GW telemetry
+  classDef cp fill:#f1f5f9,stroke:#475569,color:#0f172a
+
+  class App1,App2,App3 app
+  class AG1,AG2,AG3,FB1,FB2,FB3 agent
+  class GW gateway
   class J,VL backend
+  class TRF cp
 ```
 
-Le cluster se traverse de bout en bout : la Gateway API reçoit le trafic web du navigateur, les pods des deux applications produisent la télémétrie, et les deux **collector** la collectent avant de l'envoyer aux backends de `srv-N`. Un **agent** par nœud reçoit les traces des applications ; Fluent Bit, lui aussi un par nœud, lit les fichiers de logs ; la **gateway** centralise l'export.
+Le cluster se compose de quatre nœuds : le nœud `cluster-control-plane` héberge le contrôleur d'entrée Traefik (Gateway API), tandis que les trois nœuds `cluster-worker` exécutent les pods des applications. Sur chaque nœud worker, un **agent OpenTelemetry** (DaemonSet) collecte et enrichit localement les traces émises par les conteneurs, et un pod Fluent Bit (DaemonSet) lit les fichiers de journaux sur le disque. Tous ces flux convergent au niveau supérieur vers la **gateway OpenTelemetry** (Deployment centralisé), qui prend en charge l'exportation vers les backends Jaeger et VictoriaLogs situés sur la machine `srv-N`.
 
 ### Créer le cluster
 

@@ -284,6 +284,7 @@ receivers:
       cpu: {}
       load: {}
       memory: {}
+      # network: {}  # optionnel, voir section Extra
 {% endif %}
 
 processors:
@@ -1110,9 +1111,15 @@ ansible-playbook playbook.yml | grep -A3 'PLAY RECAP'
 
 `ansible-galaxy role init otelcol` crée l'arborescence d'un rôle : les tâches, le handler, le template et les variables par défaut s'y rangent chacun dans leur dossier, et le playbook se réduit à une déclaration.
 
-### 3. Ajouter un receiver de logs
+### 3. Activer le scraper network du receiver hostmetrics (extra)
 
-Ajoutez au template un receiver `filelog` sur `/var/log/syslog` et un pipeline de logs vers l'exporter de votre choix. Pensez aux droits de lecture de l'utilisateur `otelcol-contrib`.
+Le receiver `hostmetrics` active par défaut seulement `cpu`, `load` et `memory`. Pour collecter également les métriques réseau (`network` : paquets, octets, erreurs, etc.), décommentez la ligne suivante dans le template :
+
+```yaml
+      network: {}
+```
+
+Redéployez ensuite le **collector** avec le playbook. Vous verrez alors de nouvelles métriques telles que `system_network_packets` ou `system_network_io` dans Prometheus.
 
 ### 4. Conserver les versions précédentes de la configuration
 

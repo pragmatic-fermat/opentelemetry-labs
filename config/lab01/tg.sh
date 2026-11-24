@@ -2,7 +2,7 @@
 # Envoie de la télémétrie de test vers le Collector (service "otelcol" du compose).
 #
 # Usage : ./tg.sh traces [options de telemetrygen]
-# Exemple : ./tg.sh traces --traces 5 --service demo
+# Exemple : ./tg.sh traces --traces 5
 #
 # Les valeurs de chaîne des attributs doivent conserver leurs guillemets doubles :
 #   --telemetry-attributes 'http.route="/health"'

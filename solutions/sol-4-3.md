@@ -48,7 +48,7 @@ Chaque déploiement crée une nouvelle sauvegarde horodatée.
 
 **Liens de navigation**
 
-- [Retour au lab 4](../Lab_04_Ansible_Jinja2.md#4-conserver-les-versions-précédentes-de-la-configuration)
+- [Retour au lab 4](../Lab_04_Ansible_Jinja2.md#3-conserver-les-versions-précédentes-de-la-configuration)
 - [Solution précédente (Extra 2)](sol-4-2.md)
 - [Solution suivante (Extra 4)](sol-4-4.md)
 - [Retour au répertoire solutions](../solutions/)

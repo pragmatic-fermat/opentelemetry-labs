@@ -105,6 +105,8 @@ cat ansible.cfg
 
 Créez l'inventaire. Cette fois, le mot `EOF` n'est pas entre guillemets : le shell remplace donc `$SRV_HOST` par sa valeur avant d'écrire le fichier. C'est ce que vous voulez ici, alors que dans les autres commandes du lab vous écrirez des `{{ ... }}` Jinja2 qui doivent rester tels quels.
 
+Le groupe s'appelle `[otel]` : c'est une convention courante pour désigner les machines qui reçoivent le **collector** OpenTelemetry. La commande `ansible otel ...` cible donc tous les hôtes de ce groupe.
+
 ```bash
 cat > inventory.ini <<EOF
 [otel]
@@ -246,7 +248,7 @@ Le template produit une configuration de **collector** qui contient :
 - une première ligne de commentaire `{{ ansible_managed | comment }}`, qui indique que le fichier est géré par Ansible ;
 - un receiver `otlp` (gRPC et HTTP) qui écoute sur toutes les interfaces, ports 4317 et 4318 ;
 - si la variable `otelcol_hostmetrics_enabled` est vraie, un receiver `hostmetrics` avec `collection_interval: 30s` et les scrapers `cpu`, `load` et `memory` (écrits `cpu: {}`, etc.) ;
-- les processors `memory_limiter` (1 s, 256 MiB, marge de 64 MiB), `resourcedetection`, `resource` et `batch`. Le processor `resourcedetection` interroge la machine elle-même (détecteur `system` : nom d'hôte, système, identifiant machine) et complète la ressource avec ce qu'il trouve. Le processor `resource` reçoit, par une boucle sur le dictionnaire `otelcol_resource_attributes`, une entrée `upsert` par attribut (clé `key`, valeur écrite avec le filtre `to_json`, qui ajoute les guillemets nécessaires à une chaîne YAML). Le `batch` utilise la valeur de `otelcol_batch_timeout` ;
+- les processors `memory_limiter` (1 s, 256 MiB, marge de 64 MiB), `resourcedetection`, `resource` et `batch`. Le processor `resourcedetection` interroge la machine elle-même (détecteur `system` : nom d'hôte, système, identifiant machine) et complète la ressource avec ce qu'il trouve. Le processor `resource` reçoit, par une boucle sur le dictionnaire `otelcol_resource_attributes`, une entrée `upsert` par attribut (clé `key`, valeur écrite avec le filtre `to_json`, qui ajoute les guillemets nécessaires à une chaîne YAML). Le processor `batch` regroupe les données avant envoi ; sa valeur `timeout` (2 s par défaut) est fournie par la variable `otelcol_batch_timeout` ;
 - l'exporter `otlp_grpc/jaeger`, vers `otelcol_backend_host` sur le port 4317 sans TLS ;
 - si `otelcol_hostmetrics_enabled` est vraie, un exporter `otlp_http/prometheus` dont le paramètre `metrics_endpoint` vaut `http://<otelcol_backend_host>:9090/api/v1/otlp/v1/metrics` ;
 - un pipeline `traces` (receiver `otlp`, processors `memory_limiter`, `resourcedetection`, `resource` puis `batch`, exporter `otlp_grpc/jaeger`) et, si `otelcol_hostmetrics_enabled` est vraie, un pipeline `metrics` (receiver `hostmetrics`, mêmes processors, exporter `otlp_http/prometheus`).
@@ -263,6 +265,10 @@ C'est ce qui rendra la partie 5 lisible : le même template déployé sur quatre
 > [!NOTE]
 >
 > `otelcol_backend_host` est lue dans l'environnement du terminal qui lance `ansible-playbook`, par `lookup('ansible.builtin.env', 'CLT_HOST')`. Si `CLT_HOST` est vide, l'endpoint de l'exporter devient `:4317` et le **collector** tente de joindre sa propre machine : les traces n'arrivent pas dans Jaeger, et les logs du service citent `127.0.0.1:4317`. Contrôlez `echo $CLT_HOST` avant de lancer le playbook ; s'il est vide, ouvrez un nouveau terminal web, où la variable est définie.
+
+> [!NOTE]
+>
+> Sur un environnement fraîchement créé, il arrive que `srv-N` ne résolve pas encore le nom de `clt-N` : les résolveurs internes du fournisseur gardent quelques minutes une réponse négative émise avant la création de l'enregistrement DNS. Les logs du **collector** citent alors `dial tcp: lookup clt-N...: no such host`, et ni les traces ni les métriques n'arrivent. Contrôlez avec `ssh root@$SRV_HOST getent hosts $CLT_HOST`. Si le nom ne résout pas, relancez le playbook en donnant l'adresse privée de `clt-N` à la place du nom, le temps que le DNS se propage (`export CLT_HOST=<adresse privée de clt-N>` avant `ansible-playbook`).
 
 ```bash
 mkdir -p templates
@@ -282,6 +288,7 @@ receivers:
       cpu: {}
       load: {}
       memory: {}
+      # network: {}  # optionnel, voir section Extra
 {% endif %}
 
 processors:
@@ -300,6 +307,12 @@ processors:
         value: {{ value | to_json }}
         action: upsert
 {% endfor %}
+      - key: service.name
+        value: {{ otelcol_environment | to_json }}
+        action: upsert
+      - key: service.instance.id
+        value: {{ ansible_hostname | to_json }}
+        action: upsert
   batch:
     timeout: {{ otelcol_batch_timeout }}
 
@@ -426,7 +439,7 @@ cat >> playbook.yml <<'EOF'
 EOF
 ```
 
-Déployez, puis envoyez cinq traces à travers le **collector** de `srv-N`, avec `telemetrygen` lancé depuis `clt-N` :
+Déployez, puis générez cinq traces avec `telemetrygen` (lancé depuis `clt-N`) et envoyez-les au **collector** de `srv-N` :
 
 ```bash
 ansible-playbook playbook.yml
@@ -478,7 +491,9 @@ deployment.environment.name=lab4
 lab.id=<votre numéro>
 ```
 
-La même requête, filtrée sur `host.name`, montre ce qu'aucune variable n'a fourni : le nom de la machine, détecté par `resourcedetection`. Les traces sont celles du **collector** de `srv-N`, donc le nom est celui du serveur, pas celui de `clt-N` :
+La même requête, filtrée sur `host.name`, montre ce qu'aucune variable Ansible n'a fourni : le nom de la machine, détecté automatiquement par le processor `resourcedetection`.
+
+**Ces traces ont été générées par `telemetrygen`** (lancé depuis `clt-N`). Elles ont ensuite transité par le **collector** qui tourne sur `srv-N`. C'est pourquoi l'attribut `host.name` vaut le nom du serveur (`srv-N.monlab.top` ou `srv-N`), et non celui de `clt-N`.
 
 ```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
@@ -656,17 +671,17 @@ ansible-playbook playbook.yml >/dev/null
 ansible otel -a 'tail -1 /etc/otelcol-contrib/config.yaml'
 ```
 
-La ligne a disparu, et le fichier se termine de nouveau par la déclaration de l'exporter du pipeline `traces` :
+La ligne a disparu, et le fichier se termine de nouveau par la déclaration du dernier pipeline du template. Les métriques système étant encore activées à ce stade, c'est le pipeline `metrics` :
 
 ```text
-      exporters: [otlp_grpc/jaeger]
+      exporters: [otlp_http/prometheus]
 ```
 
 Ansible est la source de vérité : une modification manuelle est écrasée au passage suivant. C'est ce qui rend un parc prévisible, et c'est aussi pourquoi une urgence se règle en modifiant le template, pas le serveur.
 
 ### Un changement refusé
 
-Simulez enfin une erreur de saisie. La valeur de `otelcol_batch_timeout` est invalide, et le paramètre `validate` doit empêcher son déploiement :
+Simulez enfin une erreur de saisie. La valeur de `otelcol_batch_timeout` est invalide (`"deux secondes"` au lieu d’une durée comme `2s`). Le paramètre `validate` du template doit empêcher le déploiement d’une configuration invalide :
 
 ```bash
 cat > host_vars/$SRV_HOST.yml <<'EOF'
@@ -699,7 +714,13 @@ sed -i '/otelcol_batch_timeout/d' host_vars/$SRV_HOST.yml
 ansible-playbook playbook.yml | grep -A2 'PLAY RECAP'
 ```
 
-Le résumé indique `failed=0` et `changed=0` : le fichier déployé correspond déjà au résultat du template.
+Le résumé indique `failed=0` et `changed=2`. Le fichier est bien redéployé : la suppression de la ligne fautive retire aussi la valeur `hostmetrics` devenue `false`, donc la configuration générée change par rapport à celle qui tourne, et le service redémarre :
+
+```text
+srv-N.monlab.top           : ok=6    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+```
+
+Pour retrouver un `changed=0`, relancez une seconde fois le playbook : le fichier est alors déjà conforme au template.
 
 > [!NOTE]
 >
@@ -817,16 +838,18 @@ ansible collector -b -m ansible.builtin.shell \
   -o
 ```
 
-La sortie montre que chaque serveur a bien sa configuration :
+La sortie montre que chaque serveur a bien sa configuration. Les retours à la ligne internes sont remplacés par `\n`, effet de l'option `-o` qui tient chaque hôte sur une seule ligne :
 
 ```text
-srv-frontend |    timeout: 1s    (pas de hostmetrics)    value: "frontend"
-srv-backend |     timeout: 5s    hostmetrics: ...        value: "backend"
-srv-database |    timeout: 10s   hostmetrics: ...        value: "database"
-srv-0.monlab.top | timeout: 2s   hostmetrics: ...        value: "lab4"
+srv-frontend |    timeout: 1s\n        value: "frontend"
+srv-backend |     timeout: 5s\n  hostmetrics:\n        value: "backend"
+srv-database |    timeout: 10s\n  hostmetrics:\n        value: "database"
+srv-0.monlab.top | timeout: 2s\n  hostmetrics:\n        value: "lab4"
 ```
 
-Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables. Le fichier `prometheus/prometheus.yml` fourni contient pour cela un bloc `otlp` qui promeut quatre attributs en labels : `service.name`, `service.instance.id`, `deployment.environment.name` et `host.name`. C'est le pendant OTLP de ce que l'exporter `prometheus` faisait seul en scrape [au lab 1](Lab_01_Socle.md).
+Le frontend n'affiche pas `hostmetrics`, puisque ses métriques système sont désactivées.
+
+Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables. Le fichier `prometheus/prometheus.yml` fourni contient pour cela un bloc `otlp` qui promeut quatre attributs en labels : `service.name`, `service.instance.id`, `deployment.environment.name` et `host.name`.
 
 Attendez une minute, puis interrogez Prometheus pour voir les métriques des serveurs d'infrastructure :
 
@@ -851,16 +874,7 @@ srv3-0 [database] : 0.13
 
 > [!NOTE]
 >
-> Les labels `instance` et `job` de Prometheus viennent des attributs de ressource `service.instance.id` et `service.name`. Pour les remplir automatiquement avec le hostname de chaque serveur, ajoutez ces deux attributs dans le template Jinja2, en utilisant les facts Ansible (`ansible_hostname`), et redéployez :
-
-```yaml
-      - key: service.name
-        value: {{ otelcol_environment | to_json }}
-        action: upsert
-      - key: service.instance.id
-        value: {{ ansible_hostname | to_json }}
-        action: upsert
-```
+> Les labels `instance` et `job` de Prometheus viennent des attributs de ressource `service.instance.id` et `service.name`. Ces deux attributs sont désormais ajoutés automatiquement dans le template (via `otelcol_environment` et le fact Ansible `ansible_hostname`).
 
 > [!NOTE]
 >
@@ -875,14 +889,14 @@ cd ~/lab04
 docker compose down
 ansible otel -b -m ansible.builtin.apt -a "name=otelcol-contrib state=absent purge=true"
 ansible otel -b -m ansible.builtin.file -a "path=/tmp/otelcol-contrib_0.165.0.deb state=absent"
-ansible otel -a 'command -v otelcol-contrib || echo absent'
+ansible otel -m ansible.builtin.shell -a 'command -v otelcol-contrib || echo absent'
 ```
 
 La dernière commande affiche `absent` : le binaire, la configuration `/etc/otelcol-contrib` et le paquet dans `/tmp` ont disparu du serveur.
 
 Si des serveurs éphémères ont été déployés [à la partie 5](#5-étendre-le-parc--4-serveurs-4-configurations), ils ne se nettoient pas depuis le terminal : votre animateur les détruit en fin de séance avec `animateur/scripts/lab04-vms-destroy.sh`. Aucun playbook n'est nécessaire pour cela, et les machines disparaissent avec leurs paquets et leurs configurations.
 
-Le dossier `~/lab04` peut être conservé : le playbook, le template et les `host_vars` servent de point de départ au lab suivant.
+Le dossier `~/lab04` peut être conservé si vous voulez rejouer le lab. Les autres labs ne le réutilisent pas : chacun fournit ses propres fichiers.
 
 ## Extra
 
@@ -1105,19 +1119,21 @@ sed -i 's|src: config-tenants.yaml.j2|src: config.yaml.j2|' playbook.yml
 ansible-playbook playbook.yml | grep -A3 'PLAY RECAP'
 ```
 
-### 2. Transformer le playbook en rôle
+### 2. Activer le scraper network du receiver hostmetrics (extra)
 
-`ansible-galaxy role init otelcol` crée l'arborescence d'un rôle : les tâches, le handler, le template et les variables par défaut s'y rangent chacun dans leur dossier, et le playbook se réduit à une déclaration.
+Le receiver `hostmetrics` active par défaut seulement `cpu`, `load` et `memory`. Pour collecter également les métriques réseau (`network` : paquets, octets, erreurs, etc.), décommentez la ligne suivante dans le template :
 
-### 3. Ajouter un receiver de logs
+```yaml
+      network: {}
+```
 
-Ajoutez au template un receiver `filelog` sur `/var/log/syslog` et un pipeline de logs vers l'exporter de votre choix. Pensez aux droits de lecture de l'utilisateur `otelcol-contrib`.
+Redéployez ensuite le **collector** avec le playbook. Vous verrez alors de nouvelles métriques telles que `system_network_packets` ou `system_network_io` dans Prometheus.
 
-### 4. Conserver les versions précédentes de la configuration
+### 3. Conserver les versions précédentes de la configuration
 
 Ajoutez le paramètre `backup: true` à la tâche de configuration et observez les copies conservées sur le serveur à chaque modification.
 
-### 5. Revenir à une version antérieure du binaire
+### 4. Revenir à une version antérieure du binaire
 
 Pour l'exercice, imaginez qu'une régression de la version 0.165.0 vous oblige à revenir à 0.164.0 le temps d'un diagnostic. Le playbook rend l'opération simple, à deux conditions : changer les sommes de contrôle avec la version, et prévenir APT qu'il s'agit d'une descente de version.
 

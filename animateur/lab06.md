@@ -22,9 +22,9 @@ Le lab fait dialoguer deux machines :
 
 Le participant travaille exclusivement depuis le terminal web de `clt-N`. Toutes les opérations sur `srv-N` sont menées via SSH sans mot de passe depuis ce terminal.
 
-## Rejeu du 22 novembre 2026 (clt-0 et srv-0)
+## Rejeux du 22 et du 23 novembre 2026 (clt-0 et srv-0)
 
-Le rejeu complet a été déroulé depuis `clt-0` en pilotant `srv-0`.
+Le rejeu complet a été déroulé depuis `clt-0` en pilotant `srv-0`, et confirmé le 23 novembre 2026 sur les machines reconstruites :
 
 - **Partie 1 (Backends)** : stack Compose lancée sur `clt-0` (ports 16686 et 4318), copie des sources sur `srv-0:~/lab06`.
 - **Partie 2 (Java)** : installation d'OpenJDK 21, téléchargement de l'**agent** Java 2.34.0, compilation de `checkout.java`, démarrage en arrière-plan avec `setsid nohup java -javaagent:...`. Premier appel : `checkout` répond `{"orders":"1 mug","inventory":{"error":"ConnectException"}}` car le service suivant n'est pas encore en ligne. Jaeger enregistre `checkout`.

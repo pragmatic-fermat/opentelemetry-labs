@@ -830,7 +830,7 @@ srv-database |    timeout: 10s   hostmetrics: ...        value: "database"
 srv-0.monlab.top | timeout: 2s   hostmetrics: ...        value: "lab4"
 ```
 
-Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables. Le fichier `prometheus/prometheus.yml` fourni contient pour cela un bloc `otlp` qui promeut quatre attributs en labels : `service.name`, `service.instance.id`, `deployment.environment.name` et `host.name`. C'est le pendant OTLP de ce que l'exporter `prometheus` faisait seul en scrape [au lab 1](Lab_01_Socle.md).
+Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables. Le fichier `prometheus/prometheus.yml` fourni contient pour cela un bloc `otlp` qui promeut quatre attributs en labels : `service.name`, `service.instance.id`, `deployment.environment.name` et `host.name`.
 
 Attendez une minute, puis interrogez Prometheus pour voir les métriques des serveurs d'infrastructure :
 

@@ -11,7 +11,7 @@ Pour chaque numéro N de 0 à `group_count - 1` (le numéro 0 est celui de l'ani
 - deux enregistrements DNS `clt-N` et `srv-N` dans la zone `domain_name` ;
 - un tag commun (`tag_name`) et un projet DigitalOcean `training` qui regroupe les droplets (les VPC ne sont pas assignables à un projet, ils restent en dehors).
 
-Chaque machine expose un terminal web (ttyd derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`, protégé par le mot de passe `webshell_password` (compte `stagiaire` dans la basic auth). Le terminal ouvre des sessions directement en root (machines éphémères), le dépôt des labs est cloné dans `/root/opentelemetry-labs`, en SSH avec la clé de déploiement `github_deploy_key` tant que le dépôt est privé, en HTTPS anonyme ensuite. Le cluster Kubernetes des labs suivants sera un cluster KinD sur `clt-N`, d'où les 8 Go de RAM et le swap de 2 Go.
+Chaque machine expose un terminal web (ttyd derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`, protégé par le mot de passe `webshell_password` (compte `stagiaire` dans la basic auth). Le terminal ouvre des sessions directement en root (machines éphémères), le dépôt des labs est cloné dans `/root/opentelemetry-labs` en HTTPS anonyme. Le cluster Kubernetes des labs suivants sera un cluster KinD sur `clt-N`, d'où les 8 Go de RAM et le swap de 2 Go.
 
 ## Utilisation avec TFC
 
@@ -22,7 +22,6 @@ Créez un workspace relié à ce dépôt (workflow par gestion de versions) et i
 | `do_token` | Terraform, sensible | Jeton d'API DigitalOcean |
 | `root_password` | Terraform, sensible | Mot de passe du compte root, injecté dans les fichiers cloud-init |
 | `webshell_password` | Terraform, sensible | Mot de passe du webshell (ttyd), communiqué aux participants |
-| `github_deploy_key` | Terraform, sensible | Clé de déploiement GitHub (lecture seule) pour cloner le dépôt tant qu'il est privé ; vide quand le dépôt est public |
 | `domain_name` | Terraform | Zone DNS DigitalOcean qui reçoit les enregistrements |
 | `tag_name` | Terraform | Nom du tag appliqué aux droplets |
 | `group_count` | Terraform | Nombre d'environnements, animateur compris |

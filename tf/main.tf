@@ -32,15 +32,6 @@ variable "webshell_password" {
   sensitive = true
 }
 
-# Clé de déploiement GitHub (lecture seule) pour cloner le dépôt des labs
-# tant qu'il est privé. Vide quand le dépôt est public : le clone se fait
-# alors en HTTPS anonyme.
-variable "github_deploy_key" {
-  type      = string
-  sensitive = true
-  default   = ""
-}
-
 variable "group_count" {
   type = number
 }
@@ -79,7 +70,6 @@ resource "digitalocean_droplet" "clt" {
   user_data = templatefile("${path.module}/cloud-init-clt.yaml", {
     root_password         = var.root_password
     webshell_password     = var.webshell_password
-    github_deploy_key_b64 = base64encode(var.github_deploy_key)
     lab_id                = count.index
     lab_domain            = var.domain_name
     clt_machine           = "clt-${count.index}"
@@ -101,7 +91,6 @@ resource "digitalocean_droplet" "srv" {
   user_data = templatefile("${path.module}/cloud-init-srv.yaml", {
     root_password         = var.root_password
     webshell_password     = var.webshell_password
-    github_deploy_key_b64 = base64encode(var.github_deploy_key)
     lab_id                = count.index
     lab_domain            = var.domain_name
     clt_machine           = "clt-${count.index}"

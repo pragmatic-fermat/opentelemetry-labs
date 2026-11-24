@@ -428,7 +428,7 @@ cat >> playbook.yml <<'EOF'
 EOF
 ```
 
-Déployez, puis envoyez cinq traces à travers le **collector** de `srv-N`, avec `telemetrygen` lancé depuis `clt-N` :
+Déployez, puis générez cinq traces avec `telemetrygen` (lancé depuis `clt-N`) et envoyez-les au **collector** de `srv-N` :
 
 ```bash
 ansible-playbook playbook.yml
@@ -480,7 +480,9 @@ deployment.environment.name=lab4
 lab.id=<votre numéro>
 ```
 
-La même requête, filtrée sur `host.name`, montre ce qu'aucune variable n'a fourni : le nom de la machine, détecté par `resourcedetection`. Les traces sont celles du **collector** de `srv-N`, donc le nom est celui du serveur, pas celui de `clt-N` :
+La même requête, filtrée sur `host.name`, montre ce qu'aucune variable Ansible n'a fourni : le nom de la machine, détecté automatiquement par le processor `resourcedetection`.
+
+**Ces traces ont été générées par `telemetrygen`** (lancé depuis `clt-N`). Elles ont ensuite transité par le **collector** qui tourne sur `srv-N`. C'est pourquoi l'attribut `host.name` vaut le nom du serveur (`srv-N.monlab.top` ou `srv-N`), et non celui de `clt-N`.
 
 ```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \

@@ -267,7 +267,7 @@ Dans Jaeger (`http://$CLT_HOST:16686`), le service `shop` apparaît. La trace de
 
 ```bash
 Q='http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z'
-curl -s "$Q" | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[0].attributes[] | "\(.key)=\(.value | (.stringValue // .intValue // .boolValue))"'
+curl -s "$Q" | jq -r '[.result.resourceSpans[].scopeSpans[].spans[] | select(.name=="POST /orders")] | sort_by(.startTimeUnixNano) | last | .attributes[] | "\(.key)=\(.value | (.stringValue // .intValue // .boolValue))"'
 ```
 
 On retrouve notamment les attributs enregistrés :
@@ -280,7 +280,7 @@ http.response.status_code=404
 Vérifiez le statut du span :
 
 ```bash
-curl -s "$Q" | jq -c '.result.resourceSpans[0].scopeSpans[0].spans[0].status'
+curl -s "$Q" | jq -c '[.result.resourceSpans[].scopeSpans[].spans[] | select(.name=="POST /orders")] | sort_by(.startTimeUnixNano) | last | .status'
 ```
 
 ```text
@@ -330,7 +330,7 @@ Passez une commande et vérifiez l'effet du processor :
 ```bash
 ./order.sh coffee 2 alice
 Q='http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z'
-curl -s "$Q" | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[0].attributes[] | select(.key=="customer.id" or .key=="enduser.id") | "\(.key)=\(.value.stringValue)"'
+curl -s "$Q" | jq -r '[.result.resourceSpans[].scopeSpans[].spans[] | select(.name=="POST /orders")] | sort_by(.startTimeUnixNano) | last | .attributes[] | select(.key=="customer.id" or .key=="enduser.id") | "\(.key)=\(.value.stringValue)"'
 ```
 
 ```text
@@ -421,7 +421,7 @@ Comparez les identifiants de trace enregistrés pour `shop` et pour `inventory` 
 for s in shop inventory; do
   echo -n "$s: "
   curl -s "http://localhost:16686/api/v3/traces?query.service_name=$s&query.startTimeMin=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
-    | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[0].traceId'
+    | jq -r '[.result.resourceSpans[].scopeSpans[].spans[]] | sort_by(.startTimeUnixNano) | last | .traceId'
 done
 ```
 

@@ -31,6 +31,66 @@ Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, et le dépôt d
 
 Le [lab 1](Lab_01_Socle.md) est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici.
 
+### Architecture et répartition des rôles
+
+Dans une architecture Kubernetes, OpenTelemetry recommande une répartition en deux niveaux complémentaires pour le **collector** :
+
+1. **Le mode agent (DaemonSet)** :
+   Un pod de **collector** s'exécute sur chaque nœud du cluster Kubernetes. Déployé au plus près des charges de travail applicatives, l'**agent** intercepte les signaux locaux (sur `localhost` ou un Service Kubernetes à politique de trafic local). Son rôle essentiel consiste à enrichir les données avec les métadonnées de l'infrastructure (`k8s.pod.name`, `k8s.namespace.name`, `k8s.node.name` via le processor `k8s_attributes`), à protéger la mémoire des nœuds applicatifs, et à relayer le flux vers une passerelle centrale sans saturer les nœuds.
+
+2. **Le mode gateway (Deployment)** :
+   Un ou plusieurs pods de **collector** tournent en dehors des nœuds applicatifs, organisés sous forme de `Deployment` Kubernetes avec autoscaling et équilibrage de charge. La **gateway OpenTelemetry** concentre les flux issus des agents du cluster, applique des traitements globaux plus exigeants en mémoire ou en CPU (batching élargi, filtrage global, masquage de données), gère l'authentification et les identifiants vers l'extérieur, et exporte vers les plateformes de stockage distantes (Jaeger, VictoriaLogs).
+
+Le schéma ci-dessous, reprenant le modèle d'architecture « Agent to Gateway » documenté par le projet OpenTelemetry, résume cette séparation des responsabilités :
+
+```mermaid
+---
+title: Modèle d'architecture OpenTelemetry : Agent to Gateway
+---
+flowchart LR
+  subgraph Node1["Nœud de calcul 1"]
+    App1["Application"] -->|OTLP local| Agent1["Collector en mode agent<br/>(DaemonSet)"]
+  end
+
+  subgraph Node2["Nœud de calcul 2"]
+    App2["Application"] -->|OTLP local| Agent2["Collector en mode agent<br/>(DaemonSet)"]
+  end
+
+  subgraph NodeN["Nœud de calcul N"]
+    AppN["Application"] -->|OTLP local| AgentN["Collector en mode agent<br/>(DaemonSet)"]
+  end
+
+  subgraph GatewayCluster["Passerelle centrale"]
+    Agent1 -->|OTLP| GW["Collector en mode gateway<br/>(Deployment)"]
+    Agent2 -->|OTLP| GW
+    AgentN -->|OTLP| GW
+  end
+
+  subgraph Backends["Plateformes d'observabilité (srv-N)"]
+    GW -->|"traces (OTLP/HTTP)"| Jaeger["Jaeger"]
+    GW -->|"logs (OTLP/HTTP)"| VLogs["VictoriaLogs"]
+  end
+
+  classDef app fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef agent fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef gateway fill:#fed7aa,stroke:#c2410c,color:#7c2d12
+  classDef backend fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class App1,App2,AppN app
+  class Agent1,Agent2,AgentN agent
+  class GW gateway
+  class Jaeger,VLogs backend
+```
+
+### Distinction des termes employés
+
+Pour éviter toute ambiguïté dans la lecture de ce lab, plusieurs notions portant des noms voisins sont explicitement distinguées :
+
+- **gateway OpenTelemetry** (ou **collector** en mode **gateway**) : le composant de télémétrie central, déployé sous forme de `Deployment` Kubernetes, qui reçoit les flux des agents et les réexpédie vers les backends de stockage.
+- **Gateway API** : la spécification réseau standard de Kubernetes (ressources `Gateway`, `GatewayClass`, `HTTPRoute`) qui gère l'entrée et le routage du trafic HTTP web dans le cluster, mise en œuvre ici par **Traefik**. La Gateway API ne transporte pas la télémétrie.
+- **agent OpenTelemetry** (ou **collector** en mode **agent**) : le **collector** déployé sous forme de DaemonSet sur chaque worker Kubernetes pour collecter et enrichir les traces et métriques au plus près des conteneurs.
+- **Fluent Bit** : l'agent de collecte de journaux, également déployé en DaemonSet, spécialisé dans la lecture des fichiers de logs bruts que le moteur de conteneurs dépose sur le disque des nœuds (`/var/log/containers/`). Il convertit ces lignes au format OTLP et les achemine directement à la **gateway OpenTelemetry**.
+
 Versions utilisées dans ce lab :
 
 | Composant | Version |
@@ -63,69 +123,87 @@ Les interfaces des backends sont servies directement par `srv-N` :
 
 ## 1. Préparer le cluster et les applications
 
-Les deux machines jouent un rôle distinct : `clt-N` porte le cluster et ce que l'on observe, `srv-N` porte les backends. Le schéma suivant montre l'ensemble du dispositif, y compris les briques de télémétrie installées dans les parties suivantes. Les couleurs séparent les éléments : en bleu l'application A, en vert l'application B, en ambre les briques de télémétrie, en violet les backends :
+Les deux machines jouent un rôle distinct : `clt-N` porte le cluster et ce que l'on observe, `srv-N` porte les backends. Le schéma suivant montre l'architecture complète du dispositif : les quatre nœuds du cluster, les agents déployés sur chaque worker, la **gateway** positionnée au-dessus des nœuds pour centraliser les flux, et les backends distants sur `srv-N` :
 
 ```mermaid
 ---
-title: Les deux machines du lab 3
+title: Architecture du lab 3 : les 4 nœuds, les agents et la gateway
 ---
-flowchart LR
-  B([Navigateur])
-
-  subgraph CLT["Machine cliente clt-N"]
+flowchart TB
+  subgraph CLT["Machine cliente clt-N (Cluster KinD 4 nœuds)"]
     direction TB
-    subgraph K["cluster KinD"]
-      direction TB
-      CP["control-plane<br/>Traefik, port 8080"]
-      subgraph NA["namespace application-a"]
-        direction TB
-        FA[frontend A]
-        BA[backend A]
-        FA --> BA
-      end
-      subgraph NB["namespace application-b"]
-        direction TB
-        FB[frontend B]
-        BB[backend B]
-        FB --> BB
-      end
-      AG[otel-agent<br/>DaemonSet]
-      FLB[fluent-bit<br/>DaemonSet]
-      GW[otel-gateway<br/>Deployment]
+
+    subgraph GW_LAYER["Niveau passerelle centralisée (Deployment Kubernetes)"]
+      GW["otel-gateway<br/>(Deployment dans le namespace observability)"]
     end
+
+    subgraph NODES["Nœuds du cluster Kubernetes"]
+      direction LR
+
+      subgraph CP["Nœud 1 : cluster-control-plane"]
+        TRF["Traefik<br/>(Gateway API, port 8080)"]
+      end
+
+      subgraph W1["Nœud 2 : cluster-worker"]
+        direction TB
+        App1["Pods application A / B"]
+        AG1["otel-agent<br/>(DaemonSet)"]
+        FB1["fluent-bit<br/>(DaemonSet)"]
+        App1 -->|OTLP local| AG1
+        App1 -.->|logs sur disque| FB1
+      end
+
+      subgraph W2["Nœud 3 : cluster-worker2"]
+        direction TB
+        App2["Pods application A / B"]
+        AG2["otel-agent<br/>(DaemonSet)"]
+        FB2["fluent-bit<br/>(DaemonSet)"]
+        App2 -->|OTLP local| AG2
+        App2 -.->|logs sur disque| FB2
+      end
+
+      subgraph W3["Nœud 4 : cluster-worker3"]
+        direction TB
+        App3["Pods application A / B"]
+        AG3["otel-agent<br/>(DaemonSet)"]
+        FB3["fluent-bit<br/>(DaemonSet)"]
+        App3 -->|OTLP local| AG3
+        App3 -.->|logs sur disque| FB3
+      end
+    end
+
+    AG1 & AG2 & AG3 -->|"traces OTLP (enrichies k8s.*)"| GW
+    FB1 & FB2 & FB3 -->|"logs OTLP HTTP"| GW
+    TRF -.->|"routage HTTP :8080"| App1 & App2 & App3
   end
 
-  subgraph SRV["Machine serveur srv-N"]
+  subgraph SRV["Machine serveur srv-N (Backends)"]
     direction TB
-    J[(Jaeger<br/>TCP/16686 et 4318)]
-    VL[(VictoriaLogs<br/>TCP/9428)]
+    J[("Jaeger<br/>(traces TCP/4318 et UI TCP/16686)")]
+    VL[("VictoriaLogs<br/>(logs TCP/9428)")]
   end
 
-  B -->|"app-a et app-b, TCP/8080"| CP
-  CP --> FA
-  CP --> FB
-  FA -->|OTLP| AG
-  BA -->|OTLP| AG
-  FB -->|OTLP| AG
-  BB -->|OTLP| AG
-  FLB -->|"logs, OTLP"| GW
-  AG -->|"traces, OTLP"| GW
-  GW -->|"traces, TCP/4318"| J
-  GW -->|"logs, TCP/9428"| VL
-  B -->|TCP/16686| J
-  B -->|TCP/9428| VL
+  GW -->|"export traces (OTLP/HTTP)"| J
+  GW -->|"export logs (OTLP/HTTP)"| VL
 
-  classDef appa fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
-  classDef appb fill:#dcfce7,stroke:#15803d,color:#14532d
-  classDef telemetry fill:#fef3c7,stroke:#b45309,color:#78350f
+  B([Navigateur]) -->|"HTTP :8080"| TRF
+  B -->|"UI :16686"| J
+  B -->|"UI :9428"| VL
+
+  classDef app fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef agent fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef gateway fill:#fed7aa,stroke:#c2410c,color:#7c2d12
   classDef backend fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
-  class FA,BA appa
-  class FB,BB appb
-  class AG,FLB,GW telemetry
+  classDef cp fill:#f1f5f9,stroke:#475569,color:#0f172a
+
+  class App1,App2,App3 app
+  class AG1,AG2,AG3,FB1,FB2,FB3 agent
+  class GW gateway
   class J,VL backend
+  class TRF cp
 ```
 
-Le cluster se traverse de bout en bout : la Gateway API reçoit le trafic web du navigateur, les pods des deux applications produisent la télémétrie, et les deux **collector** la collectent avant de l'envoyer aux backends de `srv-N`. Un **agent** par nœud reçoit les traces des applications ; Fluent Bit, lui aussi un par nœud, lit les fichiers de logs ; la **gateway** centralise l'export.
+Le cluster se compose de quatre nœuds : le nœud `cluster-control-plane` héberge le contrôleur d'entrée Traefik (Gateway API), tandis que les trois nœuds `cluster-worker` exécutent les pods des applications. Sur chaque nœud worker, un **agent OpenTelemetry** (DaemonSet) collecte et enrichit localement les traces émises par les conteneurs, et un pod Fluent Bit (DaemonSet) lit les fichiers de journaux sur le disque. Tous ces flux convergent au niveau supérieur vers la **gateway OpenTelemetry** (Deployment centralisé), qui prend en charge l'exportation vers les backends Jaeger et VictoriaLogs situés sur la machine `srv-N`.
 
 ### Créer le cluster
 
@@ -334,6 +412,39 @@ Le dossier contient trois manifestes Kubernetes : `namespaces.yaml` (les espaces
 
 Les deux applications sont volontairement identiques : même image, même code, mêmes deux services `frontend` et `backend`. Seuls changent l'espace de noms et le nom d'hôte. C'est la situation d'une plateforme qui héberge plusieurs équipes, et c'est ce qui permettra de vérifier que le namespace voyage bien avec les données.
 
+Le schéma suivant illustre le routage du trafic HTTP à travers Traefik et les `HTTPRoute` vers les services de chaque application :
+
+```mermaid
+---
+title: Acheminement du trafic HTTP via la Gateway API et Traefik
+---
+flowchart LR
+  Nav([Navigateur / curl]) -->|"TCP/8080 (Host: app-a.$INGRESS_HOST)"| GW["Traefik Gateway<br/>(port 8080)"]
+  Nav -->|"TCP/8080 (Host: app-b.$INGRESS_HOST)"| GW
+
+  subgraph NSA["namespace application-a"]
+    GW -->|"HTTPRoute app-a"| SvcFA["Service frontend"]
+    SvcFA --> PodFA["Pod frontend"]
+    PodFA -->|"appel interne"| SvcBA["Service backend"]
+    SvcBA --> PodBA["Pod backend"]
+  end
+
+  subgraph NSB["namespace application-b"]
+    GW -->|"HTTPRoute app-b"| SvcFB["Service frontend"]
+    SvcFB --> PodFB["Pod frontend"]
+    PodFB -->|"appel interne"| SvcBB["Service backend"]
+    SvcBB --> PodBB["Pod backend"]
+  end
+
+  classDef appa fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef appb fill:#dcfce7,stroke:#15803d,color:#14532d
+  classDef gw fill:#fed7aa,stroke:#c2410c,color:#7c2d12
+
+  class GW gw
+  class SvcFA,PodFA,SvcBA,PodBA appa
+  class SvcFB,PodFB,SvcBB,PodBB appb
+```
+
 Chaque application est écrite en JavaScript et tient dans un ConfigMap : les pods l'exécutent avec l'image `node:22.23.5-slim`, sans aucune bibliothèque OpenTelemetry dans un premier temps. Chaque service écoute sur le port `8080` dans son pod, derrière un Service Kubernetes sur le port 80. Le frontend journalise chaque requête reçue (`console.log`) et appelle le backend sur les chemins qui commencent par `/api`.
 
 Les deux manifestes applicatifs déclarent une `HTTPRoute` et contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom avant l'envoi au cluster :
@@ -363,7 +474,9 @@ frontend-7cd9b8f4d7-dwpp6   1/1     Running   0          8s    10.244.3.3   clus
 
 Les mêmes noms de pods apparaissent dans `application-a` et dans `application-b`, avec des adresses IP différentes : deux objets Kubernetes distincts, dans deux espaces de noms distincts.
 
-Contrôlez que les deux applications répondent, à travers la Gateway API :
+Contrôlez que les deux applications répondent, à travers la Gateway API.
+
+Depuis `clt-N`, vous pouvez utiliser les commandes suivantes :
 
 ```bash
 curl -s -H "Host: app-a.$INGRESS_HOST" http://localhost:8080/api/orders
@@ -375,6 +488,17 @@ Les deux commandes affichent la même réponse JSON, une fois par application :
 ```text
 {"from":"frontend","backend":{"from":"backend","path":"/api/orders"}}
 ```
+
+**Pour les participants :** vous pouvez également ouvrir votre navigateur et accéder directement aux applications depuis Internet en utilisant les URLs suivantes :
+
+- Application A : `http://app-a.$INGRESS_HOST:8080/`
+- Application B : `http://app-b.$INGRESS_HOST:8080/`
+
+> [!NOTE]
+>
+> Si vous accédez à `http://$INGRESS_HOST:8080/` (ou directement à l’adresse IP sans le préfixe `app-a.` ou `app-b.`), vous obtiendrez une erreur **404**. C’est normal : la `Gateway` et les `HTTPRoute` ne routent le trafic que lorsque l’en-tête `Host` correspond exactement à `app-a.$INGRESS_HOST` ou `app-b.$INGRESS_HOST`.
+
+(Le nom `$INGRESS_HOST` est calculé par `helpers.sh` et pointe vers `clt-N` via sslip.io.)
 
 Ce sont exactement ces deux `curl` que les fonctions `appA` et `appB` de `helpers.sh` exécutent ; la suite du lab les emploie pour abréger. Rien ne collecte encore cette activité : les backends arrivent [à la partie 2](#2-les-backends-sur-srv-n-et-la-gateway), et l'instrumentation [à la partie 5](#5-loperator-et-lauto-instrumentation).
 
@@ -550,19 +674,52 @@ kubectl -n application-a run tg-gateway --restart=Never --rm -i \
   --otlp-insecure --rate 10 --traces 5 --service k8s-gateway
 ```
 
-Contrôlez le pod et le nombre de traces reçues par Jaeger, sur `srv-N` :
+Contrôlez le pod de la gateway et le nombre de traces reçues par Jaeger (sur `srv-N`) :
 
 ```bash
 kubectl -n observability get pods -l app.kubernetes.io/instance=otel-gateway
+
 jaeger "/api/v3/traces?query.service_name=k8s-gateway&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
   | jq '[.result.resourceSpans[].scopeSpans[].spans[].traceId] | unique | length'
 ```
 
-La première commande affiche un pod `otel-gateway-...` à l'état `Running`, la seconde affiche :
+> [!IMPORTANT]
+>
+> **N’oubliez pas de charger les fonctions d’aide** dans chaque nouveau terminal :
+>
+> ```bash
+> source helpers.sh
+> ```
+>
+> Sans cela, les commandes `jaeger`, `vlogs`, `appA` et `appB` ne sont pas définies (« command not found »).
+
+La première commande affiche un pod `otel-gateway-...` à l’état `Running`.
+
+La seconde doit afficher `5`.
+
+**Si vous obtenez l’erreur :**
 
 ```text
-5
+jq: error (at <stdin>:1): Cannot iterate over null (null)
 ```
+
+Cela signifie que Jaeger n’a encore reçu aucune trace correspondant à la requête.
+
+**Solutions dans ce cas (à exécuter dans l’ordre) :**
+
+1. Attendez 10 à 15 secondes et relancez uniquement la commande `jaeger ...` (le premier export après un redémarrage du collector peut prendre un peu de temps).
+2. Vérifiez que Jaeger est bien accessible depuis `clt-N` :
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' http://$SRV_HOST:16686/
+   ```
+   (doit renvoyer `200`)
+3. Utilisez une fenêtre temporelle plus large :
+   ```bash
+   jaeger "/api/v3/traces?query.service_name=k8s-gateway&query.startTimeMin=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+5 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+     | jq '[.result.resourceSpans[].scopeSpans[].spans[].traceId] | unique | length'
+   ```
+
+La fonction `jaeger()` fait un simple `curl` vers `http://$SRV_HOST:16686$1`. Si la fenêtre temporelle est trop restrictive ou si le premier export est en cours, `jq` reçoit `null` et échoue.
 
 Les traces générées dans le cluster sont donc arrivées dans un backend extérieur, sans aucune publication de port sur le cluster : c'est la **gateway** qui sort.
 
@@ -572,7 +729,50 @@ Les traces générées dans le cluster sont donc arrivées dans un backend exté
 
 ## 3. Le **collector** en mode **agent**
 
-Un **agent** est un **collector** déployé comme un DaemonSet : un pod par nœud, proche des applications. Il enrichit les données avec les métadonnées Kubernetes, puis les transmet à la **gateway OpenTelemetry**, c'est-à-dire au **collector** central installé [à la partie 2](#2-les-backends-sur-srv-n-et-la-gateway). Ce n'est pas la `Gateway` de la Gateway API de [la partie 1](#1-préparer-le-cluster-et-les-applications), qui route le trafic web : l'**agent** ne parle qu'OTLP, vers un autre **collector**.
+Le schéma suivant montre l’architecture mise en place dans cette partie :
+
+```mermaid
+---
+title: Lab 3 - Agent + Gateway OpenTelemetry
+---
+flowchart TB
+    subgraph CLT ["clt-N"]
+        subgraph K ["Cluster KinD"]
+            direction TB
+            subgraph NS1 ["application-a"]
+                A1[frontend-a] --> B1[backend-a]
+            end
+            subgraph NS2 ["application-b"]
+                A2[frontend-b] --> B2[backend-b]
+            end
+            subgraph OBS ["observability"]
+                AG[otel-agent<br/>(DaemonSet)] 
+                GW[otel-gateway<br/>(Deployment)]
+            end
+            FB[Fluent-Bit<br/>(DaemonSet)]
+        end
+    end
+
+    subgraph SRV ["srv-N"]
+        J[(Jaeger<br/>TCP/4318)]
+        VL[(VictoriaLogs<br/>TCP/9428)]
+    end
+
+    A1 & A2 & B1 & B2 --> AG
+    AG --> GW
+    FB --> GW
+    GW --> J
+    GW --> VL
+
+    classDef app fill:#e0f2fe,stroke:#0369a1
+    classDef obs fill:#f3e8ff,stroke:#6b21a8
+    classDef backend fill:#fef3c7,stroke:#b45309
+    class A1,A2,B1,B2 app
+    class AG,GW,FB obs
+    class J,VL backend
+```
+
+Un **agent** est un **collector** déployé comme un DaemonSet : un pod par nœud, proche des applications. Il enrichit les données avec les métadonnées Kubernetes (`k8s.*`), puis les transmet à la **gateway OpenTelemetry** (le **collector** central installé [à la partie 2](#2-les-backends-sur-srv-n-et-la-gateway)). Ce n'est pas la `Gateway` de la Gateway API de [la partie 1](#1-préparer-le-cluster-et-les-applications), qui route le trafic web : l'**agent** ne parle qu'OTLP, vers un autre **collector**.
 
 Le processor `k8s_attributes` interroge l'API Kubernetes pour retrouver, à partir de l'adresse IP du pod émetteur, son nom, son espace de noms, son déploiement et son nœud.
 
@@ -800,6 +1000,7 @@ Installez Fluent Bit :
 ```bash
 helm upgrade --install fluent-bit fluent/fluent-bit --version 0.58.3 \
   -n observability -f fluent-bit-values.yaml --wait
+kubectl -n observability get daemonset fluent-bit
 kubectl -n observability get pods -l app.kubernetes.io/name=fluent-bit -o wide
 ```
 
@@ -829,9 +1030,15 @@ for i in $(seq 10); do
 done
 ```
 
-Interrogez ensuite VictoriaLogs par son API, sans passer par l'interface, pour vérifier que les logs sont bien arrivés. Le champ `_msg` contient le message, et les attributs Kubernetes sont devenus des champs à part entière :
+Interrogez ensuite VictoriaLogs par son API, sans passer par l'interface, pour vérifier que les logs sont bien arrivés. Le champ `_msg` contient le message, et les attributs Kubernetes sont devenus des champs à part entière.
+
+**Important :** la fonction `vlogs` attend uniquement la requête LogsQL. Il ne faut **pas** mettre le chemin `/select/logsql/query` dans l’argument.
 
 ```bash
+# Bonne commande
+vlogs 'k8s.namespace.name:*'
+
+# Mauvaise commande (celle qui provoque l’erreur)
 vlogs '/select/logsql/query?query=k8s.namespace.name%3A*&limit=3'
 ```
 
@@ -842,7 +1049,7 @@ On obtient des lignes JSON, une par entrée de log :
 {"_msg":"GET /api/orders","_time":"2026-11-21T18:16:02Z","k8s.container.name":"frontend","k8s.namespace.name":"application-b","k8s.node.name":"cluster-worker2","k8s.pod.name":"frontend-84d7c6f9b5-xl2mq",...}
 ```
 
-Trois champs méritent l'attention : `_msg`, qui porte la ligne applicative, `_time`, et les champs `k8s.*` posés par Fluent Bit. Ce sont des attributs de l'enregistrement de log, et non des labels de flux (stream) : VictoriaLogs les indexe de la même façon, sans imposer de liste de labels à configurer.
+Trois champs méritent l'attention : `_msg` (le message applicatif), `_time` (l'horodatage), et les attributs `k8s.*` insérés par Fluent Bit. Dans VictoriaLogs, ces champs font partie intégrante du record de log lui-même, plutôt que d'être cantonnés à des stream labels : ils sont automatiquement indexés et interrogeables à l'identique, sans configuration préalable de schéma.
 
 > [!NOTE]
 >
@@ -852,7 +1059,7 @@ Ouvrez maintenant l'interface dans le navigateur, sur `http://$SRV_HOST:9428`. E
 
 ![Interface vmui de VictoriaLogs, requête sur les deux namespaces d'application](img/lab03-vlogs-logsql.png)
 
-Le panneau **Stream fields** de gauche reste vide : Fluent Bit n'envoie aucun attribut de ressource, donc VictoriaLogs n'a aucun label de flux à proposer. C'est une différence avec Loki, où les labels forment le point d'entrée de chaque requête. Ici, les champs `k8s.*` sont des attributs d'enregistrement : ils s'interrogent en les nommant, comme dans les requêtes suivantes.
+Le panneau **Stream fields** de gauche reste vide : Fluent Bit transmet ces métadonnées sous forme d'attributs de log au niveau du record, et non comme attributs de ressource, donc VictoriaLogs n'affiche aucun stream label prédéfini. La différence avec Loki est notable : dans Loki, chaque requête exige obligatoirement un sélecteur de labels en point d'entrée (`{job="...", namespace="..."}`). Avec VictoriaLogs, chaque champ d'un log record est directement indexé : on filtre n'importe quel attribut `k8s.*` par son nom dans la requête LogsQL, sans devoir renseigner un stream label au préalable.
 
 Dans le champ de requête, saisissez successivement les requêtes suivantes. Le langage s'appelle **LogsQL** ; il s'écrit comme une suite de filtres sur des champs, séparés par des espaces, et les valeurs contenant des caractères spéciaux vont entre guillemets.
 
@@ -1128,6 +1335,30 @@ C'est le résultat à retenir de ce lab : un même nom de service dans deux envi
 Une même trace traverse donc les deux services. Ouvrez-la dans l'interface de Jaeger (`http://$SRV_HOST:16686`), service `frontend`, puis cliquez sur une trace : vous voyez le span serveur du frontend, le span client de son appel au backend, puis le span serveur du backend. Le lien entre les deux services repose sur le propagator `tracecontext`, qui transporte l'identifiant de trace et celui du span parent d'un service à l'autre.
 
 ![Détail d'une trace dans Jaeger : le span serveur du frontend, son span client vers le backend, puis le span serveur du backend](img/lab03-jaeger-trace-detail.png)
+
+Le schéma ci-dessous résume le parcours de la trace de bout en bout et les composants traversés :
+
+```mermaid
+---
+title: Parcours complet d'une trace distribuée de bout en bout
+---
+flowchart LR
+  Client([Client HTTP]) -->|requête /api/orders| Front["Span 1 : frontend<br/>(serveur HTTP)"]
+  Front -->|appel HTTP interne| FrontClient["Span 2 : frontend<br/>(client HTTP)"]
+  FrontClient -->|"contexte W3C (traceparent)"| Back["Span 3 : backend<br/>(serveur HTTP)"]
+
+  Front & FrontClient & Back -.->|export OTLP/HTTP| Agent["otel-agent<br/>(DaemonSet)"]
+  Agent -.->|"OTLP gRPC + k8s.*"| Gateway["otel-gateway<br/>(Deployment)"]
+  Gateway -.->|"OTLP/HTTP TCP/4318"| Jaeger[("Jaeger (srv-N)")]
+
+  classDef span fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef collector fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef backend fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class Front,FrontClient,Back span
+  class Agent,Gateway collector
+  class Jaeger backend
+```
 
 Regardez enfin les attributs de ressource de cette trace, tous préfixés par `k8s.` :
 

@@ -105,6 +105,8 @@ cat ansible.cfg
 
 Créez l'inventaire. Cette fois, le mot `EOF` n'est pas entre guillemets : le shell remplace donc `$SRV_HOST` par sa valeur avant d'écrire le fichier. C'est ce que vous voulez ici, alors que dans les autres commandes du lab vous écrirez des `{{ ... }}` Jinja2 qui doivent rester tels quels.
 
+Le groupe s'appelle `[otel]` : c'est une convention courante pour désigner les machines qui reçoivent le **collector** OpenTelemetry. La commande `ansible otel ...` cible donc tous les hôtes de ce groupe.
+
 ```bash
 cat > inventory.ini <<EOF
 [otel]

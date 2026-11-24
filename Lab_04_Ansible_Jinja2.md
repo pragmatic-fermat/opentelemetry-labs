@@ -302,6 +302,12 @@ processors:
         value: {{ value | to_json }}
         action: upsert
 {% endfor %}
+      - key: service.name
+        value: {{ otelcol_environment | to_json }}
+        action: upsert
+      - key: service.instance.id
+        value: {{ ansible_hostname | to_json }}
+        action: upsert
   batch:
     timeout: {{ otelcol_batch_timeout }}
 
@@ -855,16 +861,7 @@ srv3-0 [database] : 0.13
 
 > [!NOTE]
 >
-> Les labels `instance` et `job` de Prometheus viennent des attributs de ressource `service.instance.id` et `service.name`. Pour les remplir automatiquement avec le hostname de chaque serveur, ajoutez ces deux attributs dans le template Jinja2, en utilisant les facts Ansible (`ansible_hostname`), et redéployez :
-
-```yaml
-      - key: service.name
-        value: {{ otelcol_environment | to_json }}
-        action: upsert
-      - key: service.instance.id
-        value: {{ ansible_hostname | to_json }}
-        action: upsert
-```
+> Les labels `instance` et `job` de Prometheus viennent des attributs de ressource `service.instance.id` et `service.name`. Ces deux attributs sont désormais ajoutés automatiquement dans le template (via `otelcol_environment` et le fact Ansible `ansible_hostname`).
 
 > [!NOTE]
 >

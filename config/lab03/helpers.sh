@@ -3,7 +3,7 @@
 #   appA /api/orders                          appelle application-a via la Gateway API
 #   appB /api/orders                          appelle application-b via la Gateway API
 #   jaeger '/api/v3/services'                 appelle l'API de Jaeger sur srv-N
-#   vlogs '/select/logsql/query?query=...'    interroge VictoriaLogs sur srv-N
+#   vlogs '_msg: "GET /api/orders"'           interroge VictoriaLogs sur srv-N (LogsQL)
 #
 # Les applications passent par localhost:8080, le port que KinD publie depuis
 # le control-plane, avec l'en-tête Host attendu par la HTTPRoute : cela évite
@@ -20,4 +20,4 @@ export INGRESS_HOST
 appA() { curl -s -H "Host: app-a.${INGRESS_HOST}" "http://localhost:8080$1"; }
 appB() { curl -s -H "Host: app-b.${INGRESS_HOST}" "http://localhost:8080$1"; }
 jaeger() { curl -s "http://${SRV_HOST}:16686$1"; }
-vlogs() { curl -s "http://${SRV_HOST}:9428$1"; }
+vlogs() { curl -s -G "http://${SRV_HOST}:9428/select/logsql/query" --data-urlencode "query=$1"; }

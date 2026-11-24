@@ -476,7 +476,7 @@ Une **gateway** est un **collector** central, déployé comme un Deployment, qui
 Ajoutez le dépôt de charts :
 
 ```bash
-helm repo add open-telemetry https://opentelemetry.github.io/opentelemetry-helm-charts
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 helm repo update
 ```
 

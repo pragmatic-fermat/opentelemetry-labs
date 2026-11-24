@@ -159,7 +159,7 @@ Everything is ready. Begin running and processing data.
 Envoyez cinq traces avec `./tg.sh`, un script fourni qui lance [telemetrygen](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/cmd/telemetrygen) vers le **collector**. Ce générateur produit des spans sans application, pratique pour tester un pipeline :
 
 ```bash
-./tg.sh traces --traces 5 --service demo
+./tg.sh traces --traces 5
 ```
 
 Chaque trace contient deux spans : un span parent `lets-go` et un span enfant `okey-dokey-0`. Le **collector** a donc affiché dix spans :
@@ -312,7 +312,7 @@ Validez, redémarrez le **collector**, puis générez du trafic :
 ./check.sh
 docker compose restart otelcol
 ./order.sh coffee 1 alice
-./tg.sh traces --traces 5 --service demo
+./tg.sh traces --traces 5
 NOW=$(date +%s%N)
 curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces \
   -H 'Content-Type: application/json' -d '{

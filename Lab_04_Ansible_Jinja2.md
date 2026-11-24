@@ -716,7 +716,7 @@ Le résumé indique `failed=0` et `changed=0` : le fichier déployé correspond 
 >
 > Si Ansible affiche `UNREACHABLE`, contrôlez `cat inventory.ini` (le nom du serveur doit apparaître sous `[otel]`) puis testez `ssh $SRV_HOST hostname`. Si une variable booléenne passée avec `-e` semble ignorée, c'est la chaîne `false` qui est évaluée comme vraie par Jinja2 : utilisez la forme JSON, `-e '{"otelcol_hostmetrics_enabled": false}'`.
 
-## 5. Étendre le parc : 4 serveurs, 4 configurations
+## 4. Étendre le parc : 4 serveurs, 4 configurations
 
 Votre animateur a provisionné trois serveurs éphémères Debian pour votre groupe, dans le même VPC que `clt-N`. Leurs adresses privées changent d'une session à l'autre, et DigitalOcean ne garantit pas l'ordre dans lequel il les attribue : vous allez donc les découvrir au lieu de les écrire en dur.
 
@@ -1106,10 +1106,6 @@ Revenez à la configuration du lab avant de continuer :
 sed -i 's|src: config-tenants.yaml.j2|src: config.yaml.j2|' playbook.yml
 ansible-playbook playbook.yml | grep -A3 'PLAY RECAP'
 ```
-
-### 2. Transformer le playbook en rôle
-
-`ansible-galaxy role init otelcol` crée l'arborescence d'un rôle : les tâches, le handler, le template et les variables par défaut s'y rangent chacun dans leur dossier, et le playbook se réduit à une déclaration.
 
 ### 3. Activer le scraper network du receiver hostmetrics (extra)
 

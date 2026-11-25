@@ -100,6 +100,14 @@ runcmd:
   # Autorise la cle SSH inter-machines du lab.
   - grep -q 'lab-inter-vm@opentelemetry-lab' /root/.ssh/authorized_keys 2>/dev/null || echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2xxnRQEhrbsTT6J1W2bdah4GccwZE3d5d1maZ2n+u3 lab-inter-vm@opentelemetry-lab' >> /root/.ssh/authorized_keys
   - chmod 600 /root/.ssh/authorized_keys
+  # Swap de 2 Go : filet de securite pour les compilations du lab 6 (PECL, .NET).
+  - swapoff /swapfile 2>/dev/null || true
+  - rm -f /swapfile
+  - fallocate -l 2G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
   # Docker Engine et Compose v2 depuis le depot officiel Docker : les labs
   # deploient leur stack sur la machine serveur.
   - install -m 0755 -d /etc/apt/keyrings

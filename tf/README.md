@@ -11,7 +11,7 @@ Pour chaque numéro N de 0 à `group_count - 1` (le numéro 0 est celui de l'ani
 - deux enregistrements DNS `clt-N` et `srv-N` dans la zone `domain_name` ;
 - un tag commun (`tag_name`) et un projet DigitalOcean `training` qui regroupe les droplets (les VPC ne sont pas assignables à un projet, ils restent en dehors).
 
-Chaque machine expose un terminal web (ttyd derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`, protégé par le mot de passe `webshell_password` (compte `stagiaire` dans la basic auth). Le terminal ouvre des sessions directement en root (machines éphémères), le dépôt des labs est cloné dans `/root/opentelemetry-labs` en HTTPS anonyme. Le cluster Kubernetes des labs suivants sera un cluster KinD sur `clt-N`, d'où les 8 Go de RAM et le swap de 2 Go.
+Chaque machine expose un terminal web (ttyd derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`, protégé par le mot de passe `webshell_password` (compte `stagiaire` dans la basic auth). Le terminal ouvre des sessions directement en root (machines éphémères), le dépôt des labs est cloné dans `/root/opentelemetry-labs` en HTTPS anonyme. Le cluster Kubernetes est un cluster KinD sur `clt-N` (4 vCPU, 8 Go de RAM et 2 Go de swap) ; `srv-N` dispose de 2 vCPU, 2 Go de RAM et 2 Go de swap.
 
 ## Utilisation avec TFC
 

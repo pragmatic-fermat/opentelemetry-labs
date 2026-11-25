@@ -5,11 +5,11 @@
 # Image Ubuntu 24.04 LTS (gabarit vérifié le 2026-11-19).
 droplet_image = "ubuntu-24-04-x64"
 
-# Poste de travail : 8 Go de RAM (Docker + cluster KinD à venir).
-clt_size = "s-4vcpu-8gb-intel"
-# Machine serveur : le lab 1 y déploie la stack Docker (Jaeger, Prometheus,
-# Grafana, Collector), 4 Go de RAM.
-srv_size = "s-2vcpu-4gb"
+# Poste de travail : 4 vCPU, 8 Go de RAM (Docker + cluster KinD 4 nœuds).
+clt_size = "s-4vcpu-8gb"
+# Machine serveur : 2 vCPU, 2 Go de RAM (+ 2 Go de swap, suffisant pour Jaeger,
+# VictoriaLogs, le collector et le lab 6).
+srv_size = "s-2vcpu-2gb"
 
 # Région où les resources sont créées.
 region_name = "ams3"

@@ -388,10 +388,11 @@ curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.star
   | jq -r '.result.resourceSpans[] | select([.scopeSpans[].spans[].status.code] | contains([2])) | .scopeSpans[0].spans[0].name'
 ```
 
-On obtient le span fautif :
+Le statut d'erreur se propageant au span parent, la requête renvoie les deux spans en erreur de la trace. Le span fautif est le premier, `GET inventory` :
 
 ```text
 GET inventory
+handle_request
 ```
 
 ### La lenteur

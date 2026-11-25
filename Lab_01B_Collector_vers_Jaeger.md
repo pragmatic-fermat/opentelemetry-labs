@@ -375,6 +375,12 @@ sleep 5
 
 La requête échoue avec un code HTTP 502. Dans l'interface de Jaeger, recherchez les traces du service `shop` sur les deux dernières minutes. La trace en échec se signale par un marqueur d'erreur. En l'ouvrant, on constate que le span client `GET inventory` est en erreur, ce qui a propagé le statut d'erreur sur le span parent `handle_request`.
 
+![Trace en échec dans Jaeger, avec le marqueur d'erreur](img/lab01-jaeger-span-fautif.png)
+
+Le détail du span client `GET inventory` montre le statut `ERROR`, le code HTTP 502 et l'exception levée :
+
+![Détail du span client GET inventory, en erreur](img/lab01-jaeger-span-fautif-detail.png)
+
 En ligne de commande, la même trace s'obtient via l'API de Jaeger :
 
 ```bash

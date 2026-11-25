@@ -13,6 +13,8 @@ Pour chaque numéro N de 0 à `group_count - 1` (le numéro 0 est celui de l'ani
 
 Chaque machine expose un terminal web (ttyd derrière Caddy) sur `https://clt-N.<domaine>` et `https://srv-N.<domaine>`, protégé par le mot de passe `webshell_password` (compte `stagiaire` dans la basic auth). Le terminal ouvre des sessions directement en root (machines éphémères), le dépôt des labs est cloné dans `/root/opentelemetry-labs` en HTTPS anonyme. Le cluster Kubernetes est un cluster KinD sur `clt-N` (4 vCPU, 8 Go de RAM et 2 Go de swap) ; `srv-N` dispose de 2 vCPU, 2 Go de RAM et 2 Go de swap.
 
+Le gabarit `s-2vcpu-2gb` de `srv-N` fournit 50 Go de disque, au lieu des 80 Go du gabarit précédent. Cela reste suffisant pour les images Docker des labs 1, 3 et 4 et pour les chaînes de compilation du lab 6 (Java 21, Python, SDK .NET, extension PHP compilée par PECL), mais la marge est plus étroite : en cas d'ajout d'images lourdes, surveiller l'espace avec `df -h` sur `srv-N`.
+
 ## Utilisation avec TFC
 
 Créez un workspace relié à ce dépôt (workflow par gestion de versions) et indiquez `tf` comme répertoire de travail Terraform (Terraform Working Directory). Définissez ensuite les variables dans le workspace :

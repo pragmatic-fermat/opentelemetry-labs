@@ -410,6 +410,8 @@ On obtient :
 
 Dans l'interface de Jaeger (`http://$SRV_HOST:16686`), les spans en erreur du service `shop` portent l'attribut `slo.violation` à `true`, et les commandes réussies ne le portent pas. Le filtre de la liste de Jaeger permet de ne garder que ces traces, en ajoutant `slo.violation=true` dans le champ des attributs.
 
+![Attributs du span en erreur, avec slo.violation à true](img/lab01-slo-violation.png)
+
 En ligne de commande :
 
 ```bash

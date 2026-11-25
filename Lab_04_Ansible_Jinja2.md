@@ -1200,6 +1200,35 @@ curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&qu
 
 Dans ce lab, les métriques système ont été collectées avec le receiver `hostmetrics`. Une autre approche très fréquente en production consiste à installer `node_exporter` (l'exporter Prometheus officiel pour Linux) sur la machine cible, puis à le faire scraper localement par le **collector** OpenTelemetry avec le receiver `prometheus`.
 
+Le schéma suivant zoome sur ce flux entre `srv-N` et le Prometheus central sur `clt-N` :
+
+```mermaid
+---
+title: Scrape local de node_exporter par le collector et export OTLP vers Prometheus
+---
+flowchart LR
+  subgraph SRV["Machine serveur srv-N"]
+    direction LR
+    NE["node_exporter<br/>127.0.0.1:9100/metrics"]
+    COL["collector (otelcol-contrib)<br/>receiver prometheus -> processors -> exporter otlp_http"]
+    COL -->|"scrape HTTP local<br/>(pull, toutes les 15 s)"| NE
+  end
+
+  subgraph CLT["Serveur central clt-N"]
+    PROM[("Prometheus<br/>TCP/9090<br/>/api/v1/otlp/v1/metrics")]
+  end
+
+  COL -->|"export OTLP/HTTP sortant<br/>(push)"| PROM
+
+  classDef exporter fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef collector fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef backend fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class NE exporter
+  class COL collector
+  class PROM backend
+```
+
 Ce montage présente trois intérêts concrets :
 
 - **Conserver les tableaux de bord et alertes existants.** Le receiver `hostmetrics` produit des métriques aux conventions sémantiques OpenTelemetry (`system_cpu_*`, `system_memory_*`), alors que les tableaux de bord Grafana historiques et de nombreuses règles d'alerte PromQL reposent sur les noms de `node_exporter` (`node_cpu_seconds_total`, `node_memory_MemAvailable_bytes`, `node_load1`). Scraper `node_exporter` via le **collector** permet de basculer le transport vers OpenTelemetry sans réécrire immédiatement les requêtes existantes.

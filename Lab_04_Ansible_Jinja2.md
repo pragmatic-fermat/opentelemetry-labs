@@ -1146,7 +1146,52 @@ srv-frontend | CHANGED | rc=0 | (stdout)     timeout: 1s\n        value: "fronte
 
 Le frontend n'affiche pas `hostmetrics`, puisque ses métriques système sont désactivées.
 
-Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables. Le fichier `prometheus/prometheus.yml` fourni contient pour cela un bloc `otlp` qui promeut quatre attributs en labels : `service.name`, `service.instance.id`, `deployment.environment.name` et `host.name`.
+Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables.
+
+Le fichier `prometheus/prometheus.yml` fourni n'est pas produit par Ansible : il est statique, monté en lecture seule dans le conteneur Prometheus par `compose.yaml`. Affichez-le :
+
+```bash
+cat prometheus/prometheus.yml
+```
+
+Il contient un bloc `otlp` qui promeut quatre attributs de ressource en labels :
+
+```yaml
+otlp:
+  promote_resource_attributes:
+    - service.name
+    - service.instance.id
+    - deployment.environment.name
+    - host.name
+```
+
+Le schéma suivant résume cette promotion, du collector de `srv-N` jusqu'à la série stockée par Prometheus sur `clt-N` :
+
+```mermaid
+---
+title: Promotion des attributs de ressource en labels Prometheus
+---
+flowchart LR
+  subgraph C["collector de srv-N"]
+    direction TB
+    R["attributs de ressource<br/>deployment.environment.name=lab4<br/>service.name=lab4<br/>service.instance.id=srv-N<br/>host.name=srv-N"]
+  end
+
+  subgraph P["Prometheus sur clt-N"]
+    direction TB
+    L["série system_cpu_load_average_1m<br/>deployment_environment_name=lab4<br/>service_name=lab4<br/>instance=srv-N<br/>job=lab4<br/>host_name=srv-N"]
+  end
+
+  R -->|"OTLP/HTTP :9090<br/>otlp.promote_resource_attributes"| L
+
+  classDef col fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef back fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class R col
+  class L back
+```
+
+Sans ce bloc, les quatre serveurs enverraient la même série `system_cpu_load_average_1m` sans aucun label, et il serait impossible de savoir de quelle machine elle provient.
 
 Attendez une minute, puis interrogez Prometheus pour voir les métriques des serveurs d'infrastructure :
 

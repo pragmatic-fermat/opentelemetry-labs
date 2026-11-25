@@ -470,6 +470,34 @@ ansible-playbook preview.yml -e @group_vars/all.yml
 cat /tmp/config-preview.yaml
 ```
 
+Le schéma suivant résume les deux pipelines que le template produit, avec les mêmes processors dans le même ordre :
+
+```mermaid
+---
+title: Pipelines traces et metrics produits par le template
+---
+flowchart LR
+  subgraph TR["Pipeline traces"]
+    direction LR
+    R1["receiver otlp<br/>gRPC 4317 / HTTP 4318"] --> T1["memory_limiter"] --> T2["resourcedetection"] --> T3["resource"] --> T4["batch"] --> E1["exporter otlp_grpc/jaeger<br/>srv-N:4317"]
+  end
+
+  subgraph ME["Pipeline metrics (si otelcol_hostmetrics_enabled)"]
+    direction LR
+    M1["receiver hostmetrics<br/>cpu, load, memory"] --> S1["memory_limiter"] --> S2["resourcedetection"] --> S3["resource"] --> S4["batch"] --> E2["exporter otlp_http/prometheus<br/>clt-N:9090"]
+  end
+
+  classDef recv fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef proc fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef expr fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class R1,M1 recv
+  class T1,T2,T3,T4,S1,S2,S3,S4 proc
+  class E1,E2 expr
+```
+
+Le processor `resource` ajoute `deployment.environment.name` et `lab.id` par `upsert`, puis `service.name` et `service.instance.id` par `insert`, avant que `batch` ne regroupe les données pour l'export.
+
 On obtient la configuration telle que le serveur la recevra, sans aucune accolade Jinja2. En tête le commentaire de gestion Ansible, plus bas les attributs produits par la boucle :
 
 ```yaml

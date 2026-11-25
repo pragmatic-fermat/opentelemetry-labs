@@ -355,7 +355,7 @@ cat > preview.yml <<'EOF'
         dest: /tmp/config-preview.yaml
 EOF
 ansible-playbook preview.yml -e @group_vars/all.yml
-cat config-preview.yaml
+cat /tmp/config-preview.yaml
 ```
 
 On obtient la configuration telle que le serveur la recevra, sans aucune accolade Jinja2. En tête le commentaire de gestion Ansible, plus bas les attributs produits par la boucle :

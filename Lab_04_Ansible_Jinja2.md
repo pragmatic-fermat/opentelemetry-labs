@@ -20,6 +20,11 @@
 - [5. Étendre le parc : 4 serveurs, 4 configurations](#5-étendre-le-parc--4-serveurs-4-configurations)
 - [Cleanup](#cleanup)
 - [Extra](#extra)
+  - [1. Un **collector** pour la préproduction et la production](#1-un-collector-pour-la-préproduction-et-la-production)
+  - [2. Activer le scraper network du receiver hostmetrics](#2-activer-le-scraper-network-du-receiver-hostmetrics-extra)
+  - [3. Conserver les versions précédentes de la configuration](#3-conserver-les-versions-précédentes-de-la-configuration)
+  - [4. Revenir à une version antérieure du binaire](#4-revenir-à-une-version-antérieure-du-binaire)
+  - [5. Installer node_exporter sur un serveur et le scraper via le **collector**](#5-installer-node_exporter-sur-un-serveur-et-le-scraper-via-le-collector)
 
 # Détail
 

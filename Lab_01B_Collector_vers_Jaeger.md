@@ -159,7 +159,7 @@ Everything is ready. Begin running and processing data.
 Envoyez cinq traces avec `./tg.sh`, un script fourni qui lance [telemetrygen](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/cmd/telemetrygen) vers le **collector**. Ce générateur produit des spans sans application, pratique pour tester un pipeline :
 
 ```bash
-./tg.sh traces --traces 5 --service demo
+./tg.sh traces --traces 5
 ```
 
 Chaque trace contient deux spans : un span parent `lets-go` et un span enfant `okey-dokey-0`. Le **collector** a donc affiché dix spans :
@@ -312,7 +312,7 @@ Validez, redémarrez le **collector**, puis générez du trafic :
 ./check.sh
 docker compose restart otelcol
 ./order.sh coffee 1 alice
-./tg.sh traces --traces 5 --service demo
+./tg.sh traces --traces 5
 NOW=$(date +%s%N)
 curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces \
   -H 'Content-Type: application/json' -d '{
@@ -375,6 +375,12 @@ sleep 5
 
 La requête échoue avec un code HTTP 502. Dans l'interface de Jaeger, recherchez les traces du service `shop` sur les deux dernières minutes. La trace en échec se signale par un marqueur d'erreur. En l'ouvrant, on constate que le span client `GET inventory` est en erreur, ce qui a propagé le statut d'erreur sur le span parent `handle_request`.
 
+![Trace en échec dans Jaeger, avec le marqueur d'erreur](img/lab01-jaeger-span-fautif.png)
+
+Le détail du span client `GET inventory` montre le statut `ERROR`, le code HTTP 502 et l'exception levée :
+
+![Détail du span client GET inventory, en erreur](img/lab01-jaeger-span-fautif-detail.png)
+
 En ligne de commande, la même trace s'obtient via l'API de Jaeger :
 
 ```bash
@@ -382,10 +388,11 @@ curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.star
   | jq -r '.result.resourceSpans[] | select([.scopeSpans[].spans[].status.code] | contains([2])) | .scopeSpans[0].spans[0].name'
 ```
 
-On obtient le span fautif :
+Le statut d'erreur se propageant au span parent, la requête renvoie les deux spans en erreur de la trace. Le span fautif est le premier, `GET inventory` :
 
 ```text
 GET inventory
+handle_request
 ```
 
 ### La lenteur

@@ -894,6 +894,12 @@ ansible otel -m ansible.builtin.shell -a 'command -v otelcol-contrib || echo abs
 
 La dernière commande affiche `absent` : le binaire, la configuration `/etc/otelcol-contrib` et le paquet dans `/tmp` ont disparu du serveur.
 
+Si vous avez réalisé [l'extra 5](#5-installer-node_exporter-sur-un-serveur-et-le-scraper-via-le-collector), désinstallez également `prometheus-node-exporter` sur `srv-N` :
+
+```bash
+ansible otel -b -m ansible.builtin.apt -a "name=prometheus-node-exporter state=absent purge=true"
+```
+
 Si des serveurs éphémères ont été déployés [à la partie 5](#5-étendre-le-parc--4-serveurs-4-configurations), ils ne se nettoient pas depuis le terminal : votre animateur les détruit en fin de séance avec `animateur/scripts/lab04-vms-destroy.sh`. Aucun playbook n'est nécessaire pour cela, et les machines disparaissent avec leurs paquets et leurs configurations.
 
 Le dossier `~/lab04` peut être conservé si vous voulez rejouer le lab. Les autres labs ne le réutilisent pas : chacun fournit ses propres fichiers.
@@ -1200,137 +1206,8 @@ Ce montage présente trois intérêts concrets :
 - **Remplacer le pull entrant par un export OTLP sortant.** Avec un scrape Prometheus classique, le serveur Prometheus central doit ouvrir une connexion entrante vers le port `9100` de chaque machine du parc, ce qui complique les règles de pare-feu. Ici, `node_exporter` est interrogé en local sur `127.0.0.1:9100` par le **collector**, qui pousse ensuite les métriques en OTLP sortant en leur appliquant le même pipeline que les autres signaux (`resourcedetection`, `resource`, `batch`, chiffrement, filtrage).
 - **Appliquer un modèle unique à tout l'écosystème Prometheus.** La même configuration de receiver `prometheus` sert à collecter n'importe quel exporter existant (`postgres_exporter`, `nginx_exporter`, ou un endpoint `/metrics` applicatif) sans déployer d'agent Prometheus dédié.
 
-Dans cet exercice, vous déployez `node_exporter` sur un unique serveur (`srv-N`, c'est-à-dire le groupe `otel`), sans toucher aux autres machines. Toutes les commandes s'exécutent depuis `clt-N`, dans `~/lab04`.
+En contrepartie, faire tourner simultanément `hostmetrics` et `node_exporter` duplique les métriques système et augmente la cardinalité stockée dans Prometheus (plus de 1 700 séries `node_*` par serveur). En production, on ne conserve généralement que l'un des deux receivers.
 
-Installez d'abord le paquet `prometheus-node-exporter` sur `srv-N` avec Ansible, puis vérifiez qu'il répond localement sur le port `9100` :
+**Consigne** : déployez `prometheus-node-exporter` sur un unique serveur (`srv-N`, groupe `otel`), ajoutez une variable booléenne `otelcol_node_exporter_enabled` (désactivée par défaut dans `group_vars/all.yml`, activée uniquement dans `host_vars/$SRV_HOST.yml`) pour activer un receiver `prometheus/node_exporter` dans `templates/config.yaml.j2` qui scrape `127.0.0.1:9100`, redéployez sur `srv-N`, puis vérifiez dans Prometheus sur `clt-N` que la métrique `node_load1` apparaît avec les attributs de ressource (`host_name`, `deployment_environment_name`, `instance`, `job`).
 
-```bash
-ansible otel -b -m ansible.builtin.apt -a "name=prometheus-node-exporter state=present update_cache=true"
-ansible otel -m ansible.builtin.shell -a "curl -s http://127.0.0.1:9100/metrics | grep -E '^node_load1 '"
-```
-
-On obtient une ligne de métrique au format Prometheus :
-
-```text
-node_load1 0.12
-```
-
-Déclarez une variable booléenne `otelcol_node_exporter_enabled` désactivée par défaut dans `group_vars/all.yml`, et activez-la uniquement pour `srv-N` dans `host_vars/$SRV_HOST.yml` :
-
-```bash
-echo 'otelcol_node_exporter_enabled: false' >> group_vars/all.yml
-cat > host_vars/$SRV_HOST.yml <<'EOF'
-otelcol_hostmetrics_enabled: true
-otelcol_node_exporter_enabled: true
-EOF
-```
-
-Adaptez `templates/config.yaml.j2` pour ajouter le receiver `prometheus/node_exporter` lorsque la variable est vraie, et l'inclure dans le pipeline `metrics` :
-
-```bash
-cat > templates/config.yaml.j2 <<'EOF'
-{{ ansible_managed | comment }}
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: 0.0.0.0:4317
-      http:
-        endpoint: 0.0.0.0:4318
-{% if otelcol_hostmetrics_enabled %}
-  hostmetrics:
-    collection_interval: 30s
-    scrapers:
-      cpu: {}
-      load: {}
-      memory: {}
-{% endif %}
-{% if otelcol_node_exporter_enabled %}
-  prometheus/node_exporter:
-    config:
-      scrape_configs:
-        - job_name: node_exporter
-          scrape_interval: 15s
-          static_configs:
-            - targets: ["127.0.0.1:9100"]
-{% endif %}
-
-processors:
-  memory_limiter:
-    check_interval: 1s
-    limit_mib: 256
-    spike_limit_mib: 64
-  resourcedetection:
-    detectors: [system]
-    timeout: 2s
-    override: false
-  resource:
-    attributes:
-{% for key, value in otelcol_resource_attributes.items() %}
-      - key: {{ key }}
-        value: {{ value | to_json }}
-        action: upsert
-{% endfor %}
-      - key: service.name
-        value: {{ otelcol_environment | to_json }}
-        action: upsert
-      - key: service.instance.id
-        value: {{ ansible_hostname | to_json }}
-        action: upsert
-  batch:
-    timeout: {{ otelcol_batch_timeout }}
-
-exporters:
-  otlp_grpc/jaeger:
-    endpoint: {{ otelcol_backend_host }}:4317
-    tls:
-      insecure: true
-{% if otelcol_hostmetrics_enabled or otelcol_node_exporter_enabled %}
-  otlp_http/prometheus:
-    metrics_endpoint: http://{{ otelcol_backend_host }}:9090/api/v1/otlp/v1/metrics
-{% endif %}
-
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, resource, batch]
-      exporters: [otlp_grpc/jaeger]
-{% if otelcol_hostmetrics_enabled or otelcol_node_exporter_enabled %}
-    metrics:
-      receivers:
-{% if otelcol_hostmetrics_enabled %}
-        - hostmetrics
-{% endif %}
-{% if otelcol_node_exporter_enabled %}
-        - prometheus/node_exporter
-{% endif %}
-      processors: [memory_limiter, resourcedetection, resource, batch]
-      exporters: [otlp_http/prometheus]
-{% endif %}
-EOF
-```
-
-Déployez sur `srv-N` (utilisez `--limit otel` si les serveurs éphémères sont encore dans `inventory.ini`), attendez une trentaine de secondes, puis interrogez Prometheus sur `clt-N` :
-
-```bash
-ansible-playbook playbook.yml --limit otel
-sleep 30
-curl -s -G "http://localhost:9090/api/v1/query" \
-  --data-urlencode "query=node_load1" \
-  | jq -r '.data.result[] | "\(.metric.host_name) [\(.metric.deployment_environment_name)] : \(.value[1])"'
-```
-
-On obtient la charge de `srv-N` sous le nom de métrique `node_exporter`, enrichie des attributs de ressource ajoutés par le **collector** :
-
-```text
-srv-N [lab4] : 0.12
-```
-
-Vous disposez ainsi simultanément dans Prometheus des séries `system_cpu_load_average_1m` (issues de `hostmetrics`) et `node_load1` (issues de `node_exporter`), acheminées par le même **collector** et le même export OTLP. En production, vous ne garderez en général que l'un des deux receivers afin d'éviter de stocker deux fois les mêmes métriques système.
-
-Pour nettoyer cet exercice à la fin, désinstallez `prometheus-node-exporter` sur `srv-N` :
-
-```bash
-ansible otel -b -m ansible.builtin.apt -a "name=prometheus-node-exporter state=absent purge=true"
-```
+La solution technique détaillée est disponible dans [solutions/sol-4-5.md](solutions/sol-4-5.md).

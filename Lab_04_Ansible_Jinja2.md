@@ -72,7 +72,7 @@ flowchart LR
     SY --- CO
   end
 
-  AN ==>|SSH, become| SY
+  AN ==>|SSH| SY
   CO ==> J
   CO ==> P
 ```
@@ -189,7 +189,7 @@ flowchart LR
     T1 --> T2 --> T3
   end
 
-  PB -->|"SSH (become)"| T1
+  PB -->|"SSH"| T1
   GH -.->|"paquet .deb"| T1
 
   classDef ctrl fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
@@ -470,6 +470,34 @@ ansible-playbook preview.yml -e @group_vars/all.yml
 cat /tmp/config-preview.yaml
 ```
 
+Le schéma suivant résume les deux pipelines que le template produit, avec les mêmes processors dans le même ordre :
+
+```mermaid
+---
+title: Pipelines traces et metrics produits par le template
+---
+flowchart LR
+  subgraph TR["Pipeline traces"]
+    direction LR
+    R1["receiver otlp<br/>gRPC 4317 / HTTP 4318"] --> T1["memory_limiter"] --> T2["resourcedetection"] --> T3["resource"] --> T4["batch"] --> E1["exporter otlp_grpc/jaeger<br/>srv-N:4317"]
+  end
+
+  subgraph ME["Pipeline metrics (si otelcol_hostmetrics_enabled)"]
+    direction LR
+    M1["receiver hostmetrics<br/>cpu, load, memory"] --> S1["memory_limiter"] --> S2["resourcedetection"] --> S3["resource"] --> S4["batch"] --> E2["exporter otlp_http/prometheus<br/>clt-N:9090"]
+  end
+
+  classDef recv fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef proc fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef expr fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class R1,M1 recv
+  class T1,T2,T3,T4,S1,S2,S3,S4 proc
+  class E1,E2 expr
+```
+
+Le processor `resource` ajoute `deployment.environment.name` et `lab.id` par `upsert`, puis `service.name` et `service.instance.id` par `insert`, avant que `batch` ne regroupe les données pour l'export.
+
 On obtient la configuration telle que le serveur la recevra, sans aucune accolade Jinja2. En tête le commentaire de gestion Ansible, plus bas les attributs produits par la boucle :
 
 ```yaml
@@ -644,7 +672,7 @@ host.name=srv-N.monlab.top
 os.type=linux
 ```
 
-Selon la configuration de la machine, `host.name` peut n'afficher que `srv-N` : dans les deux cas, c'est le nom du serveur qui fait tourner le **collector**, pas celui de `clt-N`, et aucune variable ne l'a fourni.
+L'attribut `host.name` provient du nom d'hôte lu sur la machine par le processor `resourcedetection`. Le format exact dépend de la configuration du système : nom court (`srv-N`) ou nom complet (`srv-N.<domaine>`).
 
 > [!NOTE]
 >
@@ -1104,21 +1132,66 @@ Un seul playbook, quatre configurations différentes. Comparez-les :
 ```bash
 ansible collector -b -m ansible.builtin.shell \
   -a "grep -A1 'batch:' /etc/otelcol-contrib/config.yaml | tail -1; grep 'hostmetrics:' /etc/otelcol-contrib/config.yaml | head -1; grep 'value:' /etc/otelcol-contrib/config.yaml | head -1" \
-  -o
+  -o | sort
 ```
 
-La sortie montre que chaque serveur a bien sa configuration. Les retours à la ligne internes sont remplacés par `\n`, effet de l'option `-o` qui tient chaque hôte sur une seule ligne :
+La sortie montre que chaque serveur a bien sa configuration. L'option `-o` tient chaque hôte sur une seule ligne, avec un préfixe `CHANGED | rc=0 | (stdout)`, et les retours à la ligne internes sont remplacés par `\n`. Le `| sort` fixe l'ordre des hôtes, qui n'est pas garanti par Ansible :
 
 ```text
-srv-frontend |    timeout: 1s\n        value: "frontend"
-srv-backend |     timeout: 5s\n  hostmetrics:\n        value: "backend"
-srv-database |    timeout: 10s\n  hostmetrics:\n        value: "database"
-srv-0.monlab.top | timeout: 2s\n  hostmetrics:\n        value: "lab4"
+srv-0.monlab.top | CHANGED | rc=0 | (stdout)     timeout: 2s\n  hostmetrics:\n        value: "lab4"
+srv-backend | CHANGED | rc=0 | (stdout)     timeout: 5s\n  hostmetrics:\n        value: "backend"
+srv-database | CHANGED | rc=0 | (stdout)     timeout: 10s\n  hostmetrics:\n        value: "database"
+srv-frontend | CHANGED | rc=0 | (stdout)     timeout: 1s\n        value: "frontend"
 ```
 
 Le frontend n'affiche pas `hostmetrics`, puisque ses métriques système sont désactivées.
 
-Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables. Le fichier `prometheus/prometheus.yml` fourni contient pour cela un bloc `otlp` qui promeut quatre attributs en labels : `service.name`, `service.instance.id`, `deployment.environment.name` et `host.name`.
+Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables.
+
+Le fichier `prometheus/prometheus.yml` fourni n'est pas produit par Ansible : il est statique, monté en lecture seule dans le conteneur Prometheus par `compose.yaml`. Affichez-le :
+
+```bash
+cat prometheus/prometheus.yml
+```
+
+Il contient un bloc `otlp` qui promeut quatre attributs de ressource en labels :
+
+```yaml
+otlp:
+  promote_resource_attributes:
+    - service.name
+    - service.instance.id
+    - deployment.environment.name
+    - host.name
+```
+
+Le schéma suivant résume cette promotion, du collector de `srv-N` jusqu'à la série stockée par Prometheus sur `clt-N` :
+
+```mermaid
+---
+title: Promotion des attributs de ressource en labels Prometheus
+---
+flowchart LR
+  subgraph C["collector de srv-N"]
+    direction TB
+    R["attributs de ressource<br/>deployment.environment.name=lab4<br/>service.name=lab4<br/>service.instance.id=srv-N<br/>host.name=srv-N"]
+  end
+
+  subgraph P["Prometheus sur clt-N"]
+    direction TB
+    L["série system_cpu_load_average_1m<br/>deployment_environment_name=lab4<br/>service_name=lab4<br/>instance=srv-N<br/>job=lab4<br/>host_name=srv-N"]
+  end
+
+  R -->|"OTLP/HTTP :9090<br/>otlp.promote_resource_attributes"| L
+
+  classDef col fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef back fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class R col
+  class L back
+```
+
+Sans ce bloc, les quatre serveurs enverraient la même série `system_cpu_load_average_1m` sans aucun label, et il serait impossible de savoir de quelle machine elle provient.
 
 Attendez une minute, puis interrogez Prometheus pour voir les métriques des serveurs d'infrastructure :
 

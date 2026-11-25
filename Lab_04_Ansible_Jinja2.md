@@ -360,6 +360,11 @@ Le processor `resourcedetection` mérite un mot avant d'écrire le template. Deu
 
 C'est ce qui rendra la partie 5 lisible : le même template déployé sur quatre serveurs produira quatre `host.name` différents, sans une variable de plus. Le réglage `override: false` laisse la priorité aux attributs déjà posés, par `resource` ou par l'application : la détection complète la ressource, elle ne l'écrase pas. Le détecteur `env` existe aussi et lit `OTEL_RESOURCE_ATTRIBUTES` dans l'environnement du service ; il n'est pas utilisé ici, pour ne pas multiplier les mécanismes dans ce lab.
 
+Dans le processor `resource`, le choix entre `upsert` et `insert` répond à deux comportements distincts :
+
+- **`action: upsert`** insère l'attribut s'il est absent, et **écrase** sa valeur s'il existe déjà. Il sert aux attributs imposés par la plateforme (`deployment.environment.name`, `lab.id`), qui doivent rester uniformes quel que soit l'émetteur.
+- **`action: insert`** insère l'attribut uniquement s'il est absent, et **ne modifie pas** une valeur déjà présente. Il est indispensable ici pour `service.name` et `service.instance.id` : les traces émises par `telemetrygen` (ou par une application) portent déjà leur propre `service.name` (`ansible-demo`), qu'un `upsert` écraserait par `lab4`, alors que les métriques système de `hostmetrics` n'en ont pas et reçoivent donc `service.name=lab4` et `service.instance.id=srv-N`.
+
 > [!NOTE]
 >
 > `otelcol_backend_host` est lue dans l'environnement du terminal qui lance `ansible-playbook`, par `lookup('ansible.builtin.env', 'CLT_HOST')`. Si `CLT_HOST` est vide, l'endpoint de l'exporter devient `:4317` et le **collector** tente de joindre sa propre machine : les traces n'arrivent pas dans Jaeger, et les logs du service citent `127.0.0.1:4317`. Contrôlez `echo $CLT_HOST` avant de lancer le playbook ; s'il est vide, ouvrez un nouveau terminal web, où la variable est définie.

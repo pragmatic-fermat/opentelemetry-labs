@@ -87,8 +87,17 @@ Copiez les fichiers fournis dans un dossier de travail, puis démarrez les deux 
 
 ```bash
 mkdir -p ~/lab04
+```
+
+```bash
 cp -r ~/opentelemetry-labs/config/lab04/. ~/lab04/
+```
+
+```bash
 cd ~/lab04
+```
+
+```bash
 docker compose up -d
 ```
 
@@ -96,6 +105,9 @@ Lisez les fichiers de configuration fournis :
 
 ```bash
 cat group_vars/all.yml
+```
+
+```bash
 cat ansible.cfg
 ```
 
@@ -112,6 +124,9 @@ cat > inventory.ini <<EOF
 [otel]
 $SRV_HOST
 EOF
+```
+
+```bash
 cat inventory.ini
 ```
 
@@ -119,8 +134,17 @@ Contrôlez la connexion et l'état du serveur :
 
 ```bash
 ansible otel -m ansible.builtin.ping
+```
+
+```bash
 ansible otel -m ansible.builtin.setup -a 'filter=ansible_distribution*'
+```
+
+```bash
 ansible otel -m ansible.builtin.shell -a 'command -v otelcol-contrib || echo absent'
+```
+
+```bash
 curl -s http://localhost:9090/-/ready
 ```
 
@@ -144,6 +168,39 @@ Si votre animateur a provisionné des machines éphémères pour votre groupe (v
 
 Toutes les commandes de cette partie se lancent dans le terminal de `clt-N`, dans `~/lab04`. Les commandes `ansible` et `ansible-playbook` agissent ensuite sur `srv-N` par SSH : c'est là que le paquet est téléchargé, installé, et que le service démarre. Rien n'est tapé sur `srv-N`, qui n'a ni Ansible ni le dépôt des labs.
 
+Le schéma suivant résume l'enchaînement des trois tâches du playbook :
+
+```mermaid
+---
+title: Installation du collector sur srv-N pilotee par Ansible
+---
+flowchart LR
+  subgraph CLT["clt-N (noeud de controle)"]
+    PB["playbook.yml<br/>group_vars/all.yml"]
+  end
+
+  GH[("GitHub Releases<br/>otelcol-contrib .deb")]
+
+  subgraph SRV["srv-N (serveur cible)"]
+    direction TB
+    T1["1. get_url<br/>telechargement + verification SHA256"]
+    T2["2. apt (deb)<br/>installation du paquet .deb"]
+    T3["3. systemd_service<br/>activation et demarrage"]
+    T1 --> T2 --> T3
+  end
+
+  PB -->|"SSH (become)"| T1
+  GH -.->|"paquet .deb"| T1
+
+  classDef ctrl fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef task fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef ext fill:#f1f5f9,stroke:#475569,color:#0f172a
+
+  class PB ctrl
+  class T1,T2,T3 task
+  class GH ext
+```
+
 Écrivez le playbook `playbook.yml`, qui s'exécute sur le groupe `otel` avec les droits administrateur (`become: true`).
 
 Il contient un handler nommé `Redémarrer otelcol-contrib`, qui redémarre le service avec le module `ansible.builtin.systemd_service`, puis trois tâches : télécharger le paquet avec `ansible.builtin.get_url`, l'installer avec `ansible.builtin.apt` (paramètre `deb`), et activer puis démarrer le service avec `ansible.builtin.systemd_service`.
@@ -152,13 +209,9 @@ Quelques précisions sur le téléchargement. Il utilise la variable `otelcol_de
 
 > [!NOTE]
 >
-> D'où vient le paquet ? L'URL est assemblée dans `group_vars/all.yml`, dans la variable `otelcol_deb_url` :
+> D'où vient le paquet ? L'URL est déjà assemblée dans `group_vars/all.yml` (ne la recopiez pas) via la variable `otelcol_deb_url`, qui construit le lien GitHub Releases à partir de `otelcol_version` et de `otelcol_arch_map[ansible_architecture]` (par exemple `otelcol-contrib_0.165.0_linux_amd64.deb`). Elle pointe vers les publications GitHub du projet, canal officiel du **collector**. Il n'existe pas encore de dépôt APT officiel pour le **collector** : le projet y travaille, mais à ce jour les paquets ne vivent que sur GitHub Releases.
 
-```yaml
-otelcol_deb_url: "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v{{ otelcol_version }}/otelcol-contrib_{{ otelcol_version }}_linux_{{ otelcol_arch_map[ansible_architecture] }}.deb"
-```
-
-Elle pointe vers les publications GitHub du projet, canal officiel du **collector**. Il n'existe pas encore de dépôt APT officiel pour le **collector** : le projet y travaille, mais à ce jour les paquets ne vivent que sur GitHub Releases. Ansible évalue cette URL au moment de la tâche, sur chaque cible, en y insérant la version et l'architecture lues dans les facts du serveur : chaque hôte télécharge donc son propre paquet, dans son propre `/tmp`. Ce choix a deux conséquences que le playbook compense :
+Ansible évalue cette URL au moment de la tâche, sur chaque cible, en y insérant la version et l'architecture lues dans les facts du serveur : chaque hôte télécharge donc son propre paquet, dans son propre `/tmp`. Ce choix a deux conséquences que le playbook compense :
 
 - un fichier téléchargé hors dépôt n'a pas la chaîne de confiance d'un dépôt signé : le paramètre `checksum` la remplace, en comparant le SHA256 du fichier à la somme épinglée dans `group_vars/all.yml` ;
 - le module `apt` est utilisé en mode fichier local (paramètre `deb`) : le paquet est quand même enregistré dans `dpkg`, avec ses dépendances, ce qui rend la désinstallation propre du [Cleanup](#cleanup) possible.
@@ -200,6 +253,9 @@ Lancez le playbook, puis relancez-le immédiatement :
 
 ```bash
 ansible-playbook playbook.yml
+```
+
+```bash
 ansible-playbook playbook.yml
 ```
 
@@ -216,7 +272,13 @@ Contrôlez ce qui est installé et ce qui écoute :
 
 ```bash
 ansible otel -a '/usr/bin/otelcol-contrib --version'
+```
+
+```bash
 ansible otel -a 'systemctl is-active otelcol-contrib'
+```
+
+```bash
 ansible otel -m ansible.builtin.shell -a "ss -ltn | grep -E ':(4317|4318|1777|55679) '"
 ```
 
@@ -233,6 +295,42 @@ Le paquet démarre le service avec sa propre configuration par défaut, qui ouvr
 
 ## 3. Générer la configuration avec Jinja2
 
+Le schéma suivant montre le parcours de la configuration (génération par Ansible, validation puis déploiement sur `srv-N`) et celui des traces de test (émises par `telemetrygen` depuis `clt-N` vers le **collector** de `srv-N`, puis renvoyées vers Jaeger sur `clt-N`) :
+
+```mermaid
+---
+title: Generation Jinja2, deploiement et flux des traces de test
+---
+flowchart LR
+  subgraph CLT["clt-N"]
+    direction TB
+    TPL["templates/config.yaml.j2<br/>+ group_vars/all.yml"]
+    TG["telemetrygen<br/>(--service ansible-demo)"]
+    JG[("Jaeger<br/>TCP/4317 et 16686")]
+  end
+
+  subgraph SRV["srv-N"]
+    direction TB
+    VAL["validate --config=%s"]
+    CFG["/etc/otelcol-contrib/config.yaml"]
+    COL["collector<br/>(otelcol-contrib:4317)"]
+    VAL -->|valide| CFG
+    CFG -->|restart| COL
+  end
+
+  TPL -->|"Ansible template"| VAL
+  TG -->|"OTLP gRPC :4317"| COL
+  COL -->|"OTLP gRPC :4317"| JG
+
+  classDef ctrl fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef col fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef back fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class TPL,TG ctrl
+  class VAL,CFG,COL col
+  class JG back
+```
+
 Jinja2 est le langage de template d'Ansible. Trois constructions suffisent pour ce lab :
 
 | Syntaxe | Rôle |
@@ -248,7 +346,7 @@ Le template produit une configuration de **collector** qui contient :
 - une première ligne de commentaire `{{ ansible_managed | comment }}`, qui indique que le fichier est géré par Ansible ;
 - un receiver `otlp` (gRPC et HTTP) qui écoute sur toutes les interfaces, ports 4317 et 4318 ;
 - si la variable `otelcol_hostmetrics_enabled` est vraie, un receiver `hostmetrics` avec `collection_interval: 30s` et les scrapers `cpu`, `load` et `memory` (écrits `cpu: {}`, etc.) ;
-- les processors `memory_limiter` (1 s, 256 MiB, marge de 64 MiB), `resourcedetection`, `resource` et `batch`. Le processor `resourcedetection` interroge la machine elle-même (détecteur `system` : nom d'hôte, système, identifiant machine) et complète la ressource avec ce qu'il trouve. Le processor `resource` reçoit, par une boucle sur le dictionnaire `otelcol_resource_attributes`, une entrée `upsert` par attribut (clé `key`, valeur écrite avec le filtre `to_json`, qui ajoute les guillemets nécessaires à une chaîne YAML). Le processor `batch` regroupe les données avant envoi ; sa valeur `timeout` (2 s par défaut) est fournie par la variable `otelcol_batch_timeout` ;
+- les processors `memory_limiter` (1 s, 256 MiB, marge de 64 MiB), `resourcedetection`, `resource` et `batch`. Le processor `resourcedetection` interroge la machine elle-même (détecteur `system` : nom d'hôte, système, identifiant machine) et complète la ressource avec ce qu'il trouve. Le processor `resource` reçoit, par une boucle sur le dictionnaire `otelcol_resource_attributes`, une entrée `upsert` par attribut (clé `key`, valeur écrite avec le filtre `to_json`, qui ajoute les guillemets nécessaires à une chaîne YAML), suivie de `service.name` et `service.instance.id` avec `action: insert`. L'action `insert` est essentielle : elle ajoute la clé uniquement si elle est absente. Ainsi, elle ne remplace pas le `service.name` déjà posé par une application ou par `telemetrygen` (`ansible-demo`), mais elle renseigne `service.name` et `service.instance.id` sur les métriques `hostmetrics` qui n'en ont pas (afin d'alimenter les labels `job` et `instance` dans Prometheus). Le processor `batch` regroupe les données avant envoi ; sa valeur `timeout` (2 s par défaut) est fournie par la variable `otelcol_batch_timeout` ;
 - l'exporter `otlp_grpc/jaeger`, vers `otelcol_backend_host` sur le port 4317 sans TLS ;
 - si `otelcol_hostmetrics_enabled` est vraie, un exporter `otlp_http/prometheus` dont le paramètre `metrics_endpoint` vaut `http://<otelcol_backend_host>:9090/api/v1/otlp/v1/metrics` ;
 - un pipeline `traces` (receiver `otlp`, processors `memory_limiter`, `resourcedetection`, `resource` puis `batch`, exporter `otlp_grpc/jaeger`) et, si `otelcol_hostmetrics_enabled` est vraie, un pipeline `metrics` (receiver `hostmetrics`, mêmes processors, exporter `otlp_http/prometheus`).
@@ -272,6 +370,9 @@ C'est ce qui rendra la partie 5 lisible : le même template déployé sur quatre
 
 ```bash
 mkdir -p templates
+```
+
+```bash
 cat > templates/config.yaml.j2 <<'EOF'
 {{ ansible_managed | comment }}
 receivers:
@@ -309,10 +410,10 @@ processors:
 {% endfor %}
       - key: service.name
         value: {{ otelcol_environment | to_json }}
-        action: upsert
+        action: insert
       - key: service.instance.id
         value: {{ ansible_hostname | to_json }}
-        action: upsert
+        action: insert
   batch:
     timeout: {{ otelcol_batch_timeout }}
 
@@ -354,7 +455,13 @@ cat > preview.yml <<'EOF'
         src: templates/config.yaml.j2
         dest: /tmp/config-preview.yaml
 EOF
+```
+
+```bash
 ansible-playbook preview.yml -e @group_vars/all.yml
+```
+
+```bash
 cat /tmp/config-preview.yaml
 ```
 
@@ -389,6 +496,12 @@ processors:
       - key: lab.id
         value: "<votre numéro>"
         action: upsert
+      - key: service.name
+        value: "lab4"
+        action: insert
+      - key: service.instance.id
+        value: "clt-N"
+        action: insert
   batch:
     timeout: 2s
 
@@ -406,7 +519,7 @@ service:
       exporters: [otlp_grpc/jaeger]
 ```
 
-`<CLT_HOST>` vaut la valeur de la variable `CLT_HOST` de `clt-N` et `<votre numéro>` celle de `LAB_ID`. Avec la valeur par défaut `otelcol_hostmetrics_enabled: false`, le rendu ne contient aucune mention de `hostmetrics`.
+`<CLT_HOST>` vaut la valeur de la variable `CLT_HOST` de `clt-N` et `<votre numéro>` celle de `LAB_ID`. Lors de cette prévisualisation locale sur `localhost`, le fact `ansible_hostname` vaut `clt-N` ; au déploiement sur le serveur cible, il prendra automatiquement la valeur `srv-N`. Avec la valeur par défaut `otelcol_hostmetrics_enabled: false`, le rendu ne contient aucune mention de `hostmetrics`.
 
 Vérifiez maintenant cette configuration avec la commande `validate` du **collector**, dans un conteneur lancé sur `clt-N` :
 
@@ -414,6 +527,9 @@ Vérifiez maintenant cette configuration avec la commande `validate` du **collec
 docker run --rm -v /tmp/config-preview.yaml:/config.yaml:ro \
   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0 \
   validate --config=/config.yaml
+```
+
+```bash
 echo "code retour : $?"
 ```
 
@@ -452,6 +568,9 @@ Déployez, puis générez cinq traces avec `telemetrygen` (lancé depuis `clt-N`
 
 ```bash
 ansible-playbook playbook.yml
+```
+
+```bash
 docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
   traces --otlp-endpoint $SRV_HOST:4317 --otlp-insecure --rate 10 --traces 5 --service ansible-demo
 ```
@@ -473,8 +592,14 @@ Le fichier déployé porte l'en-tête de gestion Ansible, et Jaeger a reçu les 
 
 ```bash
 ansible otel -a 'head -n 3 /etc/otelcol-contrib/config.yaml'
+```
+
+```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
   | jq '[.result.resourceSpans[].scopeSpans[].spans[].traceId] | unique | length'
+```
+
+```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
   | jq -r '.result.resourceSpans[].resource.attributes[] | select(.key=="lab.id" or .key=="deployment.environment.name") | "\(.key)=\(.value | (.stringValue // .intValue))"' | sort -u
 ```
@@ -526,7 +651,43 @@ Ouvrez l'interface de Jaeger (`http://$CLT_HOST:16686`) et sélectionnez le serv
 
 ## 4. Déploiements successifs
 
+> [!TIP]
+>
+> Si vous démarrez directement à cette partie (ou si vous souhaitez remettre votre environnement dans l'état exact de fin de partie 3 : backends démarrés, inventaire, playbook, template et premier déploiement du **collector**), exécutez le script de rattrapage fourni depuis `clt-N` :
+
+```bash
+bash ~/opentelemetry-labs/config/lab04/fast-forward-part4.sh
+```
+
+```bash
+cd ~/lab04
+```
+
 Un parc ne se déploie pas une seule fois : il change. Cette partie enchaîne cinq déploiements sur le même serveur, du premier ajout au retour en arrière, en passant par une dérive corrigée et un changement refusé. À chaque fois la mécanique est la même : une variable ou un template, un rendu, le contrôle `validate`, puis un redémarrage si le fichier change.
+
+```mermaid
+---
+title: Cycle de mise a jour securisee avec Ansible
+---
+flowchart LR
+  HV["host_vars/$SRV_HOST.yml<br/>(surcharge de variables)"]
+  CHK["--check --diff<br/>(apercu sans modification)"]
+  TPL["template + validate<br/>(controle sur fichier temporaire)"]
+  OK["Remplacement config.yaml<br/>+ handler restart"]
+  KO["Echec du play<br/>(configuration active preservee)"]
+
+  HV --> CHK --> TPL
+  TPL -->|"validate = 0"| OK
+  TPL -->|"validate != 0"| KO
+
+  classDef ok fill:#dcfce7,stroke:#15803d,color:#14532d
+  classDef ko fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
+  classDef step fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+
+  class HV,CHK,TPL step
+  class OK ok
+  class KO ko
+```
 
 ### Un ajout
 
@@ -536,6 +697,9 @@ Une variable définie pour un hôte précis, dans `host_vars/<nom de l'hôte>.ym
 
 ```bash
 mkdir -p host_vars
+```
+
+```bash
 cat > host_vars/$SRV_HOST.yml <<'EOF'
 otelcol_hostmetrics_enabled: true
 EOF
@@ -582,7 +746,13 @@ Contrôlez que l'instance en cours utilise bien cette configuration, puis attend
 
 ```bash
 ansible otel -a 'grep -c hostmetrics /etc/otelcol-contrib/config.yaml'
+```
+
+```bash
 sleep 60
+```
+
+```bash
 curl -s http://localhost:9090/api/v1/query --data-urlencode 'query=count({__name__=~"system_cpu.*"})' \
   | jq -r '.data.result[0].value[1]'
 ```
@@ -620,6 +790,9 @@ La collecte des métriques système a été ajoutée, elle peut être retirée d
 cat > host_vars/$SRV_HOST.yml <<'EOF'
 otelcol_hostmetrics_enabled: false
 EOF
+```
+
+```bash
 ansible-playbook playbook.yml --check --diff
 ```
 
@@ -646,6 +819,9 @@ Appliquez, puis vérifiez que la configuration en cours ne contient plus le rece
 
 ```bash
 ansible-playbook playbook.yml | grep -E 'RUNNING HANDLER|changed:' | head -4
+```
+
+```bash
 ansible otel -m ansible.builtin.shell -a 'grep -c hostmetrics /etc/otelcol-contrib/config.yaml || true'
 ```
 
@@ -657,6 +833,9 @@ Que se passe-t-il si quelqu'un modifie la configuration à la main sur le serveu
 
 ```bash
 ansible otel -b -m ansible.builtin.shell -a 'echo "# ajouté à la main" >> /etc/otelcol-contrib/config.yaml'
+```
+
+```bash
 ansible otel -a 'tail -1 /etc/otelcol-contrib/config.yaml'
 ```
 
@@ -677,6 +856,9 @@ Appliquez, puis contrôlez la fin du fichier :
 
 ```bash
 ansible-playbook playbook.yml >/dev/null
+```
+
+```bash
 ansible otel -a 'tail -1 /etc/otelcol-contrib/config.yaml'
 ```
 
@@ -697,6 +879,9 @@ cat > host_vars/$SRV_HOST.yml <<'EOF'
 otelcol_hostmetrics_enabled: false
 otelcol_batch_timeout: "deux secondes"
 EOF
+```
+
+```bash
 ansible-playbook playbook.yml
 ```
 
@@ -711,6 +896,9 @@ Le serveur n'a pas été touché : le service tourne toujours avec la dernière 
 
 ```bash
 ansible otel -a 'systemctl is-active otelcol-contrib'
+```
+
+```bash
 ansible otel -a 'grep -n timeout /etc/otelcol-contrib/config.yaml'
 ```
 
@@ -720,6 +908,9 @@ Corrigez l'erreur en supprimant la ligne fautive, puis relancez :
 
 ```bash
 sed -i '/otelcol_batch_timeout/d' host_vars/$SRV_HOST.yml
+```
+
+```bash
 ansible-playbook playbook.yml | grep -A2 'PLAY RECAP'
 ```
 
@@ -739,12 +930,61 @@ Pour retrouver un `changed=0`, relancez une seconde fois le playbook : le fichie
 
 Votre animateur a provisionné trois serveurs éphémères Debian pour votre groupe, dans le même VPC que `clt-N`. Leurs adresses privées changent d'une session à l'autre, et DigitalOcean ne garantit pas l'ordre dans lequel il les attribue : vous allez donc les découvrir au lieu de les écrire en dur.
 
+Le schéma suivant montre le déploiement simultané d'un seul playbook et d'un seul template vers les quatre serveurs aux profils différenciés :
+
+```mermaid
+---
+title: Un playbook, un template, quatre configurations dans le VPC
+---
+flowchart LR
+  subgraph CLT["clt-N"]
+    direction TB
+    ANS["Ansible<br/>1 playbook + 1 template<br/>+ 4 host_vars"]
+    PROM[("Prometheus<br/>TCP/9090 (OTLP)")]
+  end
+
+  subgraph PARC["4 serveurs cibles dans vpc-N"]
+    direction TB
+    S0["srv-N (Ubuntu)<br/>env=lab4, batch=2s, hostmetrics=on"]
+    S1["srv-frontend (Debian)<br/>env=frontend, batch=1s, hostmetrics=off"]
+    S2["srv-backend (Debian)<br/>env=backend, batch=5s, hostmetrics=on"]
+    S3["srv-database (Debian)<br/>env=database, batch=10s, hostmetrics=on"]
+  end
+
+  ANS -->|SSH| S0
+  ANS -->|SSH| S1
+  ANS -->|SSH| S2
+  ANS -->|SSH| S3
+  S0 -->|"OTLP metrics"| PROM
+  S2 -->|"OTLP metrics"| PROM
+  S3 -->|"OTLP metrics"| PROM
+
+  classDef ctrl fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef on fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef off fill:#f1f5f9,stroke:#475569,color:#0f172a
+  classDef back fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class ANS ctrl
+  class S0,S2,S3 on
+  class S1 off
+  class PROM back
+```
+
 Le dossier contient `discover-ephemere.sh`, qui balaie le sous-réseau privé de `clt-N` sur le port SSH, interroge les machines qui répondent, et ne garde que celles dont le nom commence par `srv2-`, `srv3-` ou `srv4-`. Lancez-le, puis construisez l'inventaire à partir de son résultat :
 
 ```bash
 chmod +x discover-ephemere.sh
+```
+
+```bash
 ./discover-ephemere.sh > ephemeres.ini
+```
+
+```bash
 cat ephemeres.ini
+```
+
+```bash
 cat > inventory.ini <<EOF
 [otel]
 $SRV_HOST
@@ -755,6 +995,9 @@ $(cat ephemeres.ini)
 otel
 ephemere
 EOF
+```
+
+```bash
 cat inventory.ini
 ```
 
@@ -771,6 +1014,9 @@ Les numéros finaux dépendent de la session : c'est justement ce que le script 
 
 ```bash
 ansible all -m ansible.builtin.ping -o | head -6
+```
+
+```bash
 ansible ephemere -m ansible.builtin.setup -a 'filter=ansible_distribution' -o | grep -o 'Debian\|ansible_hostname[^,]*' | head -4
 ```
 
@@ -798,11 +1044,17 @@ otelcol_hostmetrics_enabled: false
 otelcol_batch_timeout: 1s
 otelcol_environment: frontend
 EOF
+```
+
+```bash
 cat > host_vars/srv-backend.yml <<'EOF'
 otelcol_hostmetrics_enabled: true
 otelcol_batch_timeout: 5s
 otelcol_environment: backend
 EOF
+```
+
+```bash
 cat > host_vars/srv-database.yml <<'EOF'
 otelcol_hostmetrics_enabled: true
 otelcol_batch_timeout: 10s
@@ -820,6 +1072,9 @@ Le playbook doit maintenant s'exécuter sur le groupe `collector` (les quatre se
 
 ```bash
 sed -i 's/^  hosts: otel/  hosts: collector/' playbook.yml
+```
+
+```bash
 grep 'hosts:' playbook.yml
 ```
 
@@ -864,6 +1119,9 @@ Attendez une minute, puis interrogez Prometheus pour voir les métriques des ser
 
 ```bash
 sleep 60
+```
+
+```bash
 curl -s -G "http://localhost:9090/api/v1/query" \
   --data-urlencode "query=system_cpu_load_average_1m" \
   | jq -r '.data.result[] | "\(.metric.host_name) [\(.metric.deployment_environment_name)] : \(.value[1])"'
@@ -895,9 +1153,21 @@ Arrêtez les backends du poste de contrôle, puis désinstallez le **collector**
 
 ```bash
 cd ~/lab04
+```
+
+```bash
 docker compose down
+```
+
+```bash
 ansible otel -b -m ansible.builtin.apt -a "name=otelcol-contrib state=absent purge=true"
+```
+
+```bash
 ansible otel -b -m ansible.builtin.file -a "path=/tmp/otelcol-contrib_0.165.0.deb state=absent"
+```
+
+```bash
 ansible otel -m ansible.builtin.shell -a 'command -v otelcol-contrib || echo absent'
 ```
 
@@ -931,6 +1201,9 @@ Ajoutez la description des deux locataires à la fin de `host_vars/$SRV_HOST.yml
 
 ```bash
 cd ~/lab04
+```
+
+```bash
 cat >> host_vars/$SRV_HOST.yml <<'EOF'
 otelcol_tenants:
   - name: prod
@@ -1031,9 +1304,15 @@ Rendez le template sur `clt-N` et validez-le avant de déployer :
 ```bash
 ansible localhost -m ansible.builtin.template \
   -a "src=templates/config-tenants.yaml.j2 dest=/tmp/config-tenants.yaml" -e @group_vars/all.yml
+```
+
+```bash
 docker run --rm -v /tmp/config-tenants.yaml:/config.yaml:ro \
   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0 \
   validate --config=/config.yaml
+```
+
+```bash
 echo "code retour : $?"
 ```
 
@@ -1062,6 +1341,9 @@ Déployez cette configuration en pointant la tâche sur le nouveau template :
 
 ```bash
 sed -i 's|src: config.yaml.j2|src: config-tenants.yaml.j2|' playbook.yml
+```
+
+```bash
 ansible-playbook playbook.yml | grep -A3 'PLAY RECAP'
 ```
 
@@ -1087,8 +1369,14 @@ Envoyez maintenant trois traces sur chaque endpoint, sous le même nom de servic
 ```bash
 docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
   traces --otlp-endpoint $SRV_HOST:4317 --otlp-insecure --rate 10 --traces 3 --service checkout-web
+```
+
+```bash
 docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
   traces --otlp-endpoint $SRV_HOST:5317 --otlp-insecure --rate 10 --traces 3 --service checkout-web
+```
+
+```bash
 sleep 5
 ```
 
@@ -1112,6 +1400,9 @@ Vérifiez enfin la différence de traitement sur les métriques. Après une tren
 
 ```bash
 sleep 35
+```
+
+```bash
 curl -s -G http://localhost:9090/api/v1/query \
   --data-urlencode 'query=count by (instance) ({__name__=~"system_cpu.*"})' \
   | jq -r '.data.result[] | "instance=\(.metric.instance) : \(.value[1]) series"'
@@ -1131,6 +1422,9 @@ Revenez à la configuration du lab avant de continuer :
 
 ```bash
 sed -i 's|src: config-tenants.yaml.j2|src: config.yaml.j2|' playbook.yml
+```
+
+```bash
 ansible-playbook playbook.yml | grep -A3 'PLAY RECAP'
 ```
 
@@ -1156,8 +1450,17 @@ Commencez par la version et les sommes. Celles de la 0.164.0 sont publiées avec
 
 ```bash
 sed -i 's/otelcol_version: "0.165.0"/otelcol_version: "0.164.0"/' group_vars/all.yml
+```
+
+```bash
 sed -i 's|amd64: "sha256:dafb5174344dd15f339fd8208783b17122fb4cd37fa7e5461fb09d99df212b4b"|amd64: "sha256:1995260c54cf5d74964a85e5e7d27834bb9a252c87a2582a4fb6a6c34565a90d"|' group_vars/all.yml
+```
+
+```bash
 sed -i 's|arm64: "sha256:4dcfb6b69dfa10132c593ed5782823eec79dc408a0d68291e1c4adc5879d0948"|arm64: "sha256:34dca7290ff50d8be123c587dff51d93711a59e2cff41895e8801b145749dd0e"|' group_vars/all.yml
+```
+
+```bash
 grep -A3 'otelcol_checksums' group_vars/all.yml
 ```
 
@@ -1165,6 +1468,9 @@ Autorisez ensuite la descente de version dans la tâche d'installation :
 
 ```bash
 sed -i 's|        deb: "/tmp/otelcol-contrib_{{ otelcol_version }}.deb"|        deb: "/tmp/otelcol-contrib_{{ otelcol_version }}.deb"\n        allow_downgrade: true|' playbook.yml
+```
+
+```bash
 grep -A3 'deb:' playbook.yml | head -4
 ```
 
@@ -1178,8 +1484,17 @@ Déployez, puis contrôlez la version installée et l'état du service :
 
 ```bash
 ansible-playbook playbook.yml
+```
+
+```bash
 ansible otel -a '/usr/bin/otelcol-contrib --version'
+```
+
+```bash
 ansible otel -a 'systemctl is-active otelcol-contrib'
+```
+
+```bash
 ansible otel -a 'dpkg-query -W otelcol-contrib'
 ```
 
@@ -1196,7 +1511,13 @@ Envoyez cinq traces pour vérifier que le **collector** déployé fonctionne tou
 ```bash
 docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
   traces --otlp-endpoint $SRV_HOST:4317 --otlp-insecure --rate 10 --traces 5 --service ansible-demo
+```
+
+```bash
 sleep 3
+```
+
+```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
   | jq '[.result.resourceSpans[].scopeSpans[].spans[].traceId] | unique | length'
 ```

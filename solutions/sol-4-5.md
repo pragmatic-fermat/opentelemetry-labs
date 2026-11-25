@@ -81,10 +81,10 @@ processors:
 {% endfor %}
       - key: service.name
         value: {{ otelcol_environment | to_json }}
-        action: upsert
+        action: insert
       - key: service.instance.id
         value: {{ ansible_hostname | to_json }}
-        action: upsert
+        action: insert
   batch:
     timeout: {{ otelcol_batch_timeout }}
 

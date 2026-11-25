@@ -894,6 +894,12 @@ ansible otel -m ansible.builtin.shell -a 'command -v otelcol-contrib || echo abs
 
 La dernière commande affiche `absent` : le binaire, la configuration `/etc/otelcol-contrib` et le paquet dans `/tmp` ont disparu du serveur.
 
+Si vous avez réalisé [l'extra 5](#5-installer-node_exporter-sur-un-serveur-et-le-scraper-via-le-collector), désinstallez également `prometheus-node-exporter` sur `srv-N` :
+
+```bash
+ansible otel -b -m ansible.builtin.apt -a "name=prometheus-node-exporter state=absent purge=true"
+```
+
 Si des serveurs éphémères ont été déployés [à la partie 5](#5-étendre-le-parc--4-serveurs-4-configurations), ils ne se nettoient pas depuis le terminal : votre animateur les détruit en fin de séance avec `animateur/scripts/lab04-vms-destroy.sh`. Aucun playbook n'est nécessaire pour cela, et les machines disparaissent avec leurs paquets et leurs configurations.
 
 Le dossier `~/lab04` peut être conservé si vous voulez rejouer le lab. Les autres labs ne le réutilisent pas : chacun fournit ses propres fichiers.
@@ -1189,3 +1195,48 @@ curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&qu
 > [!NOTE]
 >
 > Trois choses à retenir de cet exercice. Sans `allow_downgrade`, APT refuse l'opération avec `Packages were downgraded and -y was used without --allow-downgrades`, et le paquet reste en 0.165.0. Une somme de contrôle oubliée fait échouer le téléchargement avant même l'installation. Et la remontée de version est le cas normal : sans `allow_downgrade`, APT installe la version supérieure sans broncher.
+
+### 5. Installer node_exporter sur un serveur et le scraper via le **collector**
+
+Dans ce lab, les métriques système ont été collectées avec le receiver `hostmetrics`. Une autre approche très fréquente en production consiste à installer `node_exporter` (l'exporter Prometheus officiel pour Linux) sur la machine cible, puis à le faire scraper localement par le **collector** OpenTelemetry avec le receiver `prometheus`.
+
+Le schéma suivant zoome sur ce flux entre `srv-N` et le Prometheus central sur `clt-N` :
+
+```mermaid
+---
+title: Scrape local de node_exporter par le collector et export OTLP vers Prometheus
+---
+flowchart LR
+  subgraph SRV["Machine serveur srv-N"]
+    direction LR
+    NE["node_exporter<br/>127.0.0.1:9100/metrics"]
+    COL["collector (otelcol-contrib)<br/>receiver prometheus -> processors -> exporter otlp_http"]
+    COL -->|"scrape HTTP local<br/>(pull, toutes les 15 s)"| NE
+  end
+
+  subgraph CLT["Serveur central clt-N"]
+    PROM[("Prometheus<br/>TCP/9090<br/>/api/v1/otlp/v1/metrics")]
+  end
+
+  COL -->|"export OTLP/HTTP sortant<br/>(push)"| PROM
+
+  classDef exporter fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef collector fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef backend fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class NE exporter
+  class COL collector
+  class PROM backend
+```
+
+Ce montage présente trois intérêts concrets :
+
+- **Conserver les tableaux de bord et alertes existants.** Le receiver `hostmetrics` produit des métriques aux conventions sémantiques OpenTelemetry (`system_cpu_*`, `system_memory_*`), alors que les tableaux de bord Grafana historiques et de nombreuses règles d'alerte PromQL reposent sur les noms de `node_exporter` (`node_cpu_seconds_total`, `node_memory_MemAvailable_bytes`, `node_load1`). Scraper `node_exporter` via le **collector** permet de basculer le transport vers OpenTelemetry sans réécrire immédiatement les requêtes existantes.
+- **Remplacer le pull entrant par un export OTLP sortant.** Avec un scrape Prometheus classique, le serveur Prometheus central doit ouvrir une connexion entrante vers le port `9100` de chaque machine du parc, ce qui complique les règles de pare-feu. Ici, `node_exporter` est interrogé en local sur `127.0.0.1:9100` par le **collector**, qui pousse ensuite les métriques en OTLP sortant en leur appliquant le même pipeline que les autres signaux (`resourcedetection`, `resource`, `batch`, chiffrement, filtrage).
+- **Appliquer un modèle unique à tout l'écosystème Prometheus.** La même configuration de receiver `prometheus` sert à collecter n'importe quel exporter existant (`postgres_exporter`, `nginx_exporter`, ou un endpoint `/metrics` applicatif) sans déployer d'agent Prometheus dédié.
+
+En contrepartie, faire tourner simultanément `hostmetrics` et `node_exporter` duplique les métriques système et augmente la cardinalité stockée dans Prometheus (plus de 1 700 séries `node_*` par serveur). En production, on ne conserve généralement que l'un des deux receivers.
+
+**Consigne** : déployez `prometheus-node-exporter` sur un unique serveur (`srv-N`, groupe `otel`), ajoutez une variable booléenne `otelcol_node_exporter_enabled` (désactivée par défaut dans `group_vars/all.yml`, activée uniquement dans `host_vars/$SRV_HOST.yml`) pour activer un receiver `prometheus/node_exporter` dans `templates/config.yaml.j2` qui scrape `127.0.0.1:9100`, redéployez sur `srv-N`, puis vérifiez dans Prometheus sur `clt-N` que la métrique `node_load1` apparaît avec les attributs de ressource (`host_name`, `deployment_environment_name`, `instance`, `job`).
+
+La solution technique détaillée est disponible dans [solutions/sol-4-5.md](solutions/sol-4-5.md).

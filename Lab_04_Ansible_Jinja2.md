@@ -1423,6 +1423,45 @@ service:
 
 `prod` a deux pipelines, `preprod` un seul : la condition a suffi à produire cette différence.
 
+Le schéma suivant situe les deux locataires dans le même processus du **collector** : deux jeux de receivers, deux jeux de pipelines, mais un seul `memory_limiter` et une seule paire d'exporters, partagés par tous les pipelines.
+
+```mermaid
+---
+title: Deux locataires dans un seul processus collector sur srv-N
+---
+flowchart LR
+  subgraph SRV["srv-N, un seul processus otelcol-contrib"]
+    direction TB
+
+    subgraph PROD["Locataire prod"]
+      direction LR
+      R1["receiver otlp/prod<br/>gRPC 4317 / HTTP 4318"] --> T1["pipeline traces/prod<br/>resource/prod -> batch/prod 1s"] --> E1["exporter otlp_grpc/jaeger"]
+      H1["receiver hostmetrics/prod"] --> M1["pipeline metrics/prod<br/>resource/prod -> batch/prod 1s"] --> E2["exporter otlp_http/prometheus"]
+    end
+
+    subgraph PRE["Locataire preprod"]
+      direction LR
+      R2["receiver otlp/preprod<br/>gRPC 5317 / HTTP 5318"] --> T2["pipeline traces/preprod<br/>resource/preprod -> batch/preprod 10s"] --> E1
+    end
+
+    ML["memory_limiter<br/>(partage par tous les pipelines)"]
+    ML -.-> T1
+    ML -.-> T2
+    ML -.-> M1
+  end
+
+  E1 --> JG[("Jaeger<br/>clt-N:4317")]
+  E2 --> PM[("Prometheus<br/>clt-N:9090")]
+
+  classDef recv fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+  classDef pipe fill:#fef3c7,stroke:#b45309,color:#78350f
+  classDef expr fill:#ede9fe,stroke:#6d28d9,color:#4c1d95
+
+  class R1,R2,H1 recv
+  class T1,T2,M1,ML pipe
+  class E1,E2 expr
+```
+
 Déployez cette configuration en pointant la tâche sur le nouveau template :
 
 ```bash

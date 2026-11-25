@@ -72,7 +72,7 @@ flowchart LR
     SY --- CO
   end
 
-  AN ==>|SSH, become| SY
+  AN ==>|SSH| SY
   CO ==> J
   CO ==> P
 ```
@@ -189,7 +189,7 @@ flowchart LR
     T1 --> T2 --> T3
   end
 
-  PB -->|"SSH (become)"| T1
+  PB -->|"SSH"| T1
   GH -.->|"paquet .deb"| T1
 
   classDef ctrl fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a

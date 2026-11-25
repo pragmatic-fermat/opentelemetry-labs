@@ -344,8 +344,9 @@ EOF
 Avant de déployer, produisez d'abord le rendu du template sur `clt-N`, sans toucher au serveur. Le module `ansible.builtin.template` est exécuté sur `localhost`, avec les variables de `group_vars/all.yml` :
 
 ```bash
-ansible localhost -m ansible.builtin.template \
-  -a "src=templates/config.yaml.j2 dest=/tmp/config-preview.yaml" -e @group_vars/all.yml
+cd ~/lab04
+cp /tmp/preview.yml ~/lab04/preview.yml
+ansible-playbook preview.yml -e @group_vars/all.yml
 cat /tmp/config-preview.yaml
 ```
 

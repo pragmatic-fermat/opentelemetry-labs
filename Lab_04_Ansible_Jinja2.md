@@ -644,7 +644,7 @@ host.name=srv-N.monlab.top
 os.type=linux
 ```
 
-Selon la configuration de la machine, `host.name` peut n'afficher que `srv-N` : dans les deux cas, c'est le nom du serveur qui fait tourner le **collector**, pas celui de `clt-N`, et aucune variable ne l'a fourni.
+L'attribut `host.name` provient du nom d'hôte lu sur la machine par le processor `resourcedetection`. Le format exact dépend de la configuration du système : nom court (`srv-N`) ou nom complet (`srv-N.<domaine>`).
 
 > [!NOTE]
 >

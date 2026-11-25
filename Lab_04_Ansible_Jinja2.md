@@ -295,17 +295,16 @@ Le paquet démarre le service avec sa propre configuration par défaut, qui ouvr
 
 ## 3. Générer la configuration avec Jinja2
 
-Le schéma suivant montre le parcours de la configuration (génération par Ansible, validation puis déploiement sur `srv-N`) et celui des traces de test (émises par `telemetrygen` depuis `clt-N` vers le **collector** de `srv-N`, puis renvoyées vers Jaeger sur `clt-N`) :
+Le schéma suivant montre le parcours de la configuration (génération par Ansible, validation puis déploiement sur `srv-N`) et celui des traces de test (émises sur `srv-N` par `telemetrygen` vers le **collector** local, puis exportées vers Jaeger sur `clt-N`) :
 
 ```mermaid
 ---
-title: Generation Jinja2, deploiement et flux des traces de test
+title: Generation Jinja2, deploiement et flux des traces depuis srv-N vers clt-N
 ---
 flowchart LR
   subgraph CLT["clt-N"]
     direction TB
     TPL["templates/config.yaml.j2<br/>+ group_vars/all.yml"]
-    TG["telemetrygen<br/>(--service ansible-demo)"]
     JG[("Jaeger<br/>TCP/4317 et 16686")]
   end
 
@@ -313,13 +312,14 @@ flowchart LR
     direction TB
     VAL["validate --config=%s"]
     CFG["/etc/otelcol-contrib/config.yaml"]
+    TG["telemetrygen<br/>(--service ansible-demo)"]
     COL["collector<br/>(otelcol-contrib:4317)"]
     VAL -->|valide| CFG
     CFG -->|restart| COL
+    TG -->|"OTLP gRPC local :4317"| COL
   end
 
   TPL -->|"Ansible template"| VAL
-  TG -->|"OTLP gRPC :4317"| COL
   COL -->|"OTLP gRPC :4317"| JG
 
   classDef ctrl fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
@@ -569,16 +569,19 @@ cat >> playbook.yml <<'EOF'
 EOF
 ```
 
-Déployez, puis générez cinq traces avec `telemetrygen` (lancé depuis `clt-N`) et envoyez-les au **collector** de `srv-N` :
+Déployez, puis générez cinq traces directement sur `srv-N` (en lançant `telemetrygen` par SSH depuis `clt-N`) vers le **collector** local (`localhost:4317`) :
 
 ```bash
 ansible-playbook playbook.yml
 ```
 
 ```bash
-docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
-  traces --otlp-endpoint $SRV_HOST:4317 --otlp-insecure --rate 10 --traces 5 --service ansible-demo
+ssh root@$SRV_HOST 'docker run --rm --network host ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 traces --otlp-endpoint localhost:4317 --otlp-insecure --rate 10 --traces 5 --service ansible-demo'
 ```
+
+> [!NOTE]
+>
+> L'option `--network host` permet au conteneur `telemetrygen` d'atteindre le port `localhost:4317` du **collector** systemd sur `srv-N`. Cela reproduit le schéma réel d'un serveur applicatif où l'application parle à son **collector** local, qui pousse ensuite les traces vers le serveur d'observabilité (`clt-N`).
 
 Dans le résumé du playbook, la tâche `Déployer la configuration` est en `changed` et le handler s'est exécuté :
 
@@ -632,7 +635,7 @@ lab.id=<votre numéro>
 
 La même requête, filtrée sur `host.name`, montre ce qu'aucune variable Ansible n'a fourni : le nom de la machine, détecté automatiquement par le processor `resourcedetection`.
 
-**Ces traces ont été générées par `telemetrygen`** (lancé depuis `clt-N`). Elles ont ensuite transité par le **collector** qui tourne sur `srv-N`. C'est pourquoi l'attribut `host.name` vaut le nom du serveur (`srv-N.monlab.top` ou `srv-N`), et non celui de `clt-N`.
+Ces traces ont été générées par `telemetrygen` sur `srv-N` (lancé par SSH depuis `clt-N`), puis traitées par le **collector** local de `srv-N`. C'est pourquoi l'attribut `host.name` vaut le nom du serveur (`srv-N.monlab.top` ou `srv-N`), et non celui de `clt-N`.
 
 ```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
@@ -1372,13 +1375,11 @@ LISTEN 0      4096               *:4317            *:*
 Envoyez maintenant trois traces sur chaque endpoint, sous le même nom de service : c'est la situation réelle d'une application déployée dans les deux environnements.
 
 ```bash
-docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
-  traces --otlp-endpoint $SRV_HOST:4317 --otlp-insecure --rate 10 --traces 3 --service checkout-web
+ssh root@$SRV_HOST 'docker run --rm --network host ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 traces --otlp-endpoint localhost:4317 --otlp-insecure --rate 10 --traces 3 --service checkout-web'
 ```
 
 ```bash
-docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
-  traces --otlp-endpoint $SRV_HOST:5317 --otlp-insecure --rate 10 --traces 3 --service checkout-web
+ssh root@$SRV_HOST 'docker run --rm --network host ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 traces --otlp-endpoint localhost:5317 --otlp-insecure --rate 10 --traces 3 --service checkout-web'
 ```
 
 ```bash
@@ -1514,8 +1515,7 @@ otelcol-contrib	0.164.0
 Envoyez cinq traces pour vérifier que le **collector** déployé fonctionne toujours :
 
 ```bash
-docker run --rm ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 \
-  traces --otlp-endpoint $SRV_HOST:4317 --otlp-insecure --rate 10 --traces 5 --service ansible-demo
+ssh root@$SRV_HOST 'docker run --rm --network host ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 traces --otlp-endpoint localhost:4317 --otlp-insecure --rate 10 --traces 5 --service ansible-demo'
 ```
 
 ```bash

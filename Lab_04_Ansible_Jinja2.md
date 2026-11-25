@@ -209,7 +209,7 @@ Quelques précisions sur le téléchargement. Il utilise la variable `otelcol_de
 
 > [!NOTE]
 >
-> D'où vient le paquet ? L'URL est déjà assemblée dans `group_vars/all.yml` (ne la recopiez pas) via la variable `otelcol_deb_url`, qui construit le lien GitHub Releases à partir de `otelcol_version` et de `otelcol_arch_map[ansible_architecture]` (par exemple `otelcol-contrib_0.165.0_linux_amd64.deb`). Elle pointe vers les publications GitHub du projet, canal officiel du **collector**. Il n'existe pas encore de dépôt APT officiel pour le **collector** : le projet y travaille, mais à ce jour les paquets ne vivent que sur GitHub Releases.
+> D'où vient le paquet ? L'URL est déjà définie dans `group_vars/all.yml`, dans la variable `otelcol_deb_url`, qui construit le lien GitHub Releases à partir de `otelcol_version` et de `otelcol_arch_map[ansible_architecture]` (par exemple `otelcol-contrib_0.165.0_linux_amd64.deb`). Elle pointe vers les publications GitHub du projet, canal officiel du **collector**. Il n'existe pas encore de dépôt APT officiel pour le **collector** : le projet y travaille, mais à ce jour les paquets ne vivent que sur GitHub Releases.
 
 Ansible évalue cette URL au moment de la tâche, sur chaque cible, en y insérant la version et l'architecture lues dans les facts du serveur : chaque hôte télécharge donc son propre paquet, dans son propre `/tmp`. Ce choix a deux conséquences que le playbook compense :
 
@@ -532,9 +532,6 @@ Vérifiez maintenant cette configuration avec la commande `validate` du **collec
 docker run --rm -v /tmp/config-preview.yaml:/config.yaml:ro \
   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0 \
   validate --config=/config.yaml
-```
-
-```bash
 echo "code retour : $?"
 ```
 
@@ -1318,9 +1315,6 @@ ansible localhost -m ansible.builtin.template \
 docker run --rm -v /tmp/config-tenants.yaml:/config.yaml:ro \
   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.165.0 \
   validate --config=/config.yaml
-```
-
-```bash
 echo "code retour : $?"
 ```
 

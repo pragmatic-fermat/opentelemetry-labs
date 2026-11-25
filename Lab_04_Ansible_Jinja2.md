@@ -344,10 +344,18 @@ EOF
 Avant de déployer, produisez d'abord le rendu du template sur `clt-N`, sans toucher au serveur. Le module `ansible.builtin.template` est exécuté sur `localhost`, avec les variables de `group_vars/all.yml` :
 
 ```bash
-cd ~/lab04
-cp /tmp/preview.yml ~/lab04/preview.yml
+cat > preview.yml <<'EOF'
+- hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Rendu de la configuration
+      ansible.builtin.template:
+        src: templates/config.yaml.j2
+        dest: /tmp/config-preview.yaml
+EOF
 ansible-playbook preview.yml -e @group_vars/all.yml
-cat /tmp/config-preview.yaml
+cat config-preview.yaml
 ```
 
 On obtient la configuration telle que le serveur la recevra, sans aucune accolade Jinja2. En tête le commentaire de gestion Ansible, plus bas les attributs produits par la boucle :

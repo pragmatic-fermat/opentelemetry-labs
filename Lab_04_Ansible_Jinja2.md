@@ -1132,16 +1132,16 @@ Un seul playbook, quatre configurations différentes. Comparez-les :
 ```bash
 ansible collector -b -m ansible.builtin.shell \
   -a "grep -A1 'batch:' /etc/otelcol-contrib/config.yaml | tail -1; grep 'hostmetrics:' /etc/otelcol-contrib/config.yaml | head -1; grep 'value:' /etc/otelcol-contrib/config.yaml | head -1" \
-  -o
+  -o | sort
 ```
 
-La sortie montre que chaque serveur a bien sa configuration. Les retours à la ligne internes sont remplacés par `\n`, effet de l'option `-o` qui tient chaque hôte sur une seule ligne :
+La sortie montre que chaque serveur a bien sa configuration. L'option `-o` tient chaque hôte sur une seule ligne, avec un préfixe `CHANGED | rc=0 | (stdout)`, et les retours à la ligne internes sont remplacés par `\n`. Le `| sort` fixe l'ordre des hôtes, qui n'est pas garanti par Ansible :
 
 ```text
-srv-frontend |    timeout: 1s\n        value: "frontend"
-srv-backend |     timeout: 5s\n  hostmetrics:\n        value: "backend"
-srv-database |    timeout: 10s\n  hostmetrics:\n        value: "database"
-srv-0.monlab.top | timeout: 2s\n  hostmetrics:\n        value: "lab4"
+srv-0.monlab.top | CHANGED | rc=0 | (stdout)     timeout: 2s\n  hostmetrics:\n        value: "lab4"
+srv-backend | CHANGED | rc=0 | (stdout)     timeout: 5s\n  hostmetrics:\n        value: "backend"
+srv-database | CHANGED | rc=0 | (stdout)     timeout: 10s\n  hostmetrics:\n        value: "database"
+srv-frontend | CHANGED | rc=0 | (stdout)     timeout: 1s\n        value: "frontend"
 ```
 
 Le frontend n'affiche pas `hostmetrics`, puisque ses métriques système sont désactivées.

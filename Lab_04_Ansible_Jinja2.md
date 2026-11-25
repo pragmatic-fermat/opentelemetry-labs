@@ -1165,6 +1165,17 @@ otlp:
     - host.name
 ```
 
+Le tableau suivant précise le mapping réalisé, tel qu'il apparaît dans les séries stockées par Prometheus :
+
+| Attribut de ressource | Label Prometheus | Remarque |
+|---|---|---|
+| `service.name` | `job` | Prometheus l'utilise comme nom de cible, et le recopie aussi en `service_name` puisqu'il figure dans la liste |
+| `service.instance.id` | `instance` | Même mécanisme : `instance` désigne la cible, et `service_instance_id` conserve l'attribut |
+| `deployment.environment.name` | `deployment_environment_name` | Les points sont remplacés par des traits de soulignement, seul format accepté dans un nom de label |
+| `host.name` | `host_name` | Même normalisation des points |
+
+Deux points expliquent ce double emploi. D'une part, Prometheus associe historiquement les labels `job` et `instance` à chaque série, pour identifier la cible qui l'a produite ; quand une série arrive en OTLP, il les remplit avec `service.name` et `service.instance.id`. D'autre part, tout attribut listé dans `promote_resource_attributes` est promu sous son propre nom, avec les points convertis en traits de soulignement. C'est pourquoi la requête de vérification lit `.metric.host_name` et `.metric.deployment_environment_name`, et non `.metric.host.name`.
+
 Le schéma suivant résume cette promotion, du collector de `srv-N` jusqu'à la série stockée par Prometheus sur `clt-N` :
 
 ```mermaid

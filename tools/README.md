@@ -37,6 +37,8 @@ HTML et les images.
 
 Le workflow `.github/workflows/paragraph-numbers.yml` :
 
-- sur une pull request, vérifie que `Lab_*.md` et `solutions/sol*.md` sont à jour
-  et échoue sinon, avec la commande à lancer ;
-- sur un push sur `main`, renumérote et commit automatiquement si nécessaire.
+- sur une pull request et sur un push vers `main`, vérifie que `Lab_*.md` et
+  `solutions/sol*.md` sont à jour et échoue sinon, avec la commande à lancer ;
+- sur déclenchement manuel (`workflow_dispatch`), renumérote les fichiers et
+  affiche le diff. Il ne commite que si l'option `commit` est cochée, pour ne
+  jamais pousser de commit surprise sur `main`.

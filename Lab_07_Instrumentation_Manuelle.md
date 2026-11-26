@@ -2,7 +2,7 @@
 
 # Objectifs
 
-À la fin du lab, vous saurez :
+<sub>1</sub> À la fin du lab, vous saurez :
 
 - configurer le SDK OpenTelemetry pour Python (`Resource`, `TracerProvider`, `BatchSpanProcessor`, `OTLPSpanExporter`) ;
 - créer des spans avec un type (`SpanKind`), des attributs métier et HTTP, des événements et un statut d'erreur ;
@@ -27,11 +27,11 @@
 
 Ce lab se déroule sur la machine cliente `clt-N` (N est votre numéro de participant), dans le dossier `~/lab07`. La machine serveur `srv-N` n'est pas sollicitée dans ce lab.
 
-Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, où le dépôt des labs est cloné dans `/root/opentelemetry-labs`.
+<sub>2</sub> Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, où le dépôt des labs est cloné dans `/root/opentelemetry-labs`.
 
 L'application d'exemple se compose de deux services : `shop` reçoit les commandes et interroge `inventory` pour vérifier la disponibilité des stocks. Vous allez instrumenter ce code Python manuellement en utilisant l'API et le SDK OpenTelemetry, sans recourir à un agent d'auto-instrumentation.
 
-Le [lab 1](Lab_01_Socle.md) est recommandé pour comprendre le rôle du **collector** et le format OTLP. Aucune expertise en développement Python n'est nécessaire : les extraits de code sont courts, abondamment commentés et accompagnés d'explications sur les idiomes du langage.
+<sub>3</sub> Le [lab 1](Lab_01_Socle.md) est recommandé pour comprendre le rôle du **collector** et le format OTLP. Aucune expertise en développement Python n'est nécessaire : les extraits de code sont courts, abondamment commentés et accompagnés d'explications sur les idiomes du langage.
 
 Versions utilisées dans ce lab :
 
@@ -43,7 +43,7 @@ Versions utilisées dans ce lab :
 | **collector** OpenTelemetry (distribution `otelcol-contrib`) | 0.165.0 |
 | Jaeger | 2.23.0 |
 
-L'interface web de Jaeger est accessible depuis votre navigateur sur `clt-N` : `http://$CLT_HOST:16686` (TCP/16686).
+<sub>4</sub> L'interface web de Jaeger est accessible depuis votre navigateur sur `clt-N` : `http://$CLT_HOST:16686` (TCP/16686).
 
 ## 1. Démarrer l'application sans instrumentation
 
@@ -57,11 +57,11 @@ docker compose up -d --build
 docker compose ps
 ```
 
-La stack comprend l'application (`shop` sur le port 8080 et `inventory` sur le port 8081), un **collector** local recevant sur le port 4318 et une instance Jaeger exposée sur le port 16686.
+<sub>5</sub> La stack comprend l'application (`shop` sur le port 8080 et `inventory` sur le port 8081), un **collector** local recevant sur le port 4318 et une instance Jaeger exposée sur le port 16686.
 
 Le dossier `app/` contient le code source Python. Les modules `orders.py` et `stock.py` portent la logique métier et ne sont pas modifiés. Au fil du lab, vous allez compléter quatre modules : `telemetry.py`, `shop_handler.py`, `inventory_handler.py` et `inventory_client.py`. Leurs versions initiales ne produisent aucune télémétrie.
 
-Le dossier `app/` est monté en volume dans les conteneurs : après chaque modification de fichier, un redémarrage des conteneurs applicatifs avec `docker compose restart shop inventory` suffit pour appliquer vos changements sans reconstruire l'image.
+<sub>6</sub> Le dossier `app/` est monté en volume dans les conteneurs : après chaque modification de fichier, un redémarrage des conteneurs applicatifs avec `docker compose restart shop inventory` suffit pour appliquer vos changements sans reconstruire l'image.
 
 Sur `clt-N`, envoyez trois commandes de test à l'aide du script `order.sh` (articles connus : `coffee` avec un stock de 12, `mug` avec un stock de 3, et `tea` en rupture avec un stock de 0) :
 
@@ -71,7 +71,7 @@ Sur `clt-N`, envoyez trois commandes de test à l'aide du script `order.sh` (art
 ./order.sh pizza
 ```
 
-On obtient, le code HTTP de réponse étant affiché entre crochets :
+<sub>7</sub> On obtient, le code HTTP de réponse étant affiché entre crochets :
 
 ```text
 {"status":"accepted","total":9.0} [201]
@@ -85,13 +85,13 @@ Sur `clt-N`, vérifiez les services enregistrés dans Jaeger :
 curl -s http://localhost:16686/api/v3/services | jq -r '.services[]'
 ```
 
-La commande ne retourne que `jaeger`. L'application fonctionne, mais n'émet aucune donnée d'observabilité.
+<sub>8</sub> La commande ne retourne que `jaeger`. L'application fonctionne, mais n'émet aucune donnée d'observabilité.
 
 ## 2. Configurer le SDK
 
 Pour produire des traces, une application doit initialiser un `TracerProvider`. Cet objet gère la configuration globale du traçage : il définit qui émet la télémétrie (la ressource), comment traiter les spans terminés (le processor) et vers quelle destination les expédier (l'exporter).
 
-Vous allez écrire le module `telemetry.py`, que `shop.py` et `inventory.py` appellent au démarrage en lui passant le nom de leur service respectif.
+<sub>9</sub> Vous allez écrire le module `telemetry.py`, que `shop.py` et `inventory.py` appellent au démarrage en lui passant le nom de leur service respectif.
 
 > [!NOTE]
 >
@@ -147,7 +147,7 @@ def setup(service_name):
 EOF
 ```
 
-Sur `clt-N`, redémarrez les conteneurs applicatifs, puis validez le bon fonctionnement du SDK en exécutant un court script de test dans le conteneur `shop` :
+<sub>10</sub> Sur `clt-N`, redémarrez les conteneurs applicatifs, puis validez le bon fonctionnement du SDK en exécutant un court script de test dans le conteneur `shop` :
 
 ```bash
 docker compose restart shop inventory
@@ -173,13 +173,13 @@ Interrogez l'API de Jaeger sur `clt-N` :
 curl -s http://localhost:16686/api/v3/services | jq -c '.services'
 ```
 
-La liste contient désormais `smoke-test`.
+<sub>11</sub> La liste contient désormais `smoke-test`.
 
 Passez une commande avec `./order.sh coffee 2 alice` : la commande réussit, mais ni `shop` ni `inventory` n'apparaissent encore dans Jaeger. L'initialisation du SDK ne génère aucune télémétrie par elle-même : il faut maintenant instrumenter le code qui traite les requêtes.
 
 ## 3. Créer des spans dans shop
 
-Le module `shop_handler.py` constitue le point d'entrée HTTP de `POST /orders` : il reçoit les données de commande et appelle la logique de `orders.py`. Vous allez encapsuler ce traitement dans un span OpenTelemetry.
+<sub>12</sub> Le module `shop_handler.py` constitue le point d'entrée HTTP de `POST /orders` : il reçoit les données de commande et appelle la logique de `orders.py`. Vous allez encapsuler ce traitement dans un span OpenTelemetry.
 
 > [!NOTE]
 >
@@ -254,7 +254,7 @@ def create_order(payload, headers):
 EOF
 ```
 
-Sur `clt-N`, redémarrez les conteneurs et générez les trois commandes :
+<sub>13</sub> Sur `clt-N`, redémarrez les conteneurs et générez les trois commandes :
 
 ```bash
 docker compose restart shop inventory
@@ -270,7 +270,7 @@ Q='http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeM
 curl -s "$Q" | jq -r '[.result.resourceSpans[].scopeSpans[].spans[] | select(.name=="POST /orders")] | sort_by(.startTimeUnixNano) | last | .attributes[] | "\(.key)=\(.value | (.stringValue // .intValue // .boolValue))"'
 ```
 
-On retrouve notamment les attributs enregistrés :
+<sub>14</sub> On retrouve notamment les attributs enregistrés :
 
 ```text
 order.sku=pizza
@@ -287,13 +287,13 @@ curl -s "$Q" | jq -c '[.result.resourceSpans[].scopeSpans[].spans[] | select(.na
 {"message":"unknown sku","code":2}
 ```
 
-Le code numérique `2` correspond au statut d'erreur standard d'OpenTelemetry (`StatusCode.ERROR`).
+<sub>15</sub> Le code numérique `2` correspond au statut d'erreur standard d'OpenTelemetry (`StatusCode.ERROR`).
 
 Consultez ensuite la trace de la commande `mug` : son span porte l'événement `stock.insufficient` avec la valeur du stock résiduel (`3`), visible dans les détails du span.
 
 ### Hacher l'identité avant l'export
 
-L'attribut `enduser.id` identifie l'utilisateur final. Conserver cette information en clair dans un backend d'observabilité expose des données personnelles. Plutôt que de supprimer cet attribut, vous allez remplacer sa valeur par son empreinte cryptographique : deux commandes d'un même client porteront la même empreinte, permettant de corréler ses requêtes sans divulguer son identité.
+<sub>16</sub> L'attribut `enduser.id` identifie l'utilisateur final. Conserver cette information en clair dans un backend d'observabilité expose des données personnelles. Plutôt que de supprimer cet attribut, vous allez remplacer sa valeur par son empreinte cryptographique : deux commandes d'un même client porteront la même empreinte, permettant de corréler ses requêtes sans divulguer son identité.
 
 Le **collector** lit `otelcol/config.yaml`. Créez un second fichier de configuration `otelcol/anonymize.yaml` qui insère un processor `transform` basé sur le langage OTTL :
 
@@ -316,7 +316,7 @@ service:
 EOF
 ```
 
-La fonction `SHA256` calcule le condensat de l'identifiant et `Substring(..., 0, 8)` en retient les huit premiers caractères. La clause `where` garantit que l'instruction ne s'applique qu'aux spans portant cet attribut.
+<sub>17</sub> La fonction `SHA256` calcule le condensat de l'identifiant et `Substring(..., 0, 8)` en retient les huit premiers caractères. La clause `where` garantit que l'instruction ne s'applique qu'aux spans portant cet attribut.
 
 Sur `clt-N`, déclarez ce second fichier dans `compose.yaml` et recréez le conteneur du **collector** :
 
@@ -325,7 +325,7 @@ sed -i 's|command: \["--config=/etc/otelcol/config.yaml"\]|command: ["--config=/
 docker compose up -d otelcol
 ```
 
-Passez une commande et vérifiez l'effet du processor :
+<sub>18</sub> Passez une commande et vérifiez l'effet du processor :
 
 ```bash
 ./order.sh coffee 2 alice
@@ -344,13 +344,13 @@ L'attribut `enduser.id` a été remplacé par l'empreinte `2bd806c9`, tandis que
 
 ## 4. Propager le contexte entre les services
 
-Jusqu'ici, le service `inventory` n'est pas instrumenté. Lorsque `shop` l'interroge, la continuité de la trace est rompue. Vous allez instrumenter les deux côtés de la communication HTTP pour rétablir cette chaîne.
+<sub>19</sub> Jusqu'ici, le service `inventory` n'est pas instrumenté. Lorsque `shop` l'interroge, la continuité de la trace est rompue. Vous allez instrumenter les deux côtés de la communication HTTP pour rétablir cette chaîne.
 
 ### Côté inventory
 
 Le module `inventory_handler.py` reçoit la requête `GET /stock/<sku>`. Vous allez en extraire le contexte parent et créer un span serveur, ainsi qu'un sous-span interne mesurant la consultation du stock.
 
-Sur `clt-N`, écrivez `app/inventory_handler.py` :
+<sub>20</sub> Sur `clt-N`, écrivez `app/inventory_handler.py` :
 
 ```bash
 cat > app/inventory_handler.py <<'EOF'
@@ -415,7 +415,7 @@ docker compose restart shop inventory
 ./order.sh coffee 2 alice
 ```
 
-Comparez les identifiants de trace enregistrés pour `shop` et pour `inventory` :
+<sub>21</sub> Comparez les identifiants de trace enregistrés pour `shop` et pour `inventory` :
 
 ```bash
 for s in shop inventory; do
@@ -429,7 +429,7 @@ Les deux identifiants sont distincts : `inventory` a créé sa propre trace car 
 
 ### Côté shop
 
-Le module `inventory_client.py` effectue l'appel HTTP sortant vers `inventory`. Vous allez créer un span client (`SpanKind.CLIENT`) et y injecter le contexte actif dans les en-têtes HTTP de la requête avec `inject(headers)`.
+<sub>22</sub> Le module `inventory_client.py` effectue l'appel HTTP sortant vers `inventory`. Vous allez créer un span client (`SpanKind.CLIENT`) et y injecter le contexte actif dans les en-têtes HTTP de la requête avec `inject(headers)`.
 
 > [!NOTE]
 >
@@ -484,7 +484,7 @@ def get_stock(sku):
 EOF
 ```
 
-Sur `clt-N`, redémarrez les services et passez une commande :
+<sub>23</sub> Sur `clt-N`, redémarrez les services et passez une commande :
 
 ```bash
 docker compose restart shop inventory
@@ -501,7 +501,7 @@ curl -s "http://localhost:16686/api/v3/traces/$TID" \
   | jq -c '([.result.resourceSpans[].resource.attributes[] | select(.key=="service.name") | .value.stringValue] | sort), ([.result.resourceSpans[].scopeSpans[].spans[]] | length)'
 ```
 
-On obtient :
+<sub>24</sub> On obtient :
 
 ```text
 ["inventory","shop"]
@@ -514,11 +514,11 @@ Dans l'interface web de Jaeger, la trace complète affiche la hiérarchie de bou
 
 ### Faire voyager une donnée avec le baggage
 
-Le baggage est un ensemble de paires clé-valeur qui voyage dans l'en-tête HTTP `baggage`, à côté de `traceparent`. Il accompagne la trace vers tous les services en aval. Il ne devient pas automatiquement un attribut de span : un service qui veut le voir dans Jaeger doit lire l'entrée dans le contexte reçu et l'écrire lui-même sur son span.
+<sub>25</sub> Le baggage est un ensemble de paires clé-valeur qui voyage dans l'en-tête HTTP `baggage`, à côté de `traceparent`. Il accompagne la trace vers tous les services en aval. Il ne devient pas automatiquement un attribut de span : un service qui veut le voir dans Jaeger doit lire l'entrée dans le contexte reçu et l'écrire lui-même sur son span.
 
 Les propagateurs par défaut du SDK Python incluent `tracecontext` et `baggage`. Ni `telemetry.py` ni `compose.yaml` ne fixent `OTEL_PROPAGATORS` : l'en-tête `baggage` est donc transmis sans réglage supplémentaire.
 
-Côté `shop`, réécrivez `app/inventory_client.py` pour poser une entrée `customer.tier` avant l'appel :
+<sub>26</sub> Côté `shop`, réécrivez `app/inventory_client.py` pour poser une entrée `customer.tier` avant l'appel :
 
 ```bash
 cat > app/inventory_client.py <<'EOF'
@@ -573,7 +573,7 @@ EOF
 
 La fonction `set_baggage` renvoie un nouveau contexte, car un contexte OpenTelemetry est immuable. C'est ce contexte, et non celui du span actif, qu'il faut passer à `inject` pour que l'entrée voyage avec `traceparent`.
 
-Côté `inventory`, réécrivez `app/inventory_handler.py` pour lire l'entrée et la copier sur le span serveur :
+<sub>27</sub> Côté `inventory`, réécrivez `app/inventory_handler.py` pour lire l'entrée et la copier sur le span serveur :
 
 ```bash
 cat > app/inventory_handler.py <<'EOF'
@@ -649,7 +649,7 @@ docker compose restart shop inventory
 sleep 4
 ```
 
-Preuve sur le réseau : le gestionnaire d'`inventory` journalise l'en-tête `baggage` reçu. Affichez la ligne :
+<sub>28</sub> Preuve sur le réseau : le gestionnaire d'`inventory` journalise l'en-tête `baggage` reçu. Affichez la ligne :
 
 ```bash
 docker compose logs --no-log-prefix inventory | grep "baggage recu" | tail -1 | cut -d' ' -f3-
@@ -661,7 +661,7 @@ On obtient :
 INFO inventory.handler baggage recu : customer.tier=gold
 ```
 
-Preuve dans Jaeger : interrogez la trace de la commande et lisez l'attribut sur le span serveur d'`inventory` :
+<sub>29</sub> Preuve dans Jaeger : interrogez la trace de la commande et lisez l'attribut sur le span serveur d'`inventory` :
 
 ```bash
 curl -s "http://localhost:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
@@ -674,7 +674,7 @@ On obtient :
 customer.tier=gold
 ```
 
-L'attribut n'apparaît pas sur les spans de `shop` : le service a posé le baggage et l'a transmis, mais il ne l'a pas écrit sur ses propres spans.
+<sub>30</sub> L'attribut n'apparaît pas sur les spans de `shop` : le service a posé le baggage et l'a transmis, mais il ne l'a pas écrit sur ses propres spans.
 
 > [!WARNING]
 >
@@ -690,7 +690,7 @@ docker compose stop inventory
 docker compose start inventory
 ```
 
-La commande renvoie le code HTTP 502 :
+<sub>31</sub> La commande renvoie le code HTTP 502 :
 
 ```text
 {"error":"inventory unavailable"} [502]
@@ -702,7 +702,7 @@ Dans Jaeger, la trace correspondante met en évidence le span client `GET invent
 
 ## Cleanup
 
-Le cleanup arrête la stack et supprime les conteneurs et images locales sur `clt-N`.
+<sub>32</sub> Le cleanup arrête la stack et supprime les conteneurs et images locales sur `clt-N`.
 
 Sur `clt-N`, arrêtez la stack Docker Compose et supprimez les images locales et le dossier de travail :
 
@@ -712,7 +712,7 @@ docker compose down -v --rmi local
 rm -rf ~/lab07
 ```
 
-Vérifiez que les conteneurs sont supprimés et que les ports sont libérés :
+<sub>33</sub> Vérifiez que les conteneurs sont supprimés et que les ports sont libérés :
 
 ```bash
 docker ps -a --format '{{.Names}}' | grep lab07 || echo "aucun conteneur lab07"
@@ -728,7 +728,7 @@ ports libres
 
 ## Extra
 
-Cet exercice optionnel permet d'approfondir les capacités de l'instrumentation manuelle.
+<sub>34</sub> Cet exercice optionnel permet d'approfondir les capacités de l'instrumentation manuelle.
 
 - Instrumentez l'émission de métriques applicatives : créez un `MeterProvider` dans `telemetry.py` et ajoutez un compteur de commandes (`create_counter`) dans `shop_handler.py`.
 - Testez la reprise d'une trace externe en fournissant votre propre en-tête `traceparent` lors d'un appel `curl` (`curl -H 'traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' http://localhost:8080/orders -d '{"sku":"coffee","qty":1}' -H 'Content-Type: application/json'`) et constatez que Jaeger rattache la requête à cet identifiant de trace.

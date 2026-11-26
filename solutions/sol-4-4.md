@@ -2,7 +2,7 @@
 
 ## Objectif
 
-Simuler une régression et revenir de la version 0.165.0 à 0.164.0 du **collector** en utilisant Ansible, tout en gérant les sommes de contrôle et l’option `allow_downgrade`.
+<sub>1</sub> Simuler une régression et revenir de la version 0.165.0 à 0.164.0 du **collector** en utilisant Ansible, tout en gérant les sommes de contrôle et l’option `allow_downgrade`.
 
 ## Solution
 
@@ -54,7 +54,7 @@ ansible-playbook playbook.yml
 
 ---
 
-**Liens de navigation**
+<sub>2</sub> **Liens de navigation**
 
 - [Retour au lab 4](../Lab_04_Ansible_Jinja2.md#4-revenir-à-une-version-antérieure-du-binaire)
 - [Solution précédente (Extra 3)](sol-4-3.md)

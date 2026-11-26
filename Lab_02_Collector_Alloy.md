@@ -1,6 +1,6 @@
 # Lab 2 : **collector** sur mesure et Alloy
 
-Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédiger. Hors périmètre actuel : le lab est conservé pour mémoire.
+<sub>1</sub> Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédiger. Hors périmètre actuel : le lab est conservé pour mémoire.
 
 # Objectifs
 
@@ -28,11 +28,11 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 ## Environnement
 
-Machine(s) : `clt-N`.
+<sub>2</sub> Machine(s) : `clt-N`.
 
 Prérequis : [lab 1](Lab_01_Socle.md) recommandé : les backends et la configuration du **collector** du lab 1 sont réutilisés pour valider le **collector** sur mesure.
 
-Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
+<sub>3</sub> Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 
 ## 1. Comparer les distributions core et contrib
 
@@ -43,7 +43,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## 2. Décrire le **collector** voulu dans un manifeste OCB
 
-À compléter. Points couverts :
+<sub>4</sub> À compléter. Points couverts :
 
 - Partir de la configuration du [lab 1](Lab_01_Socle.md) pour déduire la liste minimale de composants.
 - Écrire le manifeste OCB avec des versions exactes.
@@ -57,7 +57,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## 4. Valider avec la configuration du lab 1
 
-À compléter. Points couverts :
+<sub>5</sub> À compléter. Points couverts :
 
 - Valider et démarrer le **collector** avec la configuration du [lab 1](Lab_01_Socle.md).
 - Ajouter un composant absent du manifeste et lire l'erreur de validation.
@@ -71,7 +71,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## 6. Gains et limites
 
-À compléter. Points couverts :
+<sub>6</sub> À compléter. Points couverts :
 
 - Comparer la portabilité des configurations, les composants disponibles, le support et le périmètre fonctionnel.
 - Conclure par des critères de choix et non par une recommandation unique. Les points sur Alloy sont à revérifier sur la version retenue.
@@ -82,4 +82,4 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## Extra
 
-À compléter. Idée : ajouter un second exporter au manifeste, reconstruire et mesurer l'écart de taille.
+<sub>7</sub> À compléter. Idée : ajouter un second exporter au manifeste, reconstruire et mesurer l'écart de taille.

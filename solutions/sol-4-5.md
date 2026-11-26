@@ -2,7 +2,7 @@
 
 ## Objectif
 
-Installer `prometheus-node-exporter` sur un unique serveur (`srv-N`, groupe `otel`), configurer le **collector** OpenTelemetry pour le scraper localement sur `127.0.0.1:9100` via le receiver `prometheus`, et vérifier la réception des métriques `node_*` en OTLP dans Prometheus sur `clt-N`.
+<sub>1</sub> Installer `prometheus-node-exporter` sur un unique serveur (`srv-N`, groupe `otel`), configurer le **collector** OpenTelemetry pour le scraper localement sur `127.0.0.1:9100` via le receiver `prometheus`, et vérifier la réception des métriques `node_*` en OTLP dans Prometheus sur `clt-N`.
 
 Toutes les commandes ci-dessous s'exécutent depuis `clt-N`, dans `~/lab04`.
 
@@ -15,7 +15,7 @@ ansible otel -b -m ansible.builtin.apt -a "name=prometheus-node-exporter state=p
 ansible otel -m ansible.builtin.shell -a "curl -s http://127.0.0.1:9100/metrics | grep -E '^node_load1 '"
 ```
 
-On obtient une ligne de métrique au format Prometheus :
+<sub>2</sub> On obtient une ligne de métrique au format Prometheus :
 
 ```text
 node_load1 0.12
@@ -129,7 +129,7 @@ curl -s -G "http://localhost:9090/api/v1/query" \
   | jq -r '.data.result[] | "\(.metric.host_name) [\(.metric.deployment_environment_name)] instance=\(.metric.instance) job=\(.metric.job) : \(.value[1])"'
 ```
 
-Résultat attendu :
+<sub>3</sub> Résultat attendu :
 
 ```text
 srv-N [lab4] instance=srv-N job=lab4 : 0.44
@@ -151,7 +151,7 @@ ansible otel -b -m ansible.builtin.apt -a "name=prometheus-node-exporter state=a
 
 ---
 
-**Liens de navigation**
+<sub>4</sub> **Liens de navigation**
 
 - [Retour au lab 4](../Lab_04_Ansible_Jinja2.md#5-installer-node_exporter-sur-un-serveur-et-le-scraper-via-le-collector)
 - [Solution précédente (Extra 4)](sol-4-4.md)

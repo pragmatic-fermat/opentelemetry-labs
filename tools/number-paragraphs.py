@@ -40,6 +40,8 @@ ANCHOR_RE = re.compile(r"^<a name=\"p-[0-9]+\"></a>")
 
 # Premiers caractères qui excluent une ligne de la numérotation.
 SKIP_PREFIXES = ("#", ">", "|", "<", "![")
+# Règle horizontale : ---, *** ou ___ seuls sur la ligne.
+HORIZONTAL_RULE_RE = re.compile(r"^(-{3,}|\*{3,}|_{3,})$")
 # Puce de liste ou item numéroté : un marqueur suivi d'une espace.
 LIST_ITEM_RE = re.compile(r"^([-*+]|\d+[.)])\s")
 FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
@@ -55,6 +57,8 @@ def is_prose_line(line: str) -> bool:
         return False
     if LIST_ITEM_RE.match(line):
         return False
+    if HORIZONTAL_RULE_RE.match(line.strip()):
+        return False
     return True
 
 
@@ -65,8 +69,10 @@ def strip_markers(line: str) -> str:
     return line
 
 
-def number_text(text: str, anchors: bool = False, style: str = "sub") -> tuple[str, int]:
-    """Renumérote le texte et renvoie le résultat avec le nombre de paragraphes."""
+def number_text(
+    text: str, anchors: bool = False, style: str = "sub", step: int = 2
+) -> tuple[str, int]:
+    """Renumérote le texte et renvoie le résultat avec le nombre de paragraphes numérotés."""
     had_trailing_newline = text.endswith("\n")
     lines = [strip_markers(line) for line in text.splitlines()]
 
@@ -74,6 +80,7 @@ def number_text(text: str, anchors: bool = False, style: str = "sub") -> tuple[s
     in_fence = False
     fence_char = ""
     fence_len = 0
+    paragraph_index = 0
     count = 0
 
     for index, line in enumerate(lines):
@@ -95,13 +102,15 @@ def number_text(text: str, anchors: bool = False, style: str = "sub") -> tuple[s
 
         previous_is_blank = index == 0 or not lines[index - 1].strip()
         if previous_is_blank and is_prose_line(line):
-            count += 1
-            prefix = f"<{style}>{count}</{style}> "
-            if anchors:
-                prefix = f'<a name="p-{count}"></a>' + prefix
-            out.append(prefix + line)
-        else:
-            out.append(line)
+            paragraph_index += 1
+            if (paragraph_index - 1) % step == 0:
+                count += 1
+                prefix = f"<{style}>{count}</{style}> "
+                if anchors:
+                    prefix = f'<a name="p-{count}"></a>' + prefix
+                out.append(prefix + line)
+                continue
+        out.append(line)
 
     result = "\n".join(out)
     if had_trailing_newline:
@@ -119,6 +128,12 @@ def main(argv: list[str]) -> int:
         help="ne modifie rien, renvoie 1 si un fichier doit être renuméroté",
     )
     parser.add_argument(
+        "--step",
+        type=int,
+        default=2,
+        help="numérote un paragraphe sur N (défaut : 2, donc un sur deux)",
+    )
+    parser.add_argument(
         "--style",
         choices=("sup", "sub"),
         default="sub",
@@ -132,6 +147,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("paths", nargs="+", type=Path, help="fichiers Markdown à traiter")
     args = parser.parse_args(argv)
 
+    if args.step < 1:
+        parser.error("--step doit être supérieur ou égal à 1")
+
     changed_files = 0
     total_paragraphs = 0
 
@@ -142,7 +160,9 @@ def main(argv: list[str]) -> int:
             print(f"{path}: {error}", file=sys.stderr)
             return 2
 
-        updated, count = number_text(original, anchors=args.anchors, style=args.style)
+        updated, count = number_text(
+            original, anchors=args.anchors, style=args.style, step=args.step
+        )
         total_paragraphs += count
 
         if updated == original:

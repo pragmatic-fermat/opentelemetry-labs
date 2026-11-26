@@ -1,0 +1,58 @@
+name: Numerotation des paragraphes
+
+# Verifie que chaque lab et chaque fiche de solution porte bien ses numeros de
+# paragraphe, et les regenere automatiquement sur main.
+#
+# Sur une pull request : le job echoue si un fichier doit etre renumerote, avec
+# la commande exacte a lancer. Sur un push sur main : le job renumerote et
+# commite le resultat, ce qui garde main toujours a jour.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  verifier:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Verifier la numerotation
+        run: |
+          ./tools/number-paragraphs.py --check Lab_*.md solutions/sol*.md
+
+      - name: Rappel en cas d'echec
+        if: failure()
+        run: |
+          echo "Des fichiers ne sont pas numerotes."
+          echo "Lancez en local, puis commitez :"
+          echo "  ./tools/number-paragraphs.py Lab_*.md solutions/sol*.md"
+
+  renumeroter:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Renumeroter les labs et les solutions
+        run: |
+          ./tools/number-paragraphs.py Lab_*.md solutions/sol*.md
+
+      - name: Commiter si necessaire
+        run: |
+          if git diff --quiet; then
+            echo "Rien a commiter."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Lab_*.md solutions/sol*.md
+          git commit -m "CI : renumerotation automatique des paragraphes"
+          git push

@@ -30,15 +30,15 @@
 
 ## Environnement
 
-<sub>2</sub> Ce lab se déroule sur plusieurs machines : `clt-N`, la machine cliente qui porte Ansible et les backends, `srv-N`, la machine serveur Ubuntu où le **collector** est installé, et, à partir de la partie 5, trois serveurs éphémères Debian `srv2-N`, `srv3-N` et `srv4-N` provisionnés par l'animateur (N est votre numéro de participant).
+Ce lab se déroule sur plusieurs machines : `clt-N`, la machine cliente qui porte Ansible et les backends, `srv-N`, la machine serveur Ubuntu où le **collector** est installé, et, à partir de la partie 5, trois serveurs éphémères Debian `srv2-N`, `srv3-N` et `srv4-N` provisionnés par l'animateur (N est votre numéro de participant).
 
-<sub>3</sub> Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`. Sauf mention contraire, toutes les commandes du lab se lancent sur `clt-N` : celles qui visent les serveurs passent par Ansible, qui s'y connecte en SSH.
+<sub>2</sub> Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, où le dépôt des labs est déjà cloné dans `/root/opentelemetry-labs`. Sauf mention contraire, toutes les commandes du lab se lancent sur `clt-N` : celles qui visent les serveurs passent par Ansible, qui s'y connecte en SSH.
 
-<sub>4</sub> Ansible, Docker et SSH sont installés sur `clt-N`. La clé SSH de `root` permet de se joindre à `srv-N` sans mot de passe, et le compte dispose de `sudo` sans mot de passe sur cette machine.
+Ansible, Docker et SSH sont installés sur `clt-N`. La clé SSH de `root` permet de se joindre à `srv-N` sans mot de passe, et le compte dispose de `sudo` sans mot de passe sur cette machine.
 
-<sub>5</sub> Le [lab 1](Lab_01_Socle.md) est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici. Les commandes utilisent les noms complets des modules (`ansible.builtin.…`), qui fonctionnent avec toutes les versions récentes d'Ansible.
+<sub>3</sub> Le [lab 1](Lab_01_Socle.md) est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici. Les commandes utilisent les noms complets des modules (`ansible.builtin.…`), qui fonctionnent avec toutes les versions récentes d'Ansible.
 
-<sub>6</sub> Versions utilisées dans ce lab :
+Versions utilisées dans ce lab :
 
 | Composant | Version |
 |---|---|
@@ -49,11 +49,11 @@
 | OS serveur principal | Ubuntu 24.04 |
 | OS serveurs éphémères | Debian 13 |
 
-<sub>7</sub> Les interfaces web sont accessibles depuis votre navigateur, sur `clt-N` (`$CLT_HOST`) : Jaeger sur `http://$CLT_HOST:16686` (TCP/16686) et Prometheus sur `http://$CLT_HOST:9090` (TCP/9090).
+<sub>4</sub> Les interfaces web sont accessibles depuis votre navigateur, sur `clt-N` (`$CLT_HOST`) : Jaeger sur `http://$CLT_HOST:16686` (TCP/16686) et Prometheus sur `http://$CLT_HOST:9090` (TCP/9090).
 
 ## 1. Préparer le poste de contrôle
 
-<sub>8</sub> Deux machines entrent en jeu, et il faut savoir où se trouve quoi avant de taper la première commande. Le schéma suivant les montre, avec les deux moteurs logiciels : le moteur Ansible, installé sur `clt-N`, qui exécute les playbooks, et le moteur Docker, qui héberge les backends sur `clt-N`.
+Deux machines entrent en jeu, et il faut savoir où se trouve quoi avant de taper la première commande. Le schéma suivant les montre, avec les deux moteurs logiciels : le moteur Ansible, installé sur `clt-N`, qui exécute les playbooks, et le moteur Docker, qui héberge les backends sur `clt-N`.
 
 ```mermaid
 ---
@@ -82,13 +82,13 @@ flowchart LR
   CO ==> P
 ```
 
-<sub>9</sub> Trois points à retenir de ce schéma :
+<sub>5</sub> Trois points à retenir de ce schéma :
 
 - **le moteur Ansible ne tourne que sur `clt-N`** : c'est le nœud de contrôle. Il se connecte en SSH à `srv-N` et y exécute les tâches ; aucun playbook n'est lancé sur le serveur, et `srv-N` n'a pas besoin d'Ansible ;
 - **le collector tourne sur `srv-N`**, comme service `otelcol-contrib` géré par systemd. C'est la seule machine qui reçoit le paquet `.deb` et la configuration générée ;
 - **les backends tournent sur `clt-N`**, dans Docker : Jaeger écoute sur `TCP/16686` (interface web) et `TCP/4317` (OTLP des traces), Prometheus sur `TCP/9090`. Le collector de `srv-N` leur envoie ses données par le réseau privé du VPC.
 
-<sub>10</sub> Copiez les fichiers fournis dans un dossier de travail, puis démarrez les deux backends sur `clt-N` :
+Copiez les fichiers fournis dans un dossier de travail, puis démarrez les deux backends sur `clt-N` :
 
 ```bash
 mkdir -p ~/lab04
@@ -106,7 +106,7 @@ cd ~/lab04
 docker compose up -d
 ```
 
-<sub>11</sub> Lisez les fichiers de configuration fournis :
+<sub>6</sub> Lisez les fichiers de configuration fournis :
 
 ```bash
 cat group_vars/all.yml
@@ -116,13 +116,13 @@ cat group_vars/all.yml
 cat ansible.cfg
 ```
 
-<sub>12</sub> `group_vars/all.yml` contient les variables utilisées dans tout le lab : la version du **collector**, les sommes de contrôle des paquets, l'adresse de `clt-N` (lue dans la variable d'environnement `CLT_HOST` de la machine qui lance Ansible) et les réglages du **collector**.
+`group_vars/all.yml` contient les variables utilisées dans tout le lab : la version du **collector**, les sommes de contrôle des paquets, l'adresse de `clt-N` (lue dans la variable d'environnement `CLT_HOST` de la machine qui lance Ansible) et les réglages du **collector**.
 
-<sub>13</sub> `ansible.cfg` indique à Ansible où se trouve l'inventaire, et désactive la vérification des clés d'hôte (`host_key_checking = False`), adaptée à un environnement de lab.
+<sub>7</sub> `ansible.cfg` indique à Ansible où se trouve l'inventaire, et désactive la vérification des clés d'hôte (`host_key_checking = False`), adaptée à un environnement de lab.
 
-<sub>14</sub> Créez l'inventaire. Cette fois, le mot `EOF` n'est pas entre guillemets : le shell remplace donc `$SRV_HOST` par sa valeur avant d'écrire le fichier. C'est ce que vous voulez ici, alors que dans les autres commandes du lab vous écrirez des `{{ ... }}` Jinja2 qui doivent rester tels quels.
+Créez l'inventaire. Cette fois, le mot `EOF` n'est pas entre guillemets : le shell remplace donc `$SRV_HOST` par sa valeur avant d'écrire le fichier. C'est ce que vous voulez ici, alors que dans les autres commandes du lab vous écrirez des `{{ ... }}` Jinja2 qui doivent rester tels quels.
 
-<sub>15</sub> Le groupe s'appelle `[otel]` : c'est une convention courante pour désigner les machines qui reçoivent le **collector** OpenTelemetry. La commande `ansible otel ...` cible donc tous les hôtes de ce groupe.
+<sub>8</sub> Le groupe s'appelle `[otel]` : c'est une convention courante pour désigner les machines qui reçoivent le **collector** OpenTelemetry. La commande `ansible otel ...` cible donc tous les hôtes de ce groupe.
 
 ```bash
 cat > inventory.ini <<EOF
@@ -135,7 +135,7 @@ EOF
 cat inventory.ini
 ```
 
-<sub>16</sub> Contrôlez la connexion et l'état du serveur :
+Contrôlez la connexion et l'état du serveur :
 
 ```bash
 ansible otel -m ansible.builtin.ping
@@ -153,7 +153,7 @@ ansible otel -m ansible.builtin.shell -a 'command -v otelcol-contrib || echo abs
 curl -s http://localhost:9090/-/ready
 ```
 
-<sub>17</sub> La première commande affiche `SUCCESS` et `"ping": "pong"` :
+<sub>9</sub> La première commande affiche `SUCCESS` et `"ping": "pong"` :
 
 ```json
 srv-0.monlab.top | SUCCESS => {
@@ -165,15 +165,15 @@ srv-0.monlab.top | SUCCESS => {
 }
 ```
 
-<sub>18</sub> La deuxième indique `"ansible_distribution": "Ubuntu"` et la version `24.04`. La troisième affiche `absent` : le **collector** n'est pas encore installé. La dernière affiche `Prometheus Server is Ready.`.
+La deuxième indique `"ansible_distribution": "Ubuntu"` et la version `24.04`. La troisième affiche `absent` : le **collector** n'est pas encore installé. La dernière affiche `Prometheus Server is Ready.`.
 
-<sub>19</sub> Si votre animateur a provisionné des machines éphémères pour votre groupe (voir [la partie 5](#5-étendre-le-parc--4-serveurs-4-configurations)), elles ne sont pas encore déclarées dans l'inventaire : vous les ajouterez à ce moment-là.
+<sub>10</sub> Si votre animateur a provisionné des machines éphémères pour votre groupe (voir [la partie 5](#5-étendre-le-parc--4-serveurs-4-configurations)), elles ne sont pas encore déclarées dans l'inventaire : vous les ajouterez à ce moment-là.
 
 ## 2. Installer le **collector**
 
-<sub>20</sub> Toutes les commandes de cette partie se lancent dans le terminal de `clt-N`, dans `~/lab04`. Les commandes `ansible` et `ansible-playbook` agissent ensuite sur `srv-N` par SSH : c'est là que le paquet est téléchargé, installé, et que le service démarre. Rien n'est tapé sur `srv-N`, qui n'a ni Ansible ni le dépôt des labs.
+Toutes les commandes de cette partie se lancent dans le terminal de `clt-N`, dans `~/lab04`. Les commandes `ansible` et `ansible-playbook` agissent ensuite sur `srv-N` par SSH : c'est là que le paquet est téléchargé, installé, et que le service démarre. Rien n'est tapé sur `srv-N`, qui n'a ni Ansible ni le dépôt des labs.
 
-<sub>21</sub> Le schéma suivant résume l'enchaînement des trois tâches du playbook :
+<sub>11</sub> Le schéma suivant résume l'enchaînement des trois tâches du playbook :
 
 ```mermaid
 ---
@@ -206,24 +206,24 @@ flowchart LR
   class GH ext
 ```
 
-<sub>22</sub> Écrivez le playbook `playbook.yml`, qui s'exécute sur le groupe `otel` avec les droits administrateur (`become: true`).
+Écrivez le playbook `playbook.yml`, qui s'exécute sur le groupe `otel` avec les droits administrateur (`become: true`).
 
-<sub>23</sub> Il contient un handler nommé `Redémarrer otelcol-contrib`, qui redémarre le service avec le module `ansible.builtin.systemd_service`, puis trois tâches : télécharger le paquet avec `ansible.builtin.get_url`, l'installer avec `ansible.builtin.apt` (paramètre `deb`), et activer puis démarrer le service avec `ansible.builtin.systemd_service`.
+<sub>12</sub> Il contient un handler nommé `Redémarrer otelcol-contrib`, qui redémarre le service avec le module `ansible.builtin.systemd_service`, puis trois tâches : télécharger le paquet avec `ansible.builtin.get_url`, l'installer avec `ansible.builtin.apt` (paramètre `deb`), et activer puis démarrer le service avec `ansible.builtin.systemd_service`.
 
-<sub>24</sub> Quelques précisions sur le téléchargement. Il utilise la variable `otelcol_deb_url`, vers le fichier `/tmp/otelcol-contrib_<version>.deb`, avec le paramètre `checksum` : la somme attendue dépend de l'architecture du serveur. Le fait `ansible_architecture` vaut `x86_64` ou `aarch64`, et la variable `otelcol_arch_map` fait la correspondance avec les clés de `otelcol_checksums`.
+Quelques précisions sur le téléchargement. Il utilise la variable `otelcol_deb_url`, vers le fichier `/tmp/otelcol-contrib_<version>.deb`, avec le paramètre `checksum` : la somme attendue dépend de l'architecture du serveur. Le fait `ansible_architecture` vaut `x86_64` ou `aarch64`, et la variable `otelcol_arch_map` fait la correspondance avec les clés de `otelcol_checksums`.
 
 > [!NOTE]
 >
 > D'où vient le paquet ? L'URL est déjà définie dans `group_vars/all.yml`, dans la variable `otelcol_deb_url`, qui construit le lien GitHub Releases à partir de `otelcol_version` et de `otelcol_arch_map[ansible_architecture]` (par exemple `otelcol-contrib_0.165.0_linux_amd64.deb`). Elle pointe vers les publications GitHub du projet, canal officiel du **collector**. Il n'existe pas encore de dépôt APT officiel pour le **collector** : le projet y travaille, mais à ce jour les paquets ne vivent que sur GitHub Releases.
 
-<sub>25</sub> Ansible évalue cette URL au moment de la tâche, sur chaque cible, en y insérant la version et l'architecture lues dans les facts du serveur : chaque hôte télécharge donc son propre paquet, dans son propre `/tmp`. Ce choix a deux conséquences que le playbook compense :
+<sub>13</sub> Ansible évalue cette URL au moment de la tâche, sur chaque cible, en y insérant la version et l'architecture lues dans les facts du serveur : chaque hôte télécharge donc son propre paquet, dans son propre `/tmp`. Ce choix a deux conséquences que le playbook compense :
 
 - un fichier téléchargé hors dépôt n'a pas la chaîne de confiance d'un dépôt signé : le paramètre `checksum` la remplace, en comparant le SHA256 du fichier à la somme épinglée dans `group_vars/all.yml` ;
 - le module `apt` est utilisé en mode fichier local (paramètre `deb`) : le paquet est quand même enregistré dans `dpkg`, avec ses dépendances, ce qui rend la désinstallation propre du [Cleanup](#cleanup) possible.
 
-<sub>26</sub> En production, on remplace souvent ce téléchargement par cible par un miroir unique (dépôt APT interne, Nexus, Artifactory) : le fichier est téléchargé une fois puis distribué, et les serveurs cloisonnés n'ont plus besoin d'accéder à Internet.
+En production, on remplace souvent ce téléchargement par cible par un miroir unique (dépôt APT interne, Nexus, Artifactory) : le fichier est téléchargé une fois puis distribué, et les serveurs cloisonnés n'ont plus besoin d'accéder à Internet.
 
-<sub>27</sub> Le handler se place avant la liste `tasks:`, et le fichier sera complété à la partie 3 en ajoutant une tâche à la fin. L'ordre des clés d'un play est sans importance pour Ansible.
+<sub>14</sub> Le handler se place avant la liste `tasks:`, et le fichier sera complété à la partie 3 en ajoutant une tâche à la fin. L'ordre des clés d'un play est sans importance pour Ansible.
 
 ```bash
 cat > playbook.yml <<'EOF'
@@ -254,7 +254,7 @@ cat > playbook.yml <<'EOF'
 EOF
 ```
 
-<sub>28</sub> Lancez le playbook, puis relancez-le immédiatement :
+Lancez le playbook, puis relancez-le immédiatement :
 
 ```bash
 ansible-playbook playbook.yml
@@ -264,16 +264,16 @@ ansible-playbook playbook.yml
 ansible-playbook playbook.yml
 ```
 
-<sub>29</sub> Comparez le résumé (`PLAY RECAP`) des deux exécutions. Le premier lancement modifie deux choses, le téléchargement et l'installation :
+<sub>15</sub> Comparez le résumé (`PLAY RECAP`) des deux exécutions. Le premier lancement modifie deux choses, le téléchargement et l'installation :
 
 ```text
 PLAY RECAP *********************************************************************
 srv-N.monlab.top           : ok=4    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 ```
 
-<sub>30</sub> Le second lancement ne modifie plus rien que l'état du service, qui a été redémarré par le paquet lors de l'installation (`changed=1`) : chaque module compare l'état souhaité à l'état réel et n'agit que s'ils diffèrent. C'est l'idempotence.
+Le second lancement ne modifie plus rien que l'état du service, qui a été redémarré par le paquet lors de l'installation (`changed=1`) : chaque module compare l'état souhaité à l'état réel et n'agit que s'ils diffèrent. C'est l'idempotence.
 
-<sub>31</sub> Contrôlez ce qui est installé et ce qui écoute :
+<sub>16</sub> Contrôlez ce qui est installé et ce qui écoute :
 
 ```bash
 ansible otel -a '/usr/bin/otelcol-contrib --version'
@@ -287,7 +287,7 @@ ansible otel -a 'systemctl is-active otelcol-contrib'
 ansible otel -m ansible.builtin.shell -a "ss -ltn | grep -E ':(4317|4318|1777|55679) '"
 ```
 
-<sub>32</sub> On obtient `otelcol-contrib version 0.165.0`, puis `active`, puis plusieurs lignes d'écoute :
+On obtient `otelcol-contrib version 0.165.0`, puis `active`, puis plusieurs lignes d'écoute :
 
 ```text
 LISTEN 0      4096               *:1777             *:*
@@ -296,11 +296,11 @@ LISTEN 0      4096               *:4317             *:*
 LISTEN 0      4096               *:55679            *:*
 ```
 
-<sub>33</sub> Le paquet démarre le service avec sa propre configuration par défaut, qui ouvre les ports 4317 et 4318 (OTLP) mais aussi 1777 et 55679 (pprof et zpages, des interfaces de diagnostic) sur toutes les interfaces. Vous allez la remplacer par une configuration que vous maîtrisez.
+<sub>17</sub> Le paquet démarre le service avec sa propre configuration par défaut, qui ouvre les ports 4317 et 4318 (OTLP) mais aussi 1777 et 55679 (pprof et zpages, des interfaces de diagnostic) sur toutes les interfaces. Vous allez la remplacer par une configuration que vous maîtrisez.
 
 ## 3. Générer la configuration avec Jinja2
 
-<sub>34</sub> Le schéma suivant montre le parcours de la configuration (génération par Ansible, validation puis déploiement sur `srv-N`) et celui des traces de test (émises sur `srv-N` par `telemetrygen` vers le **collector** local, puis exportées vers Jaeger sur `clt-N`) :
+Le schéma suivant montre le parcours de la configuration (génération par Ansible, validation puis déploiement sur `srv-N`) et celui des traces de test (émises sur `srv-N` par `telemetrygen` vers le **collector** local, puis exportées vers Jaeger sur `clt-N`) :
 
 ```mermaid
 ---
@@ -336,7 +336,7 @@ flowchart LR
   class JG back
 ```
 
-<sub>35</sub> Jinja2 est le langage de template d'Ansible. Trois constructions suffisent pour ce lab :
+<sub>18</sub> Jinja2 est le langage de template d'Ansible. Trois constructions suffisent pour ce lab :
 
 | Syntaxe | Rôle |
 |---|---|
@@ -344,9 +344,9 @@ flowchart LR
 | `{% if condition %} ... {% endif %}` | n'inclut le bloc que si la condition est vraie |
 | `{% for cle, valeur in dictionnaire.items() %} ... {% endfor %}` | répète le bloc pour chaque entrée d'un dictionnaire |
 
-<sub>36</sub> Ansible supprime le saut de ligne qui suit une balise `{% ... %}` : les balises peuvent donc commencer en colonne 0 sans laisser de ligne vide dans le résultat.
+Ansible supprime le saut de ligne qui suit une balise `{% ... %}` : les balises peuvent donc commencer en colonne 0 sans laisser de ligne vide dans le résultat.
 
-<sub>37</sub> Le template produit une configuration de **collector** qui contient :
+<sub>19</sub> Le template produit une configuration de **collector** qui contient :
 
 - une première ligne de commentaire `{{ ansible_managed | comment }}`, qui indique que le fichier est géré par Ansible ;
 - un receiver `otlp` (gRPC et HTTP) qui écoute sur toutes les interfaces, ports 4317 et 4318 ;
@@ -356,16 +356,16 @@ flowchart LR
 - si `otelcol_hostmetrics_enabled` est vraie, un exporter `otlp_http/prometheus` dont le paramètre `metrics_endpoint` vaut `http://<otelcol_backend_host>:9090/api/v1/otlp/v1/metrics` ;
 - un pipeline `traces` (receiver `otlp`, processors `memory_limiter`, `resourcedetection`, `resource` puis `batch`, exporter `otlp_grpc/jaeger`) et, si `otelcol_hostmetrics_enabled` est vraie, un pipeline `metrics` (receiver `hostmetrics`, mêmes processors, exporter `otlp_http/prometheus`).
 
-<sub>38</sub> La structure reprend celle des labs précédents. Seules changent les valeurs, qui viennent désormais des variables, et les blocs conditionnels.
+La structure reprend celle des labs précédents. Seules changent les valeurs, qui viennent désormais des variables, et les blocs conditionnels.
 
-<sub>39</sub> Le processor `resourcedetection` mérite un mot avant d'écrire le template. Deux façons de renseigner la ressource se complètent ici :
+<sub>20</sub> Le processor `resourcedetection` mérite un mot avant d'écrire le template. Deux façons de renseigner la ressource se complètent ici :
 
 - `resource` pose ce que vous décidez : `deployment.environment.name`, `lab.id`, un attribut de parc commun à tous les serveurs ;
 - `resourcedetection` lit ce que la machine sait d'elle-même : son nom, son système, son identifiant. Rien à déclarer, et chaque serveur reçoit sa propre valeur.
 
-<sub>40</sub> C'est ce qui rendra la partie 5 lisible : le même template déployé sur quatre serveurs produira quatre `host.name` différents, sans une variable de plus. Le réglage `override: false` laisse la priorité aux attributs déjà posés, par `resource` ou par l'application : la détection complète la ressource, elle ne l'écrase pas. Le détecteur `env` existe aussi et lit `OTEL_RESOURCE_ATTRIBUTES` dans l'environnement du service ; il n'est pas utilisé ici, pour ne pas multiplier les mécanismes dans ce lab.
+C'est ce qui rendra la partie 5 lisible : le même template déployé sur quatre serveurs produira quatre `host.name` différents, sans une variable de plus. Le réglage `override: false` laisse la priorité aux attributs déjà posés, par `resource` ou par l'application : la détection complète la ressource, elle ne l'écrase pas. Le détecteur `env` existe aussi et lit `OTEL_RESOURCE_ATTRIBUTES` dans l'environnement du service ; il n'est pas utilisé ici, pour ne pas multiplier les mécanismes dans ce lab.
 
-<sub>41</sub> Dans le processor `resource`, le choix entre `upsert` et `insert` répond à deux comportements distincts :
+<sub>21</sub> Dans le processor `resource`, le choix entre `upsert` et `insert` répond à deux comportements distincts :
 
 - **`action: upsert`** insère l'attribut s'il est absent, et **écrase** sa valeur s'il existe déjà. Il sert aux attributs imposés par la plateforme (`deployment.environment.name`, `lab.id`), qui doivent rester uniformes quel que soit l'émetteur.
 - **`action: insert`** insère l'attribut uniquement s'il est absent, et **ne modifie pas** une valeur déjà présente. Il est indispensable ici pour `service.name` et `service.instance.id` : les traces émises par `telemetrygen` (ou par une application) portent déjà leur propre `service.name` (`ansible-demo`), qu'un `upsert` écraserait par `lab4`, alors que les métriques système de `hostmetrics` n'en ont pas et reçoivent donc `service.name=lab4` et `service.instance.id=srv-N`.
@@ -452,7 +452,7 @@ service:
 EOF
 ```
 
-<sub>42</sub> Avant de déployer, produisez d'abord le rendu du template sur `clt-N`, sans toucher au serveur. Le module `ansible.builtin.template` est exécuté sur `localhost`, avec les variables de `group_vars/all.yml` :
+Avant de déployer, produisez d'abord le rendu du template sur `clt-N`, sans toucher au serveur. Le module `ansible.builtin.template` est exécuté sur `localhost`, avec les variables de `group_vars/all.yml` :
 
 ```bash
 cat > preview.yml <<'EOF'
@@ -475,7 +475,7 @@ ansible-playbook preview.yml -e @group_vars/all.yml
 cat /tmp/config-preview.yaml
 ```
 
-<sub>43</sub> Le schéma suivant résume les deux pipelines que le template produit, avec les mêmes processors dans le même ordre :
+<sub>22</sub> Le schéma suivant résume les deux pipelines que le template produit, avec les mêmes processors dans le même ordre :
 
 ```mermaid
 ---
@@ -501,9 +501,9 @@ flowchart LR
   class E1,E2 expr
 ```
 
-<sub>44</sub> Le processor `resource` ajoute `deployment.environment.name` et `lab.id` par `upsert`, puis `service.name` et `service.instance.id` par `insert`, avant que `batch` ne regroupe les données pour l'export.
+Le processor `resource` ajoute `deployment.environment.name` et `lab.id` par `upsert`, puis `service.name` et `service.instance.id` par `insert`, avant que `batch` ne regroupe les données pour l'export.
 
-<sub>45</sub> On obtient la configuration telle que le serveur la recevra, sans aucune accolade Jinja2. En tête le commentaire de gestion Ansible, plus bas les attributs produits par la boucle :
+<sub>23</sub> On obtient la configuration telle que le serveur la recevra, sans aucune accolade Jinja2. En tête le commentaire de gestion Ansible, plus bas les attributs produits par la boucle :
 
 ```yaml
 #
@@ -557,9 +557,9 @@ service:
       exporters: [otlp_grpc/jaeger]
 ```
 
-<sub>46</sub> `<CLT_HOST>` vaut la valeur de la variable `CLT_HOST` de `clt-N` et `<votre numéro>` celle de `LAB_ID`. Lors de cette prévisualisation locale sur `localhost`, le fact `ansible_hostname` vaut `clt-N` ; au déploiement sur le serveur cible, il prendra automatiquement la valeur `srv-N`. Avec la valeur par défaut `otelcol_hostmetrics_enabled: false`, le rendu ne contient aucune mention de `hostmetrics`.
+`<CLT_HOST>` vaut la valeur de la variable `CLT_HOST` de `clt-N` et `<votre numéro>` celle de `LAB_ID`. Lors de cette prévisualisation locale sur `localhost`, le fact `ansible_hostname` vaut `clt-N` ; au déploiement sur le serveur cible, il prendra automatiquement la valeur `srv-N`. Avec la valeur par défaut `otelcol_hostmetrics_enabled: false`, le rendu ne contient aucune mention de `hostmetrics`.
 
-<sub>47</sub> Vérifiez maintenant cette configuration avec la commande `validate` du **collector**, dans un conteneur lancé sur `clt-N` :
+<sub>24</sub> Vérifiez maintenant cette configuration avec la commande `validate` du **collector**, dans un conteneur lancé sur `clt-N` :
 
 ```bash
 docker run --rm -v /tmp/config-preview.yaml:/config.yaml:ro \
@@ -568,22 +568,22 @@ docker run --rm -v /tmp/config-preview.yaml:/config.yaml:ro \
 echo "code retour : $?"
 ```
 
-<sub>48</sub> La commande `validate` n'affiche rien, et le code retour vaut 0 :
+La commande `validate` n'affiche rien, et le code retour vaut 0 :
 
 ```text
 code retour : 0
 ```
 
-<sub>49</sub> Pas de message veut dire configuration valide. Au premier lancement, Docker montre d'abord le téléchargement de l'image, puis revient au silence. Le conteneur ne sert qu'à valider : il ne tourne pas, et `--rm` le supprime à la sortie.
+<sub>25</sub> Pas de message veut dire configuration valide. Au premier lancement, Docker montre d'abord le téléchargement de l'image, puis revient au silence. Le conteneur ne sert qu'à valider : il ne tourne pas, et `--rm` le supprime à la sortie.
 
-<sub>50</sub> Complétez maintenant le playbook avec une dernière tâche, ajoutée à la fin du fichier. Elle utilise le module `ansible.builtin.template` avec les paramètres suivants :
+Complétez maintenant le playbook avec une dernière tâche, ajoutée à la fin du fichier. Elle utilise le module `ansible.builtin.template` avec les paramètres suivants :
 
 - `src` : `config.yaml.j2` et `dest` : `/etc/otelcol-contrib/config.yaml` ;
 - `owner` : `root`, `group` : `otelcol-contrib` et `mode` : `"0640"` : le service tourne sous l'utilisateur `otelcol-contrib`, qui doit pouvoir lire le fichier, et personne d'autre ne doit pouvoir l'écrire ;
 - `validate` : `/usr/bin/otelcol-contrib validate --config=%s` : Ansible écrit d'abord le résultat dans un fichier temporaire, lance cette commande dessus (`%s` est remplacé par le chemin du fichier temporaire) et ne remplace le fichier réel que si elle réussit ;
 - `notify` : le nom du handler, pour que le service redémarre uniquement quand le fichier change.
 
-<sub>51</sub> Nommez la tâche `Déployer la configuration`. Elle doit être indentée comme les autres tâches de la liste.
+<sub>26</sub> Nommez la tâche `Déployer la configuration`. Elle doit être indentée comme les autres tâches de la liste.
 
 ```bash
 cat >> playbook.yml <<'EOF'
@@ -599,7 +599,7 @@ cat >> playbook.yml <<'EOF'
 EOF
 ```
 
-<sub>52</sub> Déployez, puis générez cinq traces directement sur `srv-N` (en lançant `telemetrygen` par SSH depuis `clt-N`) vers le **collector** local (`localhost:4317`) :
+Déployez, puis générez cinq traces directement sur `srv-N` (en lançant `telemetrygen` par SSH depuis `clt-N`) vers le **collector** local (`localhost:4317`) :
 
 ```bash
 ansible-playbook playbook.yml
@@ -613,7 +613,7 @@ ssh root@$SRV_HOST 'docker run --rm --network host ghcr.io/open-telemetry/opente
 >
 > L'option `--network host` permet au conteneur `telemetrygen` d'atteindre le port `localhost:4317` du **collector** systemd sur `srv-N`. Cela reproduit le schéma réel d'un serveur applicatif où l'application parle à son **collector** local, qui pousse ensuite les traces vers le serveur d'observabilité (`clt-N`).
 
-<sub>53</sub> Dans le résumé du playbook, la tâche `Déployer la configuration` est en `changed` et le handler s'est exécuté :
+<sub>27</sub> Dans le résumé du playbook, la tâche `Déployer la configuration` est en `changed` et le handler s'est exécuté :
 
 ```text
 TASK [Déployer la configuration] ***********************************************
@@ -626,7 +626,7 @@ PLAY RECAP *********************************************************************
 srv-N.monlab.top           : ok=6    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 ```
 
-<sub>54</sub> Le fichier déployé porte l'en-tête de gestion Ansible, et Jaeger a reçu les traces :
+Le fichier déployé porte l'en-tête de gestion Ansible, et Jaeger a reçu les traces :
 
 ```bash
 ansible otel -a 'head -n 3 /etc/otelcol-contrib/config.yaml'
@@ -642,7 +642,7 @@ curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&qu
   | jq -r '.result.resourceSpans[].resource.attributes[] | select(.key=="lab.id" or .key=="deployment.environment.name") | "\(.key)=\(.value | (.stringValue // .intValue))"' | sort -u
 ```
 
-<sub>55</sub> La première commande affiche des lignes de commentaire dont `Ansible managed` :
+<sub>28</sub> La première commande affiche des lignes de commentaire dont `Ansible managed` :
 
 ```text
 #
@@ -650,22 +650,22 @@ curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&qu
 #
 ```
 
-<sub>56</sub> La deuxième affiche le nombre de traces uniques :
+La deuxième affiche le nombre de traces uniques :
 
 ```text
 5
 ```
 
-<sub>57</sub> La troisième affiche les attributs ajoutés par la boucle du template :
+<sub>29</sub> La troisième affiche les attributs ajoutés par la boucle du template :
 
 ```text
 deployment.environment.name=lab4
 lab.id=<votre numéro>
 ```
 
-<sub>58</sub> La même requête, filtrée sur `host.name`, montre ce qu'aucune variable Ansible n'a fourni : le nom de la machine, détecté automatiquement par le processor `resourcedetection`.
+La même requête, filtrée sur `host.name`, montre ce qu'aucune variable Ansible n'a fourni : le nom de la machine, détecté automatiquement par le processor `resourcedetection`.
 
-<sub>59</sub> Ces traces ont été générées par `telemetrygen` sur `srv-N` (lancé par SSH depuis `clt-N`), puis traitées par le **collector** local de `srv-N`. C'est pourquoi l'attribut `host.name` vaut le nom du serveur (`srv-N.monlab.top` ou `srv-N`), et non celui de `clt-N`.
+<sub>30</sub> Ces traces ont été générées par `telemetrygen` sur `srv-N` (lancé par SSH depuis `clt-N`), puis traitées par le **collector** local de `srv-N`. C'est pourquoi l'attribut `host.name` vaut le nom du serveur (`srv-N.monlab.top` ou `srv-N`), et non celui de `clt-N`.
 
 ```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
@@ -677,13 +677,13 @@ host.name=srv-N.monlab.top
 os.type=linux
 ```
 
-<sub>60</sub> L'attribut `host.name` provient du nom d'hôte lu sur la machine par le processor `resourcedetection`. Le format exact dépend de la configuration du système : nom court (`srv-N`) ou nom complet (`srv-N.<domaine>`).
+L'attribut `host.name` provient du nom d'hôte lu sur la machine par le processor `resourcedetection`. Le format exact dépend de la configuration du système : nom court (`srv-N`) ou nom complet (`srv-N.<domaine>`).
 
 > [!NOTE]
 >
 > Si le comptage vaut 0, attendez quelques secondes et relancez la requête. Le premier export après un redémarrage du service peut prendre quelques instants (la connexion vers Jaeger doit s'établir, et le processor `batch` attend son timeout de 2 s avant d'envoyer).
 
-<sub>61</sub> Ouvrez l'interface de Jaeger (`http://$CLT_HOST:16686`) et sélectionnez le service `ansible-demo` : les cinq traces sont visibles.
+<sub>31</sub> Ouvrez l'interface de Jaeger (`http://$CLT_HOST:16686`) et sélectionnez le service `ansible-demo` : les cinq traces sont visibles.
 
 ![Traces du service ansible-demo dans Jaeger, avec les attributs déployés par Ansible](img/lab04-jaeger-traces.png)
 
@@ -701,7 +701,7 @@ bash ~/opentelemetry-labs/config/lab04/fast-forward-part4.sh
 cd ~/lab04
 ```
 
-<sub>62</sub> Un parc ne se déploie pas une seule fois : il change. Cette partie enchaîne cinq déploiements sur le même serveur, du premier ajout au retour en arrière, en passant par une dérive corrigée et un changement refusé. À chaque fois la mécanique est la même : une variable ou un template, un rendu, le contrôle `validate`, puis un redémarrage si le fichier change.
+Un parc ne se déploie pas une seule fois : il change. Cette partie enchaîne cinq déploiements sur le même serveur, du premier ajout au retour en arrière, en passant par une dérive corrigée et un changement refusé. À chaque fois la mécanique est la même : une variable ou un template, un rendu, le contrôle `validate`, puis un redémarrage si le fichier change.
 
 ```mermaid
 ---
@@ -729,9 +729,9 @@ flowchart LR
 
 ### Un ajout
 
-<sub>63</sub> Vous allez activer la collecte des métriques du serveur sans modifier ni le playbook, ni le template : seule une variable change.
+<sub>32</sub> Vous allez activer la collecte des métriques du serveur sans modifier ni le playbook, ni le template : seule une variable change.
 
-<sub>64</sub> Une variable définie pour un hôte précis, dans `host_vars/<nom de l'hôte>.yml`, l'emporte sur celle de `group_vars/all.yml`.
+Une variable définie pour un hôte précis, dans `host_vars/<nom de l'hôte>.yml`, l'emporte sur celle de `group_vars/all.yml`.
 
 ```bash
 mkdir -p host_vars
@@ -743,13 +743,13 @@ otelcol_hostmetrics_enabled: true
 EOF
 ```
 
-<sub>65</sub> Regardez d'abord ce que ce changement ferait, sans l'appliquer :
+<sub>33</sub> Regardez d'abord ce que ce changement ferait, sans l'appliquer :
 
 ```bash
 ansible-playbook playbook.yml --check --diff
 ```
 
-<sub>66</sub> Le diff montre les lignes que le template ajouterait à la configuration du serveur : le receiver `hostmetrics`, l'exporter `otlp_http/prometheus` et le pipeline `metrics` :
+Le diff montre les lignes que le template ajouterait à la configuration du serveur : le receiver `hostmetrics`, l'exporter `otlp_http/prometheus` et le pipeline `metrics` :
 
 ```diff
 +  hostmetrics:
@@ -768,7 +768,7 @@ ansible-playbook playbook.yml --check --diff
 +      exporters: [otlp_http/prometheus]
 ```
 
-<sub>67</sub> Appliquez le changement. Le résumé montre deux tâches modifiées : le fichier déployé, puis le handler qui redémarre le service.
+<sub>34</sub> Appliquez le changement. Le résumé montre deux tâches modifiées : le fichier déployé, puis le handler qui redémarre le service.
 
 ```bash
 ansible-playbook playbook.yml | grep -E 'RUNNING HANDLER|changed:' | head -4
@@ -780,7 +780,7 @@ RUNNING HANDLER [Redémarrer otelcol-contrib] ***
 changed: [srv-N.monlab.top]
 ```
 
-<sub>68</sub> Contrôlez que l'instance en cours utilise bien cette configuration, puis attendez une minute le temps d'une collecte :
+Contrôlez que l'instance en cours utilise bien cette configuration, puis attendez une minute le temps d'une collecte :
 
 ```bash
 ansible otel -a 'grep -c hostmetrics /etc/otelcol-contrib/config.yaml'
@@ -795,25 +795,25 @@ curl -s http://localhost:9090/api/v1/query --data-urlencode 'query=count({__name
   | jq -r '.data.result[0].value[1]'
 ```
 
-<sub>69</sub> La première commande affiche `2`, une ligne pour le receiver et une pour le pipeline. La seconde affiche un nombre supérieur à 0 : Prometheus a reçu les métriques de `srv-N`.
+<sub>35</sub> La première commande affiche `2`, une ligne pour le receiver et une pour le pipeline. La seconde affiche un nombre supérieur à 0 : Prometheus a reçu les métriques de `srv-N`.
 
 ```text
 12
 ```
 
-<sub>70</sub> Le nom exact des métriques dépend de la conversion appliquée par Prometheus, d'où l'expression régulière.
+Le nom exact des métriques dépend de la conversion appliquée par Prometheus, d'où l'expression régulière.
 
 ![Métriques système de srv-N dans Prometheus, collectées via hostmetrics et OTLP](img/lab04-prometheus-metrics.png)
 
 ### Un passage sans changement
 
-<sub>71</sub> Relancez le playbook immédiatement, et lisez le résumé :
+<sub>36</sub> Relancez le playbook immédiatement, et lisez le résumé :
 
 ```bash
 ansible-playbook playbook.yml | grep -A2 'PLAY RECAP'
 ```
 
-<sub>72</sub> Rien n'a changé (`changed=0`) et le handler n'a pas redémarré le service : un redémarrage inutile aurait interrompu le **collector** sans raison.
+Rien n'a changé (`changed=0`) et le handler n'a pas redémarré le service : un redémarrage inutile aurait interrompu le **collector** sans raison.
 
 ```text
 PLAY RECAP *********************************************************************
@@ -822,7 +822,7 @@ srv-N.monlab.top           : ok=5    changed=0    unreachable=0    failed=0    s
 
 ### Un retour en arrière
 
-<sub>73</sub> La collecte des métriques système a été ajoutée, elle peut être retirée de la même façon. Désactivez la variable :
+<sub>37</sub> La collecte des métriques système a été ajoutée, elle peut être retirée de la même façon. Désactivez la variable :
 
 ```bash
 cat > host_vars/$SRV_HOST.yml <<'EOF'
@@ -834,7 +834,7 @@ EOF
 ansible-playbook playbook.yml --check --diff
 ```
 
-<sub>74</sub> Le diff montre cette fois des lignes retirées, les mêmes qu'à l'ajout :
+Le diff montre cette fois des lignes retirées, les mêmes qu'à l'ajout :
 
 ```diff
 -  hostmetrics:
@@ -853,7 +853,7 @@ ansible-playbook playbook.yml --check --diff
 -      exporters: [otlp_http/prometheus]
 ```
 
-<sub>75</sub> Appliquez, puis vérifiez que la configuration en cours ne contient plus le receiver :
+<sub>38</sub> Appliquez, puis vérifiez que la configuration en cours ne contient plus le receiver :
 
 ```bash
 ansible-playbook playbook.yml | grep -E 'RUNNING HANDLER|changed:' | head -4
@@ -863,11 +863,11 @@ ansible-playbook playbook.yml | grep -E 'RUNNING HANDLER|changed:' | head -4
 ansible otel -m ansible.builtin.shell -a 'grep -c hostmetrics /etc/otelcol-contrib/config.yaml || true'
 ```
 
-<sub>76</sub> La seconde commande affiche `0`. Dans Prometheus, les séries existantes ne disparaissent pas instantanément : le serveur les marque comme périmées après cinq minutes sans nouvelle valeur, puis les oublie. La partie suivante dure assez longtemps pour le constater à la fin, avec la même requête.
+La seconde commande affiche `0`. Dans Prometheus, les séries existantes ne disparaissent pas instantanément : le serveur les marque comme périmées après cinq minutes sans nouvelle valeur, puis les oublie. La partie suivante dure assez longtemps pour le constater à la fin, avec la même requête.
 
 ### Une dérive corrigée
 
-<sub>77</sub> Que se passe-t-il si quelqu'un modifie la configuration à la main sur le serveur ? Ajoutez une ligne au fichier déployé, comme le ferait un dépannage pressé :
+<sub>39</sub> Que se passe-t-il si quelqu'un modifie la configuration à la main sur le serveur ? Ajoutez une ligne au fichier déployé, comme le ferait un dépannage pressé :
 
 ```bash
 ansible otel -b -m ansible.builtin.shell -a 'echo "# ajouté à la main" >> /etc/otelcol-contrib/config.yaml'
@@ -877,20 +877,20 @@ ansible otel -b -m ansible.builtin.shell -a 'echo "# ajouté à la main" >> /etc
 ansible otel -a 'tail -1 /etc/otelcol-contrib/config.yaml'
 ```
 
-<sub>78</sub> Le serveur porte maintenant une configuration que le template ne décrit pas. Demandez à Ansible ce qu'il ferait :
+Le serveur porte maintenant une configuration que le template ne décrit pas. Demandez à Ansible ce qu'il ferait :
 
 ```bash
 ansible-playbook playbook.yml --check --diff
 ```
 
-<sub>79</sub> Le diff contient la ligne à retirer :
+<sub>40</sub> Le diff contient la ligne à retirer :
 
 ```diff
 @@ -45,4 +45,3 @@
 - # ajouté à la main
 ```
 
-<sub>80</sub> Appliquez, puis contrôlez la fin du fichier :
+Appliquez, puis contrôlez la fin du fichier :
 
 ```bash
 ansible-playbook playbook.yml >/dev/null
@@ -900,17 +900,17 @@ ansible-playbook playbook.yml >/dev/null
 ansible otel -a 'tail -1 /etc/otelcol-contrib/config.yaml'
 ```
 
-<sub>81</sub> La ligne a disparu, et le fichier se termine de nouveau par la déclaration du dernier pipeline du template. Les métriques système étant encore activées à ce stade, c'est le pipeline `metrics` :
+<sub>41</sub> La ligne a disparu, et le fichier se termine de nouveau par la déclaration du dernier pipeline du template. Les métriques système étant encore activées à ce stade, c'est le pipeline `metrics` :
 
 ```text
       exporters: [otlp_http/prometheus]
 ```
 
-<sub>82</sub> Ansible est la source de vérité : une modification manuelle est écrasée au passage suivant. C'est ce qui rend un parc prévisible, et c'est aussi pourquoi une urgence se règle en modifiant le template, pas le serveur.
+Ansible est la source de vérité : une modification manuelle est écrasée au passage suivant. C'est ce qui rend un parc prévisible, et c'est aussi pourquoi une urgence se règle en modifiant le template, pas le serveur.
 
 ### Un changement refusé
 
-<sub>83</sub> Simulez enfin une erreur de saisie. La valeur de `otelcol_batch_timeout` est invalide (`"deux secondes"` au lieu d’une durée comme `2s`). Le paramètre `validate` du template doit empêcher le déploiement d’une configuration invalide :
+<sub>42</sub> Simulez enfin une erreur de saisie. La valeur de `otelcol_batch_timeout` est invalide (`"deux secondes"` au lieu d’une durée comme `2s`). Le paramètre `validate` du template doit empêcher le déploiement d’une configuration invalide :
 
 ```bash
 cat > host_vars/$SRV_HOST.yml <<'EOF'
@@ -923,14 +923,14 @@ EOF
 ansible-playbook playbook.yml
 ```
 
-<sub>84</sub> Le playbook échoue sur la tâche `Déployer la configuration`, avec un message du **collector** qui cite `timeout` et une durée invalide :
+Le playbook échoue sur la tâche `Déployer la configuration`, avec un message du **collector** qui cite `timeout` et une durée invalide :
 
 ```text
 fatal: [srv-N.monlab.top]: FAILED! => {"changed": false, ..., "stderr": "Error: ... 'processors' error reading configuration for \"batch\": ... 'timeout' time: invalid duration \"deux ...", "stdout": "", ...}
 srv-N.monlab.top           : ok=4    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0
 ```
 
-<sub>85</sub> Le serveur n'a pas été touché : le service tourne toujours avec la dernière configuration valide.
+<sub>43</sub> Le serveur n'a pas été touché : le service tourne toujours avec la dernière configuration valide.
 
 ```bash
 ansible otel -a 'systemctl is-active otelcol-contrib'
@@ -940,9 +940,9 @@ ansible otel -a 'systemctl is-active otelcol-contrib'
 ansible otel -a 'grep -n timeout /etc/otelcol-contrib/config.yaml'
 ```
 
-<sub>86</sub> Les commandes affichent `active` et une ligne `timeout: 2s`.
+Les commandes affichent `active` et une ligne `timeout: 2s`.
 
-<sub>87</sub> Corrigez l'erreur en supprimant la ligne fautive, puis relancez :
+<sub>44</sub> Corrigez l'erreur en supprimant la ligne fautive, puis relancez :
 
 ```bash
 sed -i '/otelcol_batch_timeout/d' host_vars/$SRV_HOST.yml
@@ -952,13 +952,13 @@ sed -i '/otelcol_batch_timeout/d' host_vars/$SRV_HOST.yml
 ansible-playbook playbook.yml | grep -A2 'PLAY RECAP'
 ```
 
-<sub>88</sub> Le résumé indique `failed=0` et `changed=2`. Le fichier est bien redéployé : la suppression de la ligne fautive retire aussi la valeur `hostmetrics` devenue `false`, donc la configuration générée change par rapport à celle qui tourne, et le service redémarre :
+Le résumé indique `failed=0` et `changed=2`. Le fichier est bien redéployé : la suppression de la ligne fautive retire aussi la valeur `hostmetrics` devenue `false`, donc la configuration générée change par rapport à celle qui tourne, et le service redémarre :
 
 ```text
 srv-N.monlab.top           : ok=6    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 ```
 
-<sub>89</sub> Pour retrouver un `changed=0`, relancez une seconde fois le playbook : le fichier est alors déjà conforme au template.
+<sub>45</sub> Pour retrouver un `changed=0`, relancez une seconde fois le playbook : le fichier est alors déjà conforme au template.
 
 > [!NOTE]
 >
@@ -966,9 +966,9 @@ srv-N.monlab.top           : ok=6    changed=2    unreachable=0    failed=0    s
 
 ## 5. Étendre le parc : 4 serveurs, 4 configurations
 
-<sub>90</sub> Votre animateur a provisionné trois serveurs éphémères Debian pour votre groupe, dans le même VPC que `clt-N`. Leurs adresses privées changent d'une session à l'autre, et DigitalOcean ne garantit pas l'ordre dans lequel il les attribue : vous allez donc les découvrir au lieu de les écrire en dur.
+Votre animateur a provisionné trois serveurs éphémères Debian pour votre groupe, dans le même VPC que `clt-N`. Leurs adresses privées changent d'une session à l'autre, et DigitalOcean ne garantit pas l'ordre dans lequel il les attribue : vous allez donc les découvrir au lieu de les écrire en dur.
 
-<sub>91</sub> Le schéma suivant montre le déploiement simultané d'un seul playbook et d'un seul template vers les quatre serveurs aux profils différenciés :
+<sub>46</sub> Le schéma suivant montre le déploiement simultané d'un seul playbook et d'un seul template vers les quatre serveurs aux profils différenciés :
 
 ```mermaid
 ---
@@ -1008,7 +1008,7 @@ flowchart LR
   class PROM back
 ```
 
-<sub>92</sub> Le dossier contient `discover-ephemere.sh`, qui balaie le sous-réseau privé de `clt-N` sur le port SSH, interroge les machines qui répondent, et ne garde que celles dont le nom commence par `srv2-`, `srv3-` ou `srv4-`. Lancez-le, puis construisez l'inventaire à partir de son résultat :
+Le dossier contient `discover-ephemere.sh`, qui balaie le sous-réseau privé de `clt-N` sur le port SSH, interroge les machines qui répondent, et ne garde que celles dont le nom commence par `srv2-`, `srv3-` ou `srv4-`. Lancez-le, puis construisez l'inventaire à partir de son résultat :
 
 ```bash
 chmod +x discover-ephemere.sh
@@ -1039,7 +1039,7 @@ EOF
 cat inventory.ini
 ```
 
-<sub>93</sub> La découverte prend une dizaine de secondes. Le fichier `ephemeres.ini` contient les trois alias reliés aux adresses trouvées, dans l'ordre croissant des adresses, par exemple :
+<sub>47</sub> La découverte prend une dizaine de secondes. Le fichier `ephemeres.ini` contient les trois alias reliés aux adresses trouvées, dans l'ordre croissant des adresses, par exemple :
 
 ```text
 [ephemere]
@@ -1048,7 +1048,7 @@ srv-backend ansible_host=10.20.N.8
 srv-database ansible_host=10.20.N.9
 ```
 
-<sub>94</sub> Les numéros finaux dépendent de la session : c'est justement ce que le script évite de deviner. Vérifiez maintenant que la connexion fonctionne et que le système est bien Debian :
+Les numéros finaux dépendent de la session : c'est justement ce que le script évite de deviner. Vérifiez maintenant que la connexion fonctionne et que le système est bien Debian :
 
 ```bash
 ansible all -m ansible.builtin.ping -o | head -6
@@ -1058,15 +1058,15 @@ ansible all -m ansible.builtin.ping -o | head -6
 ansible ephemere -m ansible.builtin.setup -a 'filter=ansible_distribution' -o | grep -o 'Debian\|ansible_hostname[^,]*' | head -4
 ```
 
-<sub>95</sub> La sortie attendue pour le ping est `SUCCESS` sur les quatre machines, et pour `setup`, `ansible_distribution: Debian`.
+<sub>48</sub> La sortie attendue pour le ping est `SUCCESS` sur les quatre machines, et pour `setup`, `ansible_distribution: Debian`.
 
-<sub>96</sub> La structure de l'inventaire est nouvelle :
+La structure de l'inventaire est nouvelle :
 
 - `[otel]` contient le serveur principal `srv-N`, déjà déployé ;
 - `[ephemere]` contient les trois serveurs Debian, chacun sous un **alias** parlant (`srv-frontend`, `srv-backend`, `srv-database`), avec `ansible_host` qui indique l'adresse IP réelle ;
 - `[collector:children]` est un **groupe de groupes** : il regroupe `otel` et `ephemere`, pour que le playbook s'applique à tous.
 
-<sub>97</sub> La partie 4 s'est terminée avec les métriques système désactivées sur le serveur principal. Réactivez-les, puisque cette partie compare des profils de collecte :
+<sub>49</sub> La partie 4 s'est terminée avec les métriques système désactivées sur le serveur principal. Réactivez-les, puisque cette partie compare des profils de collecte :
 
 ```bash
 cat > host_vars/$SRV_HOST.yml <<'EOF'
@@ -1074,7 +1074,7 @@ otelcol_hostmetrics_enabled: true
 EOF
 ```
 
-<sub>98</sub> Créez maintenant les variables des trois serveurs éphémères, avec trois profils différents :
+Créez maintenant les variables des trois serveurs éphémères, avec trois profils différents :
 
 ```bash
 cat > host_vars/srv-frontend.yml <<'EOF'
@@ -1100,13 +1100,13 @@ otelcol_environment: database
 EOF
 ```
 
-<sub>99</sub> Chaque serveur éphémère reçoit :
+<sub>50</sub> Chaque serveur éphémère reçoit :
 
 - un `batch` différent : 1 seconde pour le frontend, 5 pour le backend, 10 pour la database ;
 - les métriques système activées ou non : le frontend est un serveur d'application, les deux autres sont des serveurs d'infrastructure dont on veut suivre la charge ;
 - un `deployment.environment.name` différent, qui deviendra un label dans Prometheus.
 
-<sub>100</sub> Le playbook doit maintenant s'exécuter sur le groupe `collector` (les quatre serveurs) au lieu de `otel`. Modifiez la ligne `hosts:` :
+Le playbook doit maintenant s'exécuter sur le groupe `collector` (les quatre serveurs) au lieu de `otel`. Modifiez la ligne `hosts:` :
 
 ```bash
 sed -i 's/^  hosts: otel/  hosts: collector/' playbook.yml
@@ -1116,13 +1116,13 @@ sed -i 's/^  hosts: otel/  hosts: collector/' playbook.yml
 grep 'hosts:' playbook.yml
 ```
 
-<sub>101</sub> Lancez le playbook :
+<sub>51</sub> Lancez le playbook :
 
 ```bash
 ansible-playbook playbook.yml
 ```
 
-<sub>102</sub> Le résumé montre quatre serveurs traités en même temps. `srv-0.monlab.top` passe à `changed=2`, parce que vous venez de réactiver ses métriques : sa configuration change et son service redémarre. Les trois serveurs Debian passent de `absent` à installé, configuré et démarré (`changed=4` chacun) :
+Le résumé montre quatre serveurs traités en même temps. `srv-0.monlab.top` passe à `changed=2`, parce que vous venez de réactiver ses métriques : sa configuration change et son service redémarre. Les trois serveurs Debian passent de `absent` à installé, configuré et démarré (`changed=4` chacun) :
 
 ```text
 PLAY RECAP *********************************************************************
@@ -1132,7 +1132,7 @@ srv-database               : ok=6    changed=4    unreachable=0    failed=0    s
 srv-frontend               : ok=6    changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 ```
 
-<sub>103</sub> Un seul playbook, quatre configurations différentes. Comparez-les :
+<sub>52</sub> Un seul playbook, quatre configurations différentes. Comparez-les :
 
 ```bash
 ansible collector -b -m ansible.builtin.shell \
@@ -1140,7 +1140,7 @@ ansible collector -b -m ansible.builtin.shell \
   -o | sort
 ```
 
-<sub>104</sub> La sortie montre que chaque serveur a bien sa configuration. L'option `-o` tient chaque hôte sur une seule ligne, avec un préfixe `CHANGED | rc=0 | (stdout)`, et les retours à la ligne internes sont remplacés par `\n`. Le `| sort` fixe l'ordre des hôtes, qui n'est pas garanti par Ansible :
+La sortie montre que chaque serveur a bien sa configuration. L'option `-o` tient chaque hôte sur une seule ligne, avec un préfixe `CHANGED | rc=0 | (stdout)`, et les retours à la ligne internes sont remplacés par `\n`. Le `| sort` fixe l'ordre des hôtes, qui n'est pas garanti par Ansible :
 
 ```text
 srv-0.monlab.top | CHANGED | rc=0 | (stdout)     timeout: 2s\n  hostmetrics:\n        value: "lab4"
@@ -1149,17 +1149,17 @@ srv-database | CHANGED | rc=0 | (stdout)     timeout: 10s\n  hostmetrics:\n     
 srv-frontend | CHANGED | rc=0 | (stdout)     timeout: 1s\n        value: "frontend"
 ```
 
-<sub>105</sub> Le frontend n'affiche pas `hostmetrics`, puisque ses métriques système sont désactivées.
+<sub>53</sub> Le frontend n'affiche pas `hostmetrics`, puisque ses métriques système sont désactivées.
 
-<sub>106</sub> Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables.
+Le **collector** ne fait pas scraper Prometheus : il lui pousse les métriques en OTLP. Dans ce mode, Prometheus ignore par défaut les attributs de ressource, et les collectors des quatre serveurs produiraient la même série `system_cpu_load_average_1m`, sans label, indiscernables.
 
-<sub>107</sub> Le fichier `prometheus/prometheus.yml` fourni n'est pas produit par Ansible : il est statique, monté en lecture seule dans le conteneur Prometheus par `compose.yaml`. Affichez-le :
+<sub>54</sub> Le fichier `prometheus/prometheus.yml` fourni n'est pas produit par Ansible : il est statique, monté en lecture seule dans le conteneur Prometheus par `compose.yaml`. Affichez-le :
 
 ```bash
 cat prometheus/prometheus.yml
 ```
 
-<sub>108</sub> Il contient un bloc `otlp` qui promeut quatre attributs de ressource en labels :
+Il contient un bloc `otlp` qui promeut quatre attributs de ressource en labels :
 
 ```yaml
 otlp:
@@ -1170,7 +1170,7 @@ otlp:
     - host.name
 ```
 
-<sub>109</sub> Le tableau suivant précise le mapping réalisé, tel qu'il apparaît dans les séries stockées par Prometheus :
+<sub>55</sub> Le tableau suivant précise le mapping réalisé, tel qu'il apparaît dans les séries stockées par Prometheus :
 
 | Attribut de ressource | Label Prometheus | Remarque |
 |---|---|---|
@@ -1179,9 +1179,9 @@ otlp:
 | `deployment.environment.name` | `deployment_environment_name` | Les points sont remplacés par des traits de soulignement, seul format accepté dans un nom de label |
 | `host.name` | `host_name` | Même normalisation des points |
 
-<sub>110</sub> Deux points expliquent ce double emploi. D'une part, Prometheus associe historiquement les labels `job` et `instance` à chaque série, pour identifier la cible qui l'a produite ; quand une série arrive en OTLP, il les remplit avec `service.name` et `service.instance.id`. D'autre part, tout attribut listé dans `promote_resource_attributes` est promu sous son propre nom, avec les points convertis en traits de soulignement. C'est pourquoi la requête de vérification lit `.metric.host_name` et `.metric.deployment_environment_name`, et non `.metric.host.name`.
+Deux points expliquent ce double emploi. D'une part, Prometheus associe historiquement les labels `job` et `instance` à chaque série, pour identifier la cible qui l'a produite ; quand une série arrive en OTLP, il les remplit avec `service.name` et `service.instance.id`. D'autre part, tout attribut listé dans `promote_resource_attributes` est promu sous son propre nom, avec les points convertis en traits de soulignement. C'est pourquoi la requête de vérification lit `.metric.host_name` et `.metric.deployment_environment_name`, et non `.metric.host.name`.
 
-<sub>111</sub> Le schéma suivant résume cette promotion, du collector de `srv-N` jusqu'à la série stockée par Prometheus sur `clt-N` :
+<sub>56</sub> Le schéma suivant résume cette promotion, du collector de `srv-N` jusqu'à la série stockée par Prometheus sur `clt-N` :
 
 ```mermaid
 ---
@@ -1207,9 +1207,9 @@ flowchart LR
   class L back
 ```
 
-<sub>112</sub> Sans ce bloc, les quatre serveurs enverraient la même série `system_cpu_load_average_1m` sans aucun label, et il serait impossible de savoir de quelle machine elle provient.
+Sans ce bloc, les quatre serveurs enverraient la même série `system_cpu_load_average_1m` sans aucun label, et il serait impossible de savoir de quelle machine elle provient.
 
-<sub>113</sub> Attendez une minute, puis interrogez Prometheus pour voir les métriques des serveurs d'infrastructure :
+<sub>57</sub> Attendez une minute, puis interrogez Prometheus pour voir les métriques des serveurs d'infrastructure :
 
 ```bash
 sleep 60
@@ -1221,7 +1221,7 @@ curl -s -G "http://localhost:9090/api/v1/query" \
   | jq -r '.data.result[] | "\(.metric.host_name) [\(.metric.deployment_environment_name)] : \(.value[1])"'
 ```
 
-<sub>114</sub> La sortie affiche une série par serveur qui envoie des métriques système, avec le rôle entre crochets. Le frontend n'y figure pas, puisque ses métriques système sont désactivées :
+La sortie affiche une série par serveur qui envoie des métriques système, avec le rôle entre crochets. Le frontend n'y figure pas, puisque ses métriques système sont désactivées :
 
 ```text
 srv-0 [lab4] : 0.19
@@ -1229,7 +1229,7 @@ srv4-0 [backend] : 0.05
 srv3-0 [database] : 0.13
 ```
 
-<sub>115</sub> `srv-frontend` n'apparaît pas : la variable `otelcol_hostmetrics_enabled: false` a supprimé le receiver `hostmetrics` et le pipeline `metrics` de sa configuration.
+<sub>58</sub> `srv-frontend` n'apparaît pas : la variable `otelcol_hostmetrics_enabled: false` a supprimé le receiver `hostmetrics` et le pipeline `metrics` de sa configuration.
 
 ![Métriques système des serveurs dans Prometheus, différenciées par instance et par job](img/lab04-prometheus-multi.png)
 
@@ -1243,7 +1243,7 @@ srv3-0 [database] : 0.13
 
 ## Cleanup
 
-<sub>116</sub> Arrêtez les backends du poste de contrôle, puis désinstallez le **collector** du serveur et effacez le paquet téléchargé :
+Arrêtez les backends du poste de contrôle, puis désinstallez le **collector** du serveur et effacez le paquet téléchargé :
 
 ```bash
 cd ~/lab04
@@ -1265,33 +1265,33 @@ ansible otel -b -m ansible.builtin.file -a "path=/tmp/otelcol-contrib_0.165.0.de
 ansible otel -m ansible.builtin.shell -a 'command -v otelcol-contrib || echo absent'
 ```
 
-<sub>117</sub> La dernière commande affiche `absent` : le binaire, la configuration `/etc/otelcol-contrib` et le paquet dans `/tmp` ont disparu du serveur.
+<sub>59</sub> La dernière commande affiche `absent` : le binaire, la configuration `/etc/otelcol-contrib` et le paquet dans `/tmp` ont disparu du serveur.
 
-<sub>118</sub> Si vous avez réalisé [l'extra 5](#5-installer-node_exporter-sur-un-serveur-et-le-scraper-via-le-collector), désinstallez également `prometheus-node-exporter` sur `srv-N` :
+Si vous avez réalisé [l'extra 5](#5-installer-node_exporter-sur-un-serveur-et-le-scraper-via-le-collector), désinstallez également `prometheus-node-exporter` sur `srv-N` :
 
 ```bash
 ansible otel -b -m ansible.builtin.apt -a "name=prometheus-node-exporter state=absent purge=true"
 ```
 
-<sub>119</sub> Si des serveurs éphémères ont été déployés [à la partie 5](#5-étendre-le-parc--4-serveurs-4-configurations), ils ne se nettoient pas depuis le terminal : votre animateur les détruit en fin de séance avec `animateur/scripts/lab04-vms-destroy.sh`. Aucun playbook n'est nécessaire pour cela, et les machines disparaissent avec leurs paquets et leurs configurations.
+<sub>60</sub> Si des serveurs éphémères ont été déployés [à la partie 5](#5-étendre-le-parc--4-serveurs-4-configurations), ils ne se nettoient pas depuis le terminal : votre animateur les détruit en fin de séance avec `animateur/scripts/lab04-vms-destroy.sh`. Aucun playbook n'est nécessaire pour cela, et les machines disparaissent avec leurs paquets et leurs configurations.
 
-<sub>120</sub> Le dossier `~/lab04` peut être conservé si vous voulez rejouer le lab. Les autres labs ne le réutilisent pas : chacun fournit ses propres fichiers.
+Le dossier `~/lab04` peut être conservé si vous voulez rejouer le lab. Les autres labs ne le réutilisent pas : chacun fournit ses propres fichiers.
 
 ## Extra
 
-<sub>121</sub> À vous de jouer, si le temps le permet. Chaque exercice est guidé pas à pas.
+<sub>61</sub> À vous de jouer, si le temps le permet. Chaque exercice est guidé pas à pas.
 
 ### 1. Un **collector** pour la préproduction et la production
 
-<sub>122</sub> Le cas d'usage est celui d'une équipe qui exploite deux environnements, `preprod` et `prod`, avec un seul **collector** plutôt que deux machines à maintenir. Les contraintes ne sont pas les mêmes :
+Le cas d'usage est celui d'une équipe qui exploite deux environnements, `preprod` et `prod`, avec un seul **collector** plutôt que deux machines à maintenir. Les contraintes ne sont pas les mêmes :
 
 - la production doit être vue vite : lots courts (1 seconde) et métriques système collectées, parce que la capacité de ces serveurs compte ;
 - la préproduction peut attendre : lots longs (10 secondes), pas de métriques système, pour ne pas payer le coût d'une collecte dont personne ne se sert ;
 - les deux flux (streams) doivent rester **séparés et identifiables** : ports différents, donc règles de pare-feu différentes, et un attribut `tenant` qui permet de retrouver l'origine de chaque donnée dans le backend.
 
-<sub>123</sub> C'est exactement ce qu'un template Jinja2 rend confortable : on décrit les deux environnements une fois, et le reste est généré. Sans boucle, il faudrait recopier six blocs de configuration à la main, avec le risque d'en oublier un.
+<sub>62</sub> C'est exactement ce qu'un template Jinja2 rend confortable : on décrit les deux environnements une fois, et le reste est généré. Sans boucle, il faudrait recopier six blocs de configuration à la main, avec le risque d'en oublier un.
 
-<sub>124</sub> Ajoutez la description des deux locataires à la fin de `host_vars/$SRV_HOST.yml` :
+Ajoutez la description des deux locataires à la fin de `host_vars/$SRV_HOST.yml` :
 
 ```bash
 cd ~/lab04
@@ -1315,7 +1315,7 @@ otelcol_tenants:
 EOF
 ```
 
-<sub>125</sub> Écrivez un second template, à côté du premier :
+<sub>63</sub> Écrivez un second template, à côté du premier :
 
 ```bash
 cat > templates/config-tenants.yaml.j2 <<'EOF'
@@ -1384,16 +1384,16 @@ service:
 EOF
 ```
 
-<sub>126</sub> Quatre constructions se combinent ici :
+Quatre constructions se combinent ici :
 
 - la boucle `{% for t in otelcol_tenants %}` produit un bloc par environnement ;
 - la condition `{% if t.hostmetrics %}` n'ajoute le receiver et le pipeline `metrics` que pour ceux qui en veulent ;
 - l'accès `{{ t.port_grpc }}` et `{{ t.batch_timeout }}` lit les champs de l'élément en cours d'itération ;
 - le suffixe `{{ t.name }}` garantit l'unicité des noms de composants, exigée par le **collector**.
 
-<sub>127</sub> L'attribut `service.instance.id` mérite une explication : c'est lui qui devient le label `instance` dans Prometheus. Sans lui, les séries de métriques arrivent sans label et deviennent impossibles à attribuer à un environnement.
+<sub>64</sub> L'attribut `service.instance.id` mérite une explication : c'est lui qui devient le label `instance` dans Prometheus. Sans lui, les séries de métriques arrivent sans label et deviennent impossibles à attribuer à un environnement.
 
-<sub>128</sub> Rendez le template sur `clt-N` et validez-le avant de déployer :
+Rendez le template sur `clt-N` et validez-le avant de déployer :
 
 ```bash
 ansible localhost -m ansible.builtin.template \
@@ -1407,7 +1407,7 @@ docker run --rm -v /tmp/config-tenants.yaml:/config.yaml:ro \
 echo "code retour : $?"
 ```
 
-<sub>129</sub> Le rendu montre les pipelines de chaque environnement, et la différence entre les deux :
+<sub>65</sub> Le rendu montre les pipelines de chaque environnement, et la différence entre les deux :
 
 ```yaml
 service:
@@ -1426,9 +1426,9 @@ service:
       exporters: [otlp_grpc/jaeger]
 ```
 
-<sub>130</sub> `prod` a deux pipelines, `preprod` un seul : la condition a suffi à produire cette différence.
+`prod` a deux pipelines, `preprod` un seul : la condition a suffi à produire cette différence.
 
-<sub>131</sub> Le schéma suivant situe les deux locataires dans le même processus du **collector** : deux jeux de receivers, deux jeux de pipelines, mais un seul `memory_limiter` et une seule paire d'exporters, partagés par tous les pipelines.
+<sub>66</sub> Le schéma suivant situe les deux locataires dans le même processus du **collector** : deux jeux de receivers, deux jeux de pipelines, mais un seul `memory_limiter` et une seule paire d'exporters, partagés par tous les pipelines.
 
 ```mermaid
 ---
@@ -1467,7 +1467,7 @@ flowchart LR
   class E1,E2 expr
 ```
 
-<sub>132</sub> Déployez cette configuration en pointant la tâche sur le nouveau template :
+Déployez cette configuration en pointant la tâche sur le nouveau template :
 
 ```bash
 sed -i 's|src: config.yaml.j2|src: config-tenants.yaml.j2|' playbook.yml
@@ -1481,7 +1481,7 @@ ansible-playbook playbook.yml | grep -A3 'PLAY RECAP'
 srv-N.monlab.top           : ok=6    changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 ```
 
-<sub>133</sub> Les quatre ports OTLP sont en écoute, deux par environnement :
+<sub>67</sub> Les quatre ports OTLP sont en écoute, deux par environnement :
 
 ```bash
 ansible otel -m ansible.builtin.shell -a "ss -ltn | grep -E ':(4317|4318|5317|5318) '"
@@ -1494,7 +1494,7 @@ LISTEN 0      4096               *:4318            *:*
 LISTEN 0      4096               *:4317            *:*
 ```
 
-<sub>134</sub> Envoyez maintenant trois traces sur chaque endpoint, sous le même nom de service : c'est la situation réelle d'une application déployée dans les deux environnements.
+Envoyez maintenant trois traces sur chaque endpoint, sous le même nom de service : c'est la situation réelle d'une application déployée dans les deux environnements.
 
 ```bash
 ssh root@$SRV_HOST 'docker run --rm --network host ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 traces --otlp-endpoint localhost:4317 --otlp-insecure --rate 10 --traces 3 --service checkout-web'
@@ -1508,7 +1508,7 @@ ssh root@$SRV_HOST 'docker run --rm --network host ghcr.io/open-telemetry/opente
 sleep 5
 ```
 
-<sub>135</sub> Dans Jaeger, le même service apparaît deux fois, distingué par les attributs que le template a posés :
+<sub>68</sub> Dans Jaeger, le même service apparaît deux fois, distingué par les attributs que le template a posés :
 
 ```bash
 curl -s 'http://localhost:16686/api/v3/traces?query.service_name=checkout-web&query.startTimeMin=2020-01-01T00:00:00Z&query.startTimeMax=2030-01-01T00:00:00Z' \
@@ -1522,9 +1522,9 @@ tenant=preprod
 tenant=prod
 ```
 
-<sub>136</sub> C'est la valeur du modèle : un seul pipeline de collecte, et des données attribuables à leur environnement sans ambiguïté, ce qui permet de répondre à « quelle est la latence en production ? » sans mélanger la préproduction.
+C'est la valeur du modèle : un seul pipeline de collecte, et des données attribuables à leur environnement sans ambiguïté, ce qui permet de répondre à « quelle est la latence en production ? » sans mélanger la préproduction.
 
-<sub>137</sub> Vérifiez enfin la différence de traitement sur les métriques. Après une trentaine de secondes, seul `prod` envoie des séries système :
+<sub>69</sub> Vérifiez enfin la différence de traitement sur les métriques. Après une trentaine de secondes, seul `prod` envoie des séries système :
 
 ```bash
 sleep 35
@@ -1540,13 +1540,13 @@ curl -s -G http://localhost:9090/api/v1/query \
 instance=otelcol-prod : 12 series
 ```
 
-<sub>138</sub> `preprod` n'apparaît pas : sa variable `hostmetrics: false` a supprimé le receiver et le pipeline `metrics` de sa configuration. Une seule variable change, et le template produit deux comportements.
+`preprod` n'apparaît pas : sa variable `hostmetrics: false` a supprimé le receiver et le pipeline `metrics` de sa configuration. Une seule variable change, et le template produit deux comportements.
 
 > [!NOTE]
 >
 > Ce modèle a une limite bien réelle, à connaître avant de le déployer en production. Les deux environnements partagent le même processus et donc le même `memory_limiter` : si la préproduction sature son endpoint, le limiteur peut rejeter aussi les données de production. C'est le problème du voisin bruyant, et c'est pourquoi certains parcs isolent la production sur un **collector** distinct. [Le lab 9](Lab_09_Gateway_Production.md) traite ces questions de **gateway** de production.
 
-<sub>139</sub> Revenez à la configuration du lab avant de continuer :
+<sub>70</sub> Revenez à la configuration du lab avant de continuer :
 
 ```bash
 sed -i 's|src: config-tenants.yaml.j2|src: config.yaml.j2|' playbook.yml
@@ -1558,23 +1558,23 @@ ansible-playbook playbook.yml | grep -A3 'PLAY RECAP'
 
 ### 2. Activer le scraper network du receiver hostmetrics (extra)
 
-<sub>140</sub> Le receiver `hostmetrics` active par défaut seulement `cpu`, `load` et `memory`. Pour collecter également les métriques réseau (`network` : paquets, octets, erreurs, etc.), décommentez la ligne suivante dans le template :
+Le receiver `hostmetrics` active par défaut seulement `cpu`, `load` et `memory`. Pour collecter également les métriques réseau (`network` : paquets, octets, erreurs, etc.), décommentez la ligne suivante dans le template :
 
 ```yaml
       network: {}
 ```
 
-<sub>141</sub> Redéployez ensuite le **collector** avec le playbook. Vous verrez alors de nouvelles métriques telles que `system_network_packets` ou `system_network_io` dans Prometheus.
+<sub>71</sub> Redéployez ensuite le **collector** avec le playbook. Vous verrez alors de nouvelles métriques telles que `system_network_packets` ou `system_network_io` dans Prometheus.
 
 ### 3. Conserver les versions précédentes de la configuration
 
-<sub>142</sub> Ajoutez le paramètre `backup: true` à la tâche de configuration et observez les copies conservées sur le serveur à chaque modification.
+Ajoutez le paramètre `backup: true` à la tâche de configuration et observez les copies conservées sur le serveur à chaque modification.
 
 ### 4. Revenir à une version antérieure du binaire
 
-<sub>143</sub> Pour l'exercice, imaginez qu'une régression de la version 0.165.0 vous oblige à revenir à 0.164.0 le temps d'un diagnostic. Le playbook rend l'opération simple, à deux conditions : changer les sommes de contrôle avec la version, et prévenir APT qu'il s'agit d'une descente de version.
+<sub>72</sub> Pour l'exercice, imaginez qu'une régression de la version 0.165.0 vous oblige à revenir à 0.164.0 le temps d'un diagnostic. Le playbook rend l'opération simple, à deux conditions : changer les sommes de contrôle avec la version, et prévenir APT qu'il s'agit d'une descente de version.
 
-<sub>144</sub> Commencez par la version et les sommes. Celles de la 0.164.0 sont publiées avec la version :
+Commencez par la version et les sommes. Celles de la 0.164.0 sont publiées avec la version :
 
 ```bash
 sed -i 's/otelcol_version: "0.165.0"/otelcol_version: "0.164.0"/' group_vars/all.yml
@@ -1592,7 +1592,7 @@ sed -i 's|arm64: "sha256:4dcfb6b69dfa10132c593ed5782823eec79dc408a0d68291e1c4adc
 grep -A3 'otelcol_checksums' group_vars/all.yml
 ```
 
-<sub>145</sub> Autorisez ensuite la descente de version dans la tâche d'installation :
+<sub>73</sub> Autorisez ensuite la descente de version dans la tâche d'installation :
 
 ```bash
 sed -i 's|        deb: "/tmp/otelcol-contrib_{{ otelcol_version }}.deb"|        deb: "/tmp/otelcol-contrib_{{ otelcol_version }}.deb"\n        allow_downgrade: true|' playbook.yml
@@ -1608,7 +1608,7 @@ grep -A3 'deb:' playbook.yml | head -4
         state: present
 ```
 
-<sub>146</sub> Déployez, puis contrôlez la version installée et l'état du service :
+Déployez, puis contrôlez la version installée et l'état du service :
 
 ```bash
 ansible-playbook playbook.yml
@@ -1626,7 +1626,7 @@ ansible otel -a 'systemctl is-active otelcol-contrib'
 ansible otel -a 'dpkg-query -W otelcol-contrib'
 ```
 
-<sub>147</sub> On obtient la version antérieure, un service actif et un paquet marqué `0.164.0` :
+<sub>74</sub> On obtient la version antérieure, un service actif et un paquet marqué `0.164.0` :
 
 ```text
 otelcol-contrib version 0.164.0
@@ -1634,7 +1634,7 @@ active
 otelcol-contrib	0.164.0
 ```
 
-<sub>148</sub> Envoyez cinq traces pour vérifier que le **collector** déployé fonctionne toujours :
+Envoyez cinq traces pour vérifier que le **collector** déployé fonctionne toujours :
 
 ```bash
 ssh root@$SRV_HOST 'docker run --rm --network host ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.165.0 traces --otlp-endpoint localhost:4317 --otlp-insecure --rate 10 --traces 5 --service ansible-demo'
@@ -1655,9 +1655,9 @@ curl -s 'http://localhost:16686/api/v3/traces?query.service_name=ansible-demo&qu
 
 ### 5. Installer node_exporter sur un serveur et le scraper via le **collector**
 
-<sub>149</sub> Dans ce lab, les métriques système ont été collectées avec le receiver `hostmetrics`. Une autre approche très fréquente en production consiste à installer `node_exporter` (l'exporter Prometheus officiel pour Linux) sur la machine cible, puis à le faire scraper localement par le **collector** OpenTelemetry avec le receiver `prometheus`.
+<sub>75</sub> Dans ce lab, les métriques système ont été collectées avec le receiver `hostmetrics`. Une autre approche très fréquente en production consiste à installer `node_exporter` (l'exporter Prometheus officiel pour Linux) sur la machine cible, puis à le faire scraper localement par le **collector** OpenTelemetry avec le receiver `prometheus`.
 
-<sub>150</sub> Le schéma suivant zoome sur ce flux entre `srv-N` et le Prometheus central sur `clt-N` :
+Le schéma suivant zoome sur ce flux entre `srv-N` et le Prometheus central sur `clt-N` :
 
 ```mermaid
 ---
@@ -1686,14 +1686,14 @@ flowchart LR
   class PROM backend
 ```
 
-<sub>151</sub> Ce montage présente trois intérêts concrets :
+<sub>76</sub> Ce montage présente trois intérêts concrets :
 
 - **Conserver les tableaux de bord et alertes existants.** Le receiver `hostmetrics` produit des métriques aux conventions sémantiques OpenTelemetry (`system_cpu_*`, `system_memory_*`), alors que les tableaux de bord Grafana historiques et de nombreuses règles d'alerte PromQL reposent sur les noms de `node_exporter` (`node_cpu_seconds_total`, `node_memory_MemAvailable_bytes`, `node_load1`). Scraper `node_exporter` via le **collector** permet de basculer le transport vers OpenTelemetry sans réécrire immédiatement les requêtes existantes.
 - **Remplacer le pull entrant par un export OTLP sortant.** Avec un scrape Prometheus classique, le serveur Prometheus central doit ouvrir une connexion entrante vers le port `9100` de chaque machine du parc, ce qui complique les règles de pare-feu. Ici, `node_exporter` est interrogé en local sur `127.0.0.1:9100` par le **collector**, qui pousse ensuite les métriques en OTLP sortant en leur appliquant le même pipeline que les autres signaux (`resourcedetection`, `resource`, `batch`, chiffrement, filtrage).
 - **Appliquer un modèle unique à tout l'écosystème Prometheus.** La même configuration de receiver `prometheus` sert à collecter n'importe quel exporter existant (`postgres_exporter`, `nginx_exporter`, ou un endpoint `/metrics` applicatif) sans déployer d'agent Prometheus dédié.
 
-<sub>152</sub> En contrepartie, faire tourner simultanément `hostmetrics` et `node_exporter` duplique les métriques système et augmente la cardinalité stockée dans Prometheus (plus de 1 700 séries `node_*` par serveur). En production, on ne conserve généralement que l'un des deux receivers.
+En contrepartie, faire tourner simultanément `hostmetrics` et `node_exporter` duplique les métriques système et augmente la cardinalité stockée dans Prometheus (plus de 1 700 séries `node_*` par serveur). En production, on ne conserve généralement que l'un des deux receivers.
 
-<sub>153</sub> **Consigne** : déployez `prometheus-node-exporter` sur un unique serveur (`srv-N`, groupe `otel`), ajoutez une variable booléenne `otelcol_node_exporter_enabled` (désactivée par défaut dans `group_vars/all.yml`, activée uniquement dans `host_vars/$SRV_HOST.yml`) pour activer un receiver `prometheus/node_exporter` dans `templates/config.yaml.j2` qui scrape `127.0.0.1:9100`, redéployez sur `srv-N`, puis vérifiez dans Prometheus sur `clt-N` que la métrique `node_load1` apparaît avec les attributs de ressource (`host_name`, `deployment_environment_name`, `instance`, `job`).
+<sub>77</sub> **Consigne** : déployez `prometheus-node-exporter` sur un unique serveur (`srv-N`, groupe `otel`), ajoutez une variable booléenne `otelcol_node_exporter_enabled` (désactivée par défaut dans `group_vars/all.yml`, activée uniquement dans `host_vars/$SRV_HOST.yml`) pour activer un receiver `prometheus/node_exporter` dans `templates/config.yaml.j2` qui scrape `127.0.0.1:9100`, redéployez sur `srv-N`, puis vérifiez dans Prometheus sur `clt-N` que la métrique `node_load1` apparaît avec les attributs de ressource (`host_name`, `deployment_environment_name`, `instance`, `job`).
 
-<sub>154</sub> La solution technique détaillée est disponible dans [solutions/sol-4-5.md](solutions/sol-4-5.md).
+La solution technique détaillée est disponible dans [solutions/sol-4-5.md](solutions/sol-4-5.md).

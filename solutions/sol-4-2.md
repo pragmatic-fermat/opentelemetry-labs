@@ -1,12 +1,14 @@
-# Solutions Lab 4 – Extras 3 et 4
+# Solution Lab 4 - Extra 2 : Activer le scraper `network` du receiver `hostmetrics`
 
-## Extra 3 : Activer le scraper `network` du receiver `hostmetrics`
+## Objectif
 
-### Solution
+<sub>1</sub> Activer le scraper `network` du receiver `hostmetrics`, redéployer le **collector** et vérifier que les métriques réseau arrivent dans Prometheus.
 
-1. **Modifier le template** (`templates/config.yaml.j2`)
+## Solution
 
-Dans la section `hostmetrics`, décommentez et activez le scraper `network` :
+### 1. Modifier le template
+
+Dans `templates/config.yaml.j2`, décommentez et activez le scraper `network` dans la section `hostmetrics` :
 
 ```yaml
   hostmetrics:
@@ -15,31 +17,28 @@ Dans la section `hostmetrics`, décommentez et activez le scraper `network` :
       cpu: {}
       load: {}
       memory: {}
-      network: {}          # ← activé
+      network: {}          # active
 ```
 
-2. **Redéployer**
+### 2. Redéployer
 
 ```bash
 ansible-playbook playbook.yml
 ```
 
-3. **Vérifier**
+### 3. Vérifier
 
 ```bash
-# Nombre de métriques réseau collectées
 ansible otel -a 'grep -c network /etc/otelcol-contrib/config.yaml'
+```
 
-# Exemple de métriques visibles dans Prometheus
+```bash
 curl -s -G "http://localhost:9090/api/v1/query" \
   --data-urlencode "query=system_network_packets" \
   | jq -r '.data.result[0] | "\(.metric.instance) : \(.value[1])"'
 ```
 
-Vous verrez alors des métriques telles que :
-- `system_network_packets`
-- `system_network_io`
-- `system_network_errors`
+<sub>2</sub> Vous verrez alors des métriques telles que `system_network_packets`, `system_network_io` et `system_network_errors`.
 
 ---
 
@@ -48,42 +47,3 @@ Vous verrez alors des métriques telles que :
 - [Retour au lab 4](../Lab_04_Ansible_Jinja2.md#2-activer-le-scraper-network-du-receiver-hostmetrics-extra)
 - [Solution suivante (Extra 3)](sol-4-3.md)
 - [Retour au répertoire solutions](../solutions/)
-
----
-
-## Extra 4 : Conserver les versions précédentes de la configuration
-
-### Solution
-
-1. **Ajouter le paramètre `backup` dans la tâche de template**
-
-Modifiez la tâche `Déployer la configuration` dans `playbook.yml` :
-
-```yaml
-      ansible.builtin.template:
-        src: config.yaml.j2
-        dest: /etc/otelcol-contrib/config.yaml
-        owner: root
-        group: otelcol-contrib
-        mode: "0640"
-        validate: /usr/bin/otelcol-contrib validate --config=%s
-        backup: true          # ← ajouté
-      notify: Redémarrer otelcol-contrib
-```
-
-2. **Vérifier les sauvegardes après plusieurs déploiements**
-
-```bash
-ls -l /etc/otelcol-contrib/config.yaml*
-```
-
-Ansible crée automatiquement des fichiers de la forme :
-- `config.yaml.2026-11-24@09:45:12~`
-- `config.yaml.2026-11-24@09:47:33~`
-
-Chaque déploiement conserve une copie horodatée de l’ancienne version.
-
----
-
-Ces deux extras sont maintenant documentés de manière autonome dans `solutions/sol-4-3.md`.  
-Vous pouvez les copier-coller ou les adapter selon vos besoins.

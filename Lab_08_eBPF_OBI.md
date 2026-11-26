@@ -1,6 +1,6 @@
 # Lab 8 : eBPF et OBI, instrumenter sans toucher au code
 
-Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédiger. Hors périmètre actuel : le lab est conservé pour mémoire.
+<sub>1</sub> Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédiger. Hors périmètre actuel : le lab est conservé pour mémoire.
 
 # Objectifs
 
@@ -27,11 +27,11 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 ## Environnement
 
-Machine(s) : `srv-N` (hôte Linux, noyau compatible à vérifier) et éventuellement `k8s-N`.
+<sub>2</sub> Machine(s) : `srv-N` (hôte Linux, noyau compatible à vérifier) et éventuellement `k8s-N`.
 
 Prérequis : [lab 5](Lab_05_NodeJS_Nginx.md) ou [lab 6](Lab_06_Java_Python_DotNet_PHP.md) recommandé, pour comparer avec l'auto-instrumentation.
 
-Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
+<sub>3</sub> Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 
 ## 1. Principe et prérequis
 
@@ -42,7 +42,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## 2. Déployer OBI à côté d'une application
 
-À compléter. Points couverts :
+<sub>4</sub> À compléter. Points couverts :
 
 - Installer OBI à une version épinglée.
 - Désigner l'application à observer.
@@ -56,7 +56,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## 4. Comparer avec l'auto-instrumentation
 
-À compléter. Points couverts :
+<sub>5</sub> À compléter. Points couverts :
 
 - Comparer profondeur des spans, attributs et surcoût.
 - Dresser un tableau des écarts.
@@ -70,7 +70,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## Cleanup
 
-À compléter : commandes qui défont ce que le lab a démarré.
+<sub>6</sub> À compléter : commandes qui défont ce que le lab a démarré.
 
 ## Extra
 

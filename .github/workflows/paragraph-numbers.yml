@@ -1,0 +1,66 @@
+name: Numerotation des paragraphes
+
+# Verifie que chaque lab et chaque fiche de solution porte bien ses numeros de
+# paragraphe. La renumerotation elle-meme reste une action explicite
+# (workflow_dispatch) : la CI ne pousse jamais de commit surprise sur main.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Committer et pousser la renumerotation sur la branche courante"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  verifier:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Verifier la numerotation
+        run: |
+          ./tools/number-paragraphs.py --check Lab_*.md solutions/sol*.md
+
+      - name: Rappel en cas d'echec
+        if: failure()
+        run: |
+          echo "Des fichiers ne sont pas numerotes."
+          echo "Lancez en local, puis commitez :"
+          echo "  ./tools/number-paragraphs.py Lab_*.md solutions/sol*.md"
+
+  renumeroter:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Renumeroter les labs et les solutions
+        run: |
+          ./tools/number-paragraphs.py Lab_*.md solutions/sol*.md
+
+      - name: Afficher le resultat
+        run: |
+          git --no-pager diff --stat
+
+      - name: Commiter si demande
+        if: inputs.commit
+        run: |
+          if git diff --quiet; then
+            echo "Rien a commiter."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Lab_*.md solutions/sol*.md
+          git commit -m "CI : renumerotation des paragraphes"
+          git push

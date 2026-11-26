@@ -1,6 +1,6 @@
 # Lab 9 : **gateway** et production, échantillonnage, sécurité et fiabilité
 
-Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédiger. Hors périmètre actuel : le lab est conservé pour mémoire.
+<sub>1</sub> Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédiger. Hors périmètre actuel : le lab est conservé pour mémoire.
 
 # Objectifs
 
@@ -28,11 +28,11 @@ Statut : objectifs et contenu de haut niveau (HLD) rédigés, détail à rédige
 
 ## Environnement
 
-Machine(s) : `clt-N` (Docker Compose) ou `k8s-N`, à confirmer à la rédaction.
+<sub>2</sub> Machine(s) : `clt-N` (Docker Compose) ou `k8s-N`, à confirmer à la rédaction.
 
 Prérequis : [lab 1](Lab_01_Socle.md) et [lab 3](Lab_03_Kubernetes.md) recommandés (topologie **agent** et **gateway**).
 
-Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
+<sub>3</sub> Versions : à vérifier dans les registres et à dater au moment de la rédaction détaillée.
 
 ## 1. Topologie **agent** et **gateway** de départ
 
@@ -43,7 +43,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## 2. Échantillonnage : head et tail
 
-À compléter. Points couverts :
+<sub>4</sub> À compléter. Points couverts :
 
 - Configurer un échantillonnage probabiliste en tête.
 - Configurer des politiques de tail sampling et comparer. Point de discussion : tous les spans d'une trace doivent arriver sur la même **gateway**, ce que détaille [la partie 6](#6-limites-du-tail-sampling-et-répartition-sur-plusieurs-répliques).
@@ -57,7 +57,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## 4. Authentification
 
-À compléter. Points couverts :
+<sub>5</sub> À compléter. Points couverts :
 
 - Activer une extension d'authentification sur la **gateway**.
 - Tester un client autorisé et un client refusé.
@@ -71,7 +71,7 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## 6. Limites du tail sampling et répartition sur plusieurs répliques
 
-À compléter. Points couverts, sans entrer dans la configuration :
+<sub>6</sub> À compléter. Points couverts, sans entrer dans la configuration :
 
 - le tail sampling impose un traitement **par trace** : la **gateway** doit recevoir tous les spans d'une trace, attendre la fin de la trace, puis décider. Ce que cela coûte en mémoire (état des traces en cours) et en latence de décision ;
 - le piège d'un Service Kubernetes ordinaire : avec plusieurs répliques de **gateway**, le load balancer répartit les connexions sans tenir compte des traces, et les spans d'une même trace se dispersent. Chaque réplique décide alors seule, avec une vue partielle : traces tronquées, décisions incohérentes ;
@@ -85,4 +85,4 @@ Versions : à vérifier dans les registres et à dater au moment de la rédactio
 
 ## Extra
 
-À compléter. Idée : mettre en place l'exporter `loadbalancing` entre deux **gateways** et vérifier qu'une trace reste entière, pour illustrer [la partie 6](#6-limites-du-tail-sampling-et-répartition-sur-plusieurs-répliques).
+<sub>7</sub> À compléter. Idée : mettre en place l'exporter `loadbalancing` entre deux **gateways** et vérifier qu'une trace reste entière, pour illustrer [la partie 6](#6-limites-du-tail-sampling-et-répartition-sur-plusieurs-répliques).

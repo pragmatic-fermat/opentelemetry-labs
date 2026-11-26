@@ -1,6 +1,6 @@
 # Lab 1B : Configurer un premier **collector** et exporter vers Jaeger
 
-Ce deuxième lab du lab 1 se déroule dans le terminal web de `clt-N`, dans le dossier `~/lab01` utilisé lors du [lab 1A](Lab_01A_Voir_la_valeur.md). Jaeger s'exécute sur `srv-N`, démarré depuis `clt-N` par SSH.
+<sub>1</sub> Ce deuxième lab du lab 1 se déroule dans le terminal web de `clt-N`, dans le dossier `~/lab01` utilisé lors du [lab 1A](Lab_01A_Voir_la_valeur.md). Jaeger s'exécute sur `srv-N`, démarré depuis `clt-N` par SSH.
 
 # Objectifs
 
@@ -25,7 +25,7 @@ Ce deuxième lab du lab 1 se déroule dans le terminal web de `clt-N`, dans le d
 
 ## Environnement
 
-L'environnement de travail reste identique à celui du [lab 1A](Lab_01A_Voir_la_valeur.md). L'application continue de fonctionner et ses traces sont pour le moment dirigées vers la console des conteneurs.
+<sub>2</sub> L'environnement de travail reste identique à celui du [lab 1A](Lab_01A_Voir_la_valeur.md). L'application continue de fonctionner et ses traces sont pour le moment dirigées vers la console des conteneurs.
 
 Le schéma ci-dessous illustre l'architecture cible : un **collector** local reçoit les traces applicatives sur `clt-N` et les relaie vers Jaeger sur `srv-N`. L'interface de Jaeger est consultée depuis un navigateur.
 
@@ -53,13 +53,13 @@ flowchart LR
   B([Navigateur]) -->|TCP/16686| J
 ```
 
-Le **collector** s'exécute sur le même hôte que l'application afin de recevoir les données localement et de les relayer vers le backend d'observabilité, déployé sur un serveur dédié.
+<sub>3</sub> Le **collector** s'exécute sur le même hôte que l'application afin de recevoir les données localement et de les relayer vers le backend d'observabilité, déployé sur un serveur dédié.
 
 ## 1. Un premier **collector**
 
 Un **collector** se décrit en YAML.
 
-Les **receivers** reçoivent les données, les **exporters** les envoient ailleurs, et la section `service.pipelines` relie les deux pour chaque type de signal. Un composant déclaré mais absent d'un pipeline n'est pas utilisé.
+<sub>4</sub> Les **receivers** reçoivent les données, les **exporters** les envoient ailleurs, et la section `service.pipelines` relie les deux pour chaque type de signal. Un composant déclaré mais absent d'un pipeline n'est pas utilisé.
 
 Le schéma suivant, tiré de [la documentation officielle du **collector**](https://opentelemetry.io/docs/collector/architecture/), représente un pipeline générique : les données entrent par un ou plusieurs receivers, traversent une série de processors, et le dernier processor les copie vers chaque exporter via un fan-out :
 
@@ -82,11 +82,11 @@ flowchart LR
   FO --> EN[[Exporter N]]
 ```
 
-Dans cette partie, le pipeline `traces` ne compte qu'un receiver (`otlp`) et un exporter (`debug`) ; les processors arrivent [au lab 1C](Lab_01C_Affiner_le_pipeline.md#2-les-premiers-processors).
+<sub>5</sub> Dans cette partie, le pipeline `traces` ne compte qu'un receiver (`otlp`) et un exporter (`debug`) ; les processors arrivent [au lab 1C](Lab_01C_Affiner_le_pipeline.md#2-les-premiers-processors).
 
 Le **collector** reçoit sa configuration en quatre fichiers, un par section, passés avec quatre options `--config` : il les fusionne en une seule configuration. Ce découpage permet d'ajouter des éléments au fil du lab sans réécrire un fichier entier. Les fichiers sont montés depuis le dossier `otelcol/` par le service `otelcol` du compose, que vous démarrierez à la fin de cette partie.
 
-Pour retrouver les options de chaque composant, consultez son README dans le dépôt [opentelemetry-collector-contrib](https://github.com/open-telemetry/opentelemetry-collector-contrib). L'exporter `debug` est documenté dans le dépôt [opentelemetry-collector](https://github.com/open-telemetry/opentelemetry-collector).
+<sub>6</sub> Pour retrouver les options de chaque composant, consultez son README dans le dépôt [opentelemetry-collector-contrib](https://github.com/open-telemetry/opentelemetry-collector-contrib). L'exporter `debug` est documenté dans le dépôt [opentelemetry-collector](https://github.com/open-telemetry/opentelemetry-collector).
 
 Depuis `~/lab01`, créez le receiver `otlp`, qui accepte le HTTP (port 4318) sur toutes les interfaces du conteneur :
 
@@ -105,7 +105,7 @@ EOF
 >
 > Ce lab n'utilise que le transport HTTP de l'OTLP. Il est plus facile à déboguer : une simple requête `curl` suffit, comme [à la partie 3](#3-un-span-sans-sdk), et il passe mieux à travers les proxys. Le transport gRPC reste le plus fréquent dans les configurations de production et dans les exemples de la documentation : vous le croiserez souvent (`protocols: grpc` sur le receiver, exporter `otlp_grpc`).
 
-Créez l'exporter `debug`, avec le niveau de détail `detailed`, qui écrit les données reçues dans les logs du **collector** :
+<sub>7</sub> Créez l'exporter `debug`, avec le niveau de détail `detailed`, qui écrit les données reçues dans les logs du **collector** :
 
 ```bash
 cat > otelcol/exporters.yaml <<'EOF'
@@ -123,7 +123,7 @@ processors: {}
 EOF
 ```
 
-Définissez enfin un pipeline `traces` qui relie le receiver à l'exporter :
+<sub>8</sub> Définissez enfin un pipeline `traces` qui relie le receiver à l'exporter :
 
 ```bash
 cat > otelcol/service.yaml <<'EOF'
@@ -141,7 +141,7 @@ Validez la configuration avant de démarrer. Le script `check.sh` lance la comma
 ./check.sh
 ```
 
-La commande n'affiche rien et se termine sans erreur si la configuration est correcte. En cas d'erreur, le message cite le fichier et la clé en cause.
+<sub>9</sub> La commande n'affiche rien et se termine sans erreur si la configuration est correcte. En cas d'erreur, le message cite le fichier et la clé en cause.
 
 Démarrez le **collector** et lisez ses logs :
 
@@ -150,7 +150,7 @@ docker compose --profile otelcol up -d
 docker compose logs --no-log-prefix otelcol | tail -n 1
 ```
 
-Le dernier message doit se terminer par :
+<sub>10</sub> Le dernier message doit se terminer par :
 
 ```text
 Everything is ready. Begin running and processing data.
@@ -162,7 +162,7 @@ Envoyez cinq traces avec `./tg.sh`, un script fourni qui lance [telemetrygen](ht
 ./tg.sh traces --traces 5
 ```
 
-Chaque trace contient deux spans : un span parent `lets-go` et un span enfant `okey-dokey-0`. Le **collector** a donc affiché dix spans :
+<sub>11</sub> Chaque trace contient deux spans : un span parent `lets-go` et un span enfant `okey-dokey-0`. Le **collector** a donc affiché dix spans :
 
 ```bash
 docker compose logs --no-log-prefix otelcol | grep -c 'Span #'
@@ -183,7 +183,7 @@ On obtient :
 
 ## 2. L'application parle au **collector**
 
-Dans le lab précédent, l'application exportait ses spans sur la console car aucune variable de destination n'était configurée. Dès que `OTEL_EXPORTER_OTLP_ENDPOINT` est définie, le SDK bascule automatiquement ses exports vers le protocole OTLP/HTTP à l'adresse indiquée.
+<sub>12</sub> Dans le lab précédent, l'application exportait ses spans sur la console car aucune variable de destination n'était configurée. Dès que `OTEL_EXPORTER_OTLP_ENDPOINT` est définie, le SDK bascule automatiquement ses exports vers le protocole OTLP/HTTP à l'adresse indiquée.
 
 Le compose lit cette variable dans le fichier `.env` du dossier. Créez-le, puis relancez les services avec le profil du **collector** :
 
@@ -192,7 +192,7 @@ echo 'OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4318' > .env
 docker compose --profile otelcol up -d
 ```
 
-Compose recrée les conteneurs de l'application avec la variable, et démarre le **collector** s'il ne tourne pas. Vérifiez que la console ne reçoit plus de spans et que le **collector**, lui, en reçoit :
+<sub>13</sub> Compose recrée les conteneurs de l'application avec la variable, et démarre le **collector** s'il ne tourne pas. Vérifiez que la console ne reçoit plus de spans et que le **collector**, lui, en reçoit :
 
 ```bash
 ./order.sh coffee 1 alice
@@ -210,7 +210,7 @@ spans sur la console : 0
 spans dans le collector : 3
 ```
 
-On retrouve les trois spans `handle_request`, `GET inventory` et `load_stock`. Les données produites par l'application restent identiques, seul le canal de transmission a changé.
+<sub>14</sub> On retrouve les trois spans `handle_request`, `GET inventory` et `load_stock`. Les données produites par l'application restent identiques, seul le canal de transmission a changé.
 
 > [!NOTE]
 >
@@ -241,7 +241,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces
 }'
 ```
 
-On obtient `200`. Le span est arrivé dans le **collector**, qui l'affiche dans ses logs avec les autres :
+<sub>15</sub> On obtient `200`. Le span est arrivé dans le **collector**, qui l'affiche dans ses logs avec les autres :
 
 ```bash
 docker compose logs --no-log-prefix --since 1m otelcol | grep -c 'manuel'
@@ -253,13 +253,13 @@ On obtient :
 1
 ```
 
-Cette requête illustre le format sous-jacent de l'OTLP : le SDK applicatif automatise la création de cette structure JSON (identifiants, horodatages, attributs) pour chaque opération instrumentée. Ce span apparaîtra dans Jaeger [à la partie 4](#4-jaeger-sur-la-machine-dobservabilité).
+<sub>16</sub> Cette requête illustre le format sous-jacent de l'OTLP : le SDK applicatif automatise la création de cette structure JSON (identifiants, horodatages, attributs) pour chaque opération instrumentée. Ce span apparaîtra dans Jaeger [à la partie 4](#4-jaeger-sur-la-machine-dobservabilité).
 
 ## 4. Jaeger, sur la machine d'observabilité
 
 L'exporter `debug` utilisé jusqu'ici affiche les spans reçus dans les logs du **collector**, sans persistance. Pour stocker et indexer ces traces, il est nécessaire de raccorder le **collector** à un backend d'observabilité.
 
-Jaeger est déployé avec une persistance en mémoire à l'aide du fichier `compose-srv.yaml` sur `srv-N`. Démarrez-le depuis `clt-N` par SSH :
+<sub>17</sub> Jaeger est déployé avec une persistance en mémoire à l'aide du fichier `compose-srv.yaml` sur `srv-N`. Démarrez-le depuis `clt-N` par SSH :
 
 ```bash
 ssh root@$SRV_HOST 'mkdir -p ~/lab01 && cp /root/opentelemetry-labs/config/lab01/compose-srv.yaml ~/lab01/ && cd ~/lab01 && docker compose -f compose-srv.yaml up -d'
@@ -273,7 +273,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://$SRV_HOST:4318/v1/traces
   -H 'Content-Type: application/x-protobuf' --data-binary ''
 ```
 
-Les deux requêtes renvoient le code HTTP 200, confirmant que le port web (16686) et le port de réception OTLP (4318) sont accessibles.
+<sub>18</sub> Les deux requêtes renvoient le code HTTP 200, confirmant que le port web (16686) et le port de réception OTLP (4318) sont accessibles.
 
 > [!NOTE]
 >
@@ -294,7 +294,7 @@ EOF
 >
 > `otlp_http` est le type actuel de l'exporter, l'ancien nom `otlphttp` n'est conservé que comme alias déprécié. Vous le rencontrerez encore dans beaucoup de configurations trouvées sur Internet.
 
-Ajoutez cet exporter au pipeline `traces`, à côté du `debug` :
+<sub>19</sub> Ajoutez cet exporter au pipeline `traces`, à côté du `debug` :
 
 ```bash
 cat > otelcol/service.yaml <<'EOF'
@@ -333,7 +333,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:4318/v1/traces
 }'
 ```
 
-Les traces de l'application, les traces de test émises par `telemetrygen` et le span manuel sont désormais stockés dans Jaeger. Ouvrez l'interface depuis votre poste, dans le navigateur, sur `http://$SRV_HOST:16686` : sélectionnez le service `shop`, cliquez sur **Find Traces**, puis ouvrez une trace pour afficher sa vue en cascade. On y retrouve les trois spans avec leurs relations hiérarchiques et leurs durées respectives.
+<sub>20</sub> Les traces de l'application, les traces de test émises par `telemetrygen` et le span manuel sont désormais stockés dans Jaeger. Ouvrez l'interface depuis votre poste, dans le navigateur, sur `http://$SRV_HOST:16686` : sélectionnez le service `shop`, cliquez sur **Find Traces**, puis ouvrez une trace pour afficher sa vue en cascade. On y retrouve les trois spans avec leurs relations hiérarchiques et leurs durées respectives.
 
 ![Trace du service shop dans Jaeger, avec ses trois spans](img/lab01-jaeger-shop.png)
 
@@ -346,7 +346,7 @@ curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=manuel&query.st
   | jq -r '.result.resourceSpans[0].scopeSpans[0].spans[0].name'
 ```
 
-On obtient :
+<sub>21</sub> On obtient :
 
 ```text
 1
@@ -361,7 +361,7 @@ hello
 
 Reprenez les deux scénarios du [lab 1A](Lab_01A_Voir_la_valeur.md) en vous appuyant cette fois sur l'interface web de Jaeger (`http://$SRV_HOST:16686`), sans consulter les journaux des conteneurs.
 
-Les commandes exécutées sur `clt-N` simulent des incidents en production (panne de service ou latence anormale). L'analyse s'effectue ensuite exclusivement depuis l'interface web de Jaeger sur votre poste, sans consulter les journaux des serveurs applicatifs.
+<sub>22</sub> Les commandes exécutées sur `clt-N` simulent des incidents en production (panne de service ou latence anormale). L'analyse s'effectue ensuite exclusivement depuis l'interface web de Jaeger sur votre poste, sans consulter les journaux des serveurs applicatifs.
 
 ### La panne
 
@@ -373,7 +373,7 @@ docker compose stop inventory
 sleep 5
 ```
 
-La requête échoue avec un code HTTP 502. Dans l'interface de Jaeger, recherchez les traces du service `shop` sur les deux dernières minutes. La trace en échec se signale par un marqueur d'erreur. En l'ouvrant, on constate que le span client `GET inventory` est en erreur, ce qui a propagé le statut d'erreur sur le span parent `handle_request`.
+<sub>23</sub> La requête échoue avec un code HTTP 502. Dans l'interface de Jaeger, recherchez les traces du service `shop` sur les deux dernières minutes. La trace en échec se signale par un marqueur d'erreur. En l'ouvrant, on constate que le span client `GET inventory` est en erreur, ce qui a propagé le statut d'erreur sur le span parent `handle_request`.
 
 ![Trace en échec dans Jaeger, avec le marqueur d'erreur](img/lab01-jaeger-span-fautif.png)
 
@@ -381,7 +381,7 @@ Le détail du span client `GET inventory` montre le statut `ERROR`, le code HTTP
 
 ![Détail du span client GET inventory, en erreur](img/lab01-jaeger-span-fautif-detail.png)
 
-En ligne de commande, la même trace s'obtient via l'API de Jaeger :
+<sub>24</sub> En ligne de commande, la même trace s'obtient via l'API de Jaeger :
 
 ```bash
 curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
@@ -397,7 +397,7 @@ handle_request
 
 ### La lenteur
 
-Redémarrez `inventory`, puis activez son mode lent :
+<sub>25</sub> Redémarrez `inventory`, puis activez son mode lent :
 
 ```bash
 docker compose start inventory
@@ -410,7 +410,7 @@ sleep 5
 
 Dans Jaeger, la trace correspondant à cette commande affiche une durée supérieure à trois secondes. Le diagramme en cascade met en évidence la répartition du temps : l'attente se concentre dans l'opération `load_stock` sur le service `inventory`.
 
-En ligne de commande, la recherche de Jaeger permet d'isoler cette trace par durée minimale. La commande suivante place la durée en début de ligne pour trier facilement le résultat :
+<sub>26</sub> En ligne de commande, la recherche de Jaeger permet d'isoler cette trace par durée minimale. La commande suivante place la durée en début de ligne pour trier facilement le résultat :
 
 ```bash
 curl -s "http://$SRV_HOST:16686/api/v3/traces?query.service_name=shop&query.startTimeMin=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)&query.minDuration=2s" \
@@ -426,7 +426,7 @@ On obtient :
 3016ms load_stock
 ```
 
-La racine et l'appel HTTP affichent la même durée arrondie : l'un contient l'autre, et ce qui les sépare se compte en microsecondes. La cause est `load_stock`, sur `inventory`. Remettez le service rapide :
+<sub>27</sub> La racine et l'appel HTTP affichent la même durée arrondie : l'un contient l'autre, et ce qui les sépare se compte en microsecondes. La cause est `load_stock`, sur `inventory`. Remettez le service rapide :
 
 ```bash
 docker compose up -d inventory
@@ -441,6 +441,6 @@ L'utilisation conjointe du **collector** et d'un backend dédié répond aux lim
 - La visualisation en cascade restitue la chronologie et les relations parent-enfant sans manipulation manuelle de données textuelles.
 - Le diagnostic s'opère à distance sans accès direct à l'environnement d'exécution applicatif.
 
-De plus, l'application reste découplée du backend d'observabilité : elle communique uniquement avec son **collector** local. Une modification d'infrastructure ou de backend de stockage s'effectue dans la configuration du **collector**, sans impacter le code ni le déploiement applicatif.
+<sub>28</sub> De plus, l'application reste découplée du backend d'observabilité : elle communique uniquement avec son **collector** local. Une modification d'infrastructure ou de backend de stockage s'effectue dans la configuration du **collector**, sans impacter le code ni le déploiement applicatif.
 
 Le [lab 1C](Lab_01C_Affiner_le_pipeline.md) aborde la suite de ce traitement : l'application de filtres et de transformations sur les données en transit dans le **collector**.

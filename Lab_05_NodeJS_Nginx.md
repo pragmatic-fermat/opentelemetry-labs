@@ -2,7 +2,7 @@
 
 # Objectifs
 
-À la fin du lab, vous saurez :
+<sub>1</sub> À la fin du lab, vous saurez :
 
 - démarrer une application de microservices (deux services Node.js, RabbitMQ, PostgreSQL, Nginx) et suivre un message de bout en bout, sans télémétrie ;
 - auto-instrumenter un service Node.js avec le SDK OpenTelemetry et exporter ses spans en OTLP vers Jaeger ;
@@ -29,11 +29,11 @@
 
 Ce lab se déroule sur la machine cliente `clt-N`, qui porte les deux services Node.js, la base PostgreSQL, RabbitMQ, Nginx et Jaeger. Toutes les commandes se lancent depuis le terminal web de `clt-N`, dans `/root`.
 
-Le [lab 1](Lab_01_Socle.md) est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, utilisés à la partie 6.
+<sub>2</sub> Le [lab 1](Lab_01_Socle.md) est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, utilisés à la partie 6.
 
 L'application est celle de l'architecture de démonstration Microservices March, distribuée par NGINX. Elle n'est pas recopiée dans le dépôt des labs : vous la clonez à des commits précis, indiqués dans la partie 1.
 
-Versions utilisées dans ce lab :
+<sub>3</sub> Versions utilisées dans ce lab :
 
 | Composant | Version |
 |---|---|
@@ -60,7 +60,7 @@ Les interfaces web passent par les ports ouverts de `clt-N` : Jaeger sur `http:/
 
 ## 1. La pile et le parcours d'un message
 
-L'application se compose de deux services Node.js qui communiquent par RabbitMQ, de deux bases PostgreSQL et d'un proxy Nginx. Le schéma suivant montre les composants sur `clt-N` et le trajet d'un message :
+<sub>4</sub> L'application se compose de deux services Node.js qui communiquent par RabbitMQ, de deux bases PostgreSQL et d'un proxy Nginx. Le schéma suivant montre les composants sur `clt-N` et le trajet d'un message :
 
 ```mermaid
 ---
@@ -85,7 +85,7 @@ Chaque composant ne produit pas ses spans de la même façon, et le lab le montr
 - **RabbitMQ** ne produit aucun span : il transporte les messages et les en-têtes qui contiennent le contexte ([partie 4](#4-instrumenter-notifier)) ;
 - **Jaeger** reçoit tout en OTLP, directement, ou en passant par un **collector** qui masque les données sensibles ([partie 6](#6-données-applicatives-et-masquage)).
 
-Le message suit ces étapes : une requête HTTP arrive sur `messenger`, qui joue le rôle de producteur (publisher), écrit dans sa base puis publie un événement dans RabbitMQ, le courtier de messages (broker) ; `notifier`, le consommateur (subscriber), lit l'événement dans la file (queue), écrit dans sa propre base et simule l'envoi d'un SMS. Sans télémétrie, il faut lire les logs de deux processus dans deux terminaux.
+<sub>5</sub> Le message suit ces étapes : une requête HTTP arrive sur `messenger`, qui joue le rôle de producteur (publisher), écrit dans sa base puis publie un événement dans RabbitMQ, le courtier de messages (broker) ; `notifier`, le consommateur (subscriber), lit l'événement dans la file (queue), écrit dans sa propre base et simule l'envoi d'un SMS. Sans télémétrie, il faut lire les logs de deux processus dans deux terminaux.
 
 Installez d'abord Node.js, avec le gestionnaire de versions `asdf`, comme pour l'application d'origine : la machine ne fournit pas de Node.js, et il faut une version récente pour l'auto-instrumentation actuelle. Le paquet distribué par Ubuntu est trop ancien.
 
@@ -101,7 +101,7 @@ asdf global nodejs 22.23.5
 >
 > La branche `v0.15.0` est la dernière version écrite en Bash. La branche `v0.16.x` réécrit `asdf` en Go, mais le dépôt y conserve les anciens fichiers Shell ainsi qu'un binaire obsolète : chaque appel à `node` ou `npm` affiche alors un avertissement de migration de vingt lignes, qui noie les sorties du lab. `v0.15.0` reste silencieuse et fournit exactement les mêmes commandes.
 
-`asdf` télécharge la version demandée et la rend disponible par des raccourcis (`shims`) placés en tête du `PATH`. Rendez ce `PATH` permanent, pour que les terminaux suivants, et les commandes lancées par les outils, retrouvent Node.js :
+<sub>6</sub> `asdf` télécharge la version demandée et la rend disponible par des raccourcis (`shims`) placés en tête du `PATH`. Rendez ce `PATH` permanent, pour que les terminaux suivants, et les commandes lancées par les outils, retrouvent Node.js :
 
 ```bash
 echo '. /root/.asdf/asdf.sh' >> /root/.bashrc
@@ -134,7 +134,7 @@ nodejs 22.23.5
 >
 > Pourquoi Node.js 22 plutôt qu'une version plus récente ? Le plancher vient de l'auto-instrumentation, pas de l'application. Les paquets OpenTelemetry actuels exigent Node.js 22.15 ou plus : les versions 18 et 20 ne sont plus prises en charge, et l'injection des bibliothèques n'y est plus garantie. Les versions 22 et 24 sont des versions LTS et conviennent. En revanche les versions impaires (23, 25) ne sont pas LTS, et l'injection, qui s'appuie sur des mécanismes internes de Node (`require-in-the-middle`, `import-in-the-middle`, `diagnostics_channel`), y est prise en charge avec du retard. Une version 22 LTS est donc le choix sûr pour un environnement pédagogique.
 
-Clonez les trois dépôts, chacun à un commit précis :
+<sub>7</sub> Clonez les trois dépôts, chacun à un commit précis :
 
 ```bash
 mkdir -p ~/lab05
@@ -163,7 +163,7 @@ v22.23.5
 >
 > Ce lab utilise le port `TCP/8080` de `clt-N`. Si un cluster KinD d'un lab précédent tourne encore, il occupe ce port : contrôlez avec `kind get clusters` et supprimez-le avec `kind delete cluster --name cluster`. Le cleanup du [lab 3](Lab_03_Kubernetes.md) le fait déjà, mais un cluster laissé de côté bloquerait le démarrage du proxy.
 
-Écrivez le fichier Compose qui démarre l'infrastructure et le proxy. Il reprend celui du dépôt `platform`, avec deux différences : les services Node.js n'y figurent pas, vous les lancerez vous-mêmes dans des terminaux, et Jaeger est la version 2.
+<sub>8</sub> Écrivez le fichier Compose qui démarre l'infrastructure et le proxy. Il reprend celui du dépôt `platform`, avec deux différences : les services Node.js n'y figurent pas, vous les lancerez vous-mêmes dans des terminaux, et Jaeger est la version 2.
 
 ```bash
 cd ~/lab05
@@ -265,7 +265,7 @@ notifier-db      Up
 rabbitmq         Up
 ```
 
-Installez les dépendances des deux applications, et mettez à jour `amqplib` vers `0.10.9` :
+<sub>9</sub> Installez les dépendances des deux applications, et mettez à jour `amqplib` vers `0.10.9` :
 
 ```bash
 cd ~/lab05/messenger/app && npm install && npm install --save-exact amqplib@0.10.9
@@ -283,7 +283,7 @@ cd ~/lab05/messenger/app && npm run refresh-db
 cd ~/lab05/notifier/app && npm run refresh-db
 ```
 
-Lancez le notifier dans un premier terminal, dans `~/lab05/notifier/app` :
+<sub>10</sub> Lancez le notifier dans un premier terminal, dans `~/lab05/notifier/app` :
 
 ```bash
 cd ~/lab05/notifier/app
@@ -305,7 +305,7 @@ node index.mjs
 messenger_service listening on port 4000
 ```
 
-Depuis un troisième terminal, créez une conversation et envoyez un message :
+<sub>11</sub> Depuis un troisième terminal, créez une conversation et envoyez un message :
 
 ```bash
 curl -s -X POST -H 'Content-Type: application/json' \
@@ -329,7 +329,7 @@ Le message est créé et renvoyé :
 {"message":{"id":"1","content":"This is the first message","index":1,"user_id":1,"username":"James Blanderphone","conversation_id":1,"inserted_at":"2026-11-21T07:09:32.000Z"}}
 ```
 
-Dans le terminal du notifier, l'événement est arrivé :
+<sub>12</sub> Dans le terminal du notifier, l'événement est arrivé :
 
 ```text
 Received new_message:  {"type":"new_message","channel_id":1,"user_id":1,"index":1,"participant_ids":[1,2]}
@@ -344,7 +344,7 @@ Vous avez donc un parcours complet, mais réparti entre des logs. Aucune trace n
 
 ## 2. Auto-instrumenter messenger
 
-Arrêtez le messenger dans son terminal (Ctrl+C), puis installez les paquets d'instrumentation à version exacte :
+<sub>13</sub> Arrêtez le messenger dans son terminal (Ctrl+C), puis installez les paquets d'instrumentation à version exacte :
 
 ```bash
 cd ~/lab05/messenger/app
@@ -378,7 +378,7 @@ sdk.start();
 EOF
 ```
 
-Relancez le messenger avec le fichier d'instrumentation :
+<sub>14</sub> Relancez le messenger avec le fichier d'instrumentation :
 
 ```bash
 node --import ./tracing.mjs index.mjs
@@ -398,7 +398,7 @@ Rejouez une requête, puis regardez Jaeger dans votre navigateur, sur `http://$C
 
 ## 3. Nommer le service et lire le waterfall
 
-Le nom du service vient de la ressource. Sans elle, Jaeger affiche `unknown_service:node`, ce qui rend la lecture impossible.
+<sub>15</sub> Le nom du service vient de la ressource. Sans elle, Jaeger affiche `unknown_service:node`, ce qui rend la lecture impossible.
 
 Modifiez la ressource pour y ajouter l'environnement et le numéro de participant, et gardez la même structure que dans les autres lab :
 
@@ -426,7 +426,7 @@ sdk.start();
 EOF
 ```
 
-Relancez le messenger :
+<sub>16</sub> Relancez le messenger :
 
 ```bash
 node --import ./tracing.mjs index.mjs
@@ -440,7 +440,7 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
   http://localhost:8080/conversations/1/messages
 ```
 
-Dans la trace dépliée, les spans portent des noms parlants : `middleware - query`, `middleware - corsMiddleware`, `middleware - jsonParser` pour Express, `router - /conversations` pour la route, `pg-pool.connect`, `pg.query:SELECT messenger_dev` pour le client PostgreSQL, et `publish <default>` pour RabbitMQ. La hiérarchie (indentation) montre quel span a appelé lequel.
+<sub>17</sub> Dans la trace dépliée, les spans portent des noms parlants : `middleware - query`, `middleware - corsMiddleware`, `middleware - jsonParser` pour Express, `router - /conversations` pour la route, `pg-pool.connect`, `pg.query:SELECT messenger_dev` pour le client PostgreSQL, et `publish <default>` pour RabbitMQ. La hiérarchie (indentation) montre quel span a appelé lequel.
 
 > [!NOTE]
 >
@@ -452,7 +452,7 @@ Dans la trace dépliée, les spans portent des noms parlants : `middleware - que
 
 Les spans d'Express, comme `router - /conversations` et `middleware - query`, portent les attributs `express.name` et `express.type`.
 
-Les conventions sémantiques HTTP (`http.request.method`, `http.response.status_code`, `url.path`, `http.route`) se trouvent sur le span serveur de la requête, celui dont le nom reprend la méthode et la route, par exemple `POST /conversations/:conversationId/messages`. Ce sont les noms des conventions sémantiques stables d'OpenTelemetry. Les parcs instrumentés avec des versions plus anciennes, et parfois une instrumentation écrite à la main, portent encore les noms précédents (`http.method`, `http.status_code`, `http.target`) : c'est la raison pour laquelle une recherche sur `http.method` peut ne rien renvoyer alors que la donnée existe. [Le lab 7](Lab_07_Instrumentation_Manuelle.md) vous fera écrire ces attributs à la main, avec les noms actuels.
+<sub>18</sub> Les conventions sémantiques HTTP (`http.request.method`, `http.response.status_code`, `url.path`, `http.route`) se trouvent sur le span serveur de la requête, celui dont le nom reprend la méthode et la route, par exemple `POST /conversations/:conversationId/messages`. Ce sont les noms des conventions sémantiques stables d'OpenTelemetry. Les parcs instrumentés avec des versions plus anciennes, et parfois une instrumentation écrite à la main, portent encore les noms précédents (`http.method`, `http.status_code`, `http.target`) : c'est la raison pour laquelle une recherche sur `http.method` peut ne rien renvoyer alors que la donnée existe. [Le lab 7](Lab_07_Instrumentation_Manuelle.md) vous fera écrire ces attributs à la main, avec les noms actuels.
 
 > [!NOTE]
 >
@@ -462,7 +462,7 @@ Les conventions sémantiques HTTP (`http.request.method`, `http.response.status_
 
 Le notifier consomme RabbitMQ : il n'a pas de requête HTTP entrante. Ses spans ne naissent donc pas d'un span serveur HTTP, mais du consommateur de la file : ils se rattacheront à la trace d'origine si le contexte a été propagé dans les en-têtes du message, ce que le bundle d'auto-instrumentation fait ici.
 
-Arrêtez le notifier (Ctrl+C), puis installez les mêmes paquets :
+<sub>19</sub> Arrêtez le notifier (Ctrl+C), puis installez les mêmes paquets :
 
 ```bash
 cd ~/lab05/notifier/app
@@ -498,7 +498,7 @@ sdk.start();
 EOF
 ```
 
-Relancez le notifier :
+<sub>20</sub> Relancez le notifier :
 
 ```bash
 node --import ./tracing.mjs index.mjs
@@ -514,7 +514,7 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
 
 ![Waterfall d'une trace unique traversant messenger, RabbitMQ et notifier dans Jaeger](img/lab05-jaeger-trace-waterfall.png)
 
-Vous pouvez vérifier ce lien sans passer par l'interface, en regroupant les spans par `traceId` et en listant les services présents dans chaque trace :
+<sub>21</sub> Vous pouvez vérifier ce lien sans passer par l'interface, en regroupant les spans par `traceId` et en listant les services présents dans chaque trace :
 
 ```bash
 MIN=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
@@ -532,7 +532,7 @@ f4065dd830a247fc messenger
 f4065dd830a247fc notifier
 ```
 
-Les identifiants des traces du seul notifier apparaissent avec un seul service. La ligne commune est celle qui prouve la propagation : le même identifiant se retrouve chez le producteur et chez le consommateur.
+<sub>22</sub> Les identifiants des traces du seul notifier apparaissent avec un seul service. La ligne commune est celle qui prouve la propagation : le même identifiant se retrouve chez le producteur et chez le consommateur.
 
 > [!NOTE]
 >
@@ -548,7 +548,7 @@ Les identifiants des traces du seul notifier apparaissent avec un seul service. 
 
 Jusqu'ici, les traces commencent au messenger. Nginx, le point d'entrée réel, est invisible. L'image officielle `nginx:1.30.7-otel` embarque directement le module OpenTelemetry natif (`ngx_otel_module.so`) : il crée un span par requête et propage les en-têtes W3C Trace Context vers l'amont.
 
-Remplacez le `Dockerfile` du proxy pour utiliser cette image et charger le module :
+<sub>23</sub> Remplacez le `Dockerfile` du proxy pour utiliser cette image et charger le module :
 
 ```bash
 cd ~/lab05/platform/ingress
@@ -580,7 +580,7 @@ otel_trace_context propagate;
 EOF
 ```
 
-Reconstruisez et relancez le proxy, puis envoyez un message :
+<sub>24</sub> Reconstruisez et relancez le proxy, puis envoyez un message :
 
 ```bash
 cd ~/lab05
@@ -602,7 +602,7 @@ curl -s "http://localhost:16686/api/v3/traces?query.service_name=messenger-lb&qu
   | sort -u
 ```
 
-La liste des services contient bien `messenger-lb`, et la trace de Nginx porte les trois services :
+<sub>25</sub> La liste des services contient bien `messenger-lb`, et la trace de Nginx porte les trois services :
 
 ```text
 aa741ae4cca08afe messenger
@@ -620,7 +620,7 @@ aa741ae4cca08afe notifier
 
 Les développeurs demandent à voir le contenu des messages dans les traces. C'est une mauvaise idée sur des données réelles, mais l'exercice est instructif : vous allez l'ajouter, constater le résultat, puis le masquer proprement.
 
-Créez un petit module qui ajoute un événement au span courant, avec le corps de la requête :
+<sub>26</sub> Créez un petit module qui ajoute un événement au span courant, avec le corps de la requête :
 
 ```bash
 cd ~/lab05/messenger/app
@@ -652,7 +652,7 @@ grep -n "logRequestBody" index.mjs
 19:app.use((req, _res, next) => { logRequestBody(req); next(); });
 ```
 
-Arrêtez le messenger s'il tourne, relancez-le avec l'instrumentation, et envoyez un message qui contient une donnée personnelle :
+<sub>27</sub> Arrêtez le messenger s'il tourne, relancez-le avec l'instrumentation, et envoyez un message qui contient une donnée personnelle :
 
 ```bash
 node --import ./tracing.mjs index.mjs
@@ -670,7 +670,7 @@ Dans Jaeger, ouvrez la dernière trace puis cliquez sur le span `middleware - <a
 {"content":"Appelez-moi au 0612345678"}
 ```
 
-Le masquage ne se fait pas dans le code applicatif, mais dans le **collector** : les applications envoient la donnée brute, et la politique de rétention s'applique au point de passage. Écrivez d'abord sa configuration, un **collector** qui reçoit en OTLP sur `TCP/4319`, masque, puis transmet à Jaeger :
+<sub>28</sub> Le masquage ne se fait pas dans le code applicatif, mais dans le **collector** : les applications envoient la donnée brute, et la politique de rétention s'applique au point de passage. Écrivez d'abord sa configuration, un **collector** qui reçoit en OTLP sur `TCP/4319`, masque, puis transmet à Jaeger :
 
 ```bash
 cd ~/lab05
@@ -726,7 +726,7 @@ curl -s -X POST -H 'User-Id: 1' -H 'Content-Type: application/json' \
   http://localhost:8080/conversations/1/messages
 ```
 
-Dans Jaeger, sur le span `middleware - <anonymous>` de la nouvelle trace, l'événement `request.body` affiche désormais :
+<sub>29</sub> Dans Jaeger, sur le span `middleware - <anonymous>` de la nouvelle trace, l'événement `request.body` affiche désormais :
 
 ```json
 {"content":"Appelez-moi au [numero masque]"}
@@ -752,7 +752,7 @@ curl -s "http://localhost:16686/api/v3/traces?query.service_name=messenger&query
 
 ## Cleanup
 
-Arrêtez les deux services Node.js (Ctrl+C dans leurs terminaux), puis supprimez les conteneurs, les volumes et le **collector** :
+<sub>30</sub> Arrêtez les deux services Node.js (Ctrl+C dans leurs terminaux), puis supprimez les conteneurs, les volumes et le **collector** :
 
 ```bash
 docker rm -f otelcol 2>/dev/null
@@ -763,7 +763,7 @@ docker ps --format '{{.Names}}' | grep -E 'ingress|jaeger|rabbitmq|messenger-db|
 
 La seconde commande supprime aussi les volumes des deux bases PostgreSQL : les données créées pendant le lab ne survivent pas au lab. La dernière commande confirme qu'il ne reste aucun conteneur du [lab 5](Lab_05_NodeJS_Nginx.md).
 
-Le dossier `~/lab05` peut être conservé si vous voulez rejouer le lab : les dépôts clonés et les fichiers `tracing.mjs` et `request-logger.mjs` évitent de tout réinstaller. Les autres labs ne le réutilisent pas.
+<sub>31</sub> Le dossier `~/lab05` peut être conservé si vous voulez rejouer le lab : les dépôts clonés et les fichiers `tracing.mjs` et `request-logger.mjs` évitent de tout réinstaller. Les autres labs ne le réutilisent pas.
 
 > [!NOTE]
 >

@@ -2,7 +2,7 @@
 
 # Objectifs
 
-À la fin du lab, vous saurez :
+<sub>1</sub> À la fin du lab, vous saurez :
 
 - activer l'auto-instrumentation d'une application Java avec l'**agent** Java, sans modifier son code ;
 - faire de même pour une application Python avec `opentelemetry-instrument` ;
@@ -31,11 +31,11 @@ Le lab se déroule sur deux machines :
 - `clt-N` héberge le **collector** OpenTelemetry et le backend Jaeger ;
 - `srv-N` héberge les quatre applications d'exemple (Java, Python, .NET, PHP) et leurs **agents** d'auto-instrumentation.
 
-Vous travaillez depuis le terminal web de `clt-N`. Les opérations sur `srv-N` sont pilotées à distance via des commandes SSH exécutées depuis ce terminal.
+<sub>2</sub> Vous travaillez depuis le terminal web de `clt-N`. Les opérations sur `srv-N` sont pilotées à distance via des commandes SSH exécutées depuis ce terminal.
 
 Prérequis : aucun lab préalable. Ce lab crée ses propres backends à la partie 1 : une instance Jaeger et un **collector** recevant en OTLP, sur `clt-N`. Les machines sont reconstruites par cloud-init : partez du principe qu'aucun service d'un lab précédent ne tourne encore, et que les ports 16686 et 4318 doivent être libres.
 
-Les quatre applications sont fournies dans le dépôt et recopiées sur `srv-N`. Chacune est volontairement minimale : un endpoint HTTP, un appel au service suivant, aucune bibliothèque OpenTelemetry.
+<sub>3</sub> Les quatre applications sont fournies dans le dépôt et recopiées sur `srv-N`. Chacune est volontairement minimale : un endpoint HTTP, un appel au service suivant, aucune bibliothèque OpenTelemetry.
 
 Versions utilisées dans ce lab :
 
@@ -56,7 +56,7 @@ Versions utilisées dans ce lab :
 | PHP | 8.3 (paquet `php8.3-cli`) |
 | Jaeger | 2.23.0 |
 
-Le schéma suivant montre la chaîne : une requête entre par le service Java, qui appelle le service Python, qui appelle le service .NET, qui appelle le service PHP. Les quatre **agents** envoient au même **collector**.
+<sub>4</sub> Le schéma suivant montre la chaîne : une requête entre par le service Java, qui appelle le service Python, qui appelle le service .NET, qui appelle le service PHP. Les quatre **agents** envoient au même **collector**.
 
 ```mermaid
 ---
@@ -84,7 +84,7 @@ flowchart LR
 
 Les backends de ce lab tiennent dans un fichier `compose.yaml` : un Jaeger et un **collector** qui reçoit en OTLP/HTTP.
 
-Sur `clt-N`, créez le dossier de travail `~/lab06` et déployez la stack du **collector** et de Jaeger :
+<sub>5</sub> Sur `clt-N`, créez le dossier de travail `~/lab06` et déployez la stack du **collector** et de Jaeger :
 
 ```bash
 mkdir -p ~/lab06/otelcol
@@ -167,7 +167,7 @@ collector OTLP : 200
 >
 > Si l'API renvoie `{"services":[]}` tout de suite après le démarrage, attendez quelques secondes et réinterrogez : Jaeger enregistre le service `jaeger` lui-même une fois sa télémétrie interne démarrée.
 
-Depuis `clt-N`, préparez le dossier `~/lab06` sur `srv-N` et transférez-y les quatre applications fournies par SCP :
+<sub>6</sub> Depuis `clt-N`, préparez le dossier `~/lab06` sur `srv-N` et transférez-y les quatre applications fournies par SCP :
 
 ```bash
 ssh $SRV_HOST 'mkdir -p ~/lab06'
@@ -181,7 +181,7 @@ checkout.java  inventory.py  pricing  shipping
 
 `pricing` est un projet .NET (`pricing.csproj` et `Program.cs`), compilé à la partie 4.
 
-Les quatre applications s'appellent en cascade. Voici leur comportement, pour comprendre les traces que vous verrez ensuite :
+<sub>7</sub> Les quatre applications s'appellent en cascade. Voici leur comportement, pour comprendre les traces que vous verrez ensuite :
 
 - `checkout` (Java, `TCP/8081`) répond à `GET /order` et appelle `inventory` ;
 - `inventory` (Python, `TCP/8080`) répond à `GET /stock` et appelle `pricing` ;
@@ -192,7 +192,7 @@ Sans instrumentation, une requête produit quatre lignes de log séparées et au
 
 ## 2. Java
 
-Depuis le terminal de `clt-N`, installez le JRE OpenJDK 21 et téléchargez l'**agent** Java sur `srv-N` via SSH :
+<sub>8</sub> Depuis le terminal de `clt-N`, installez le JRE OpenJDK 21 et téléchargez l'**agent** Java sur `srv-N` via SSH :
 
 ```bash
 ssh $SRV_HOST 'apt-get update -qq && apt-get install -y -qq openjdk-21-jdk-headless'
@@ -216,7 +216,7 @@ ssh $SRV_HOST 'cd ~/lab06 && javac checkout.java && ls checkout.class'
 checkout.class
 ```
 
-Démarrez ensuite le service `checkout` sur `srv-N` via SSH en lui attachant l'**agent** Java et en configurant l'export OTLP vers le **collector** sur `clt-N` (`http://$CLT_HOST:4318`) :
+<sub>9</sub> Démarrez ensuite le service `checkout` sur `srv-N` via SSH en lui attachant l'**agent** Java et en configurant l'export OTLP vers le **collector** sur `clt-N` (`http://$CLT_HOST:4318`) :
 
 ```bash
 ssh $SRV_HOST 'cd ~/lab06 && \
@@ -251,7 +251,7 @@ curl -s "http://localhost:16686/api/v3/services" | jq -c '.services'
 {"services":["checkout","jaeger"]}
 ```
 
-Le service `checkout` est enregistré dans Jaeger. Sa trace contient pour l'instant deux spans : le span serveur de la requête et le span client vers `inventory`. Ce dernier échoue avec `ConnectException` car le service Python n'est pas encore démarré.
+<sub>10</sub> Le service `checkout` est enregistré dans Jaeger. Sa trace contient pour l'instant deux spans : le span serveur de la requête et le span client vers `inventory`. Ce dernier échoue avec `ConnectException` car le service Python n'est pas encore démarré.
 
 ## 3. Python
 
@@ -266,7 +266,7 @@ ssh $SRV_HOST 'python3 -m venv ~/lab06/venv && ~/lab06/venv/bin/pip -q install \
 ssh $SRV_HOST '~/lab06/venv/bin/opentelemetry-bootstrap -a install 2>&1 | tail -3'
 ```
 
-`opentelemetry-bootstrap -a install` installe les instrumentations correspondant aux bibliothèques présentes, ici `flask` et `requests`.
+<sub>11</sub> `opentelemetry-bootstrap -a install` installe les instrumentations correspondant aux bibliothèques présentes, ici `flask` et `requests`.
 
 Depuis `clt-N`, démarrez le service Python `inventory` sur `srv-N` via SSH avec la commande `opentelemetry-instrument`, en configurant l'export OTLP vers le **collector** sur `clt-N` :
 
@@ -290,7 +290,7 @@ inventory listening on 8080
 >
 > En Python, il n'y a pas d'option de JVM ni de variable `NODE_OPTIONS`. L'**agent** est un point d'entrée : `opentelemetry-instrument` remplace `python` et pose les hooks avant l'import de l'application.
 
-Sur `clt-N`, sollicitez à nouveau l'entrée de la chaîne (`checkout` sur `srv-N:8081`) et vérifiez dans Jaeger sur `clt-N` que `inventory` apparaît :
+<sub>12</sub> Sur `clt-N`, sollicitez à nouveau l'entrée de la chaîne (`checkout` sur `srv-N:8081`) et vérifiez dans Jaeger sur `clt-N` que `inventory` apparaît :
 
 ```bash
 curl -s http://$SRV_HOST:8081/order
@@ -307,7 +307,7 @@ curl -s "http://localhost:16686/api/v3/services" | jq -c '.services'
 
 ## 4. .NET
 
-Depuis le terminal de `clt-N`, installez le SDK .NET 10 sur `srv-N` via SSH et compilez le service `pricing` :
+<sub>13</sub> Depuis le terminal de `clt-N`, installez le SDK .NET 10 sur `srv-N` via SSH et compilez le service `pricing` :
 
 ```bash
 ssh $SRV_HOST 'curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
@@ -340,7 +340,7 @@ LICENSE  OpenTelemetry.AutoInstrumentation.Native.so  instrument.sh  linux-x64  
 >
 > L'auto-instrumentation 1.20.0 supporte .NET 10 et 11. C'est pourquoi le service cible `net10.0`. Avec une version plus ancienne de l'auto-instrumentation, l'application ne démarrerait pas ou resterait sans spans.
 
-Depuis `clt-N`, démarrez le service .NET `pricing` sur `srv-N` via SSH au moyen du script `instrument.sh`, en configurant l'export OTLP vers le **collector** sur `clt-N` :
+<sub>14</sub> Depuis `clt-N`, démarrez le service .NET `pricing` sur `srv-N` via SSH au moyen du script `instrument.sh`, en configurant l'export OTLP vers le **collector** sur `clt-N` :
 
 ```bash
 ssh $SRV_HOST 'cd ~/lab06 && \
@@ -382,7 +382,7 @@ curl -s "http://localhost:16686/api/v3/services" | jq -c '.services'
 {"services":["checkout","inventory","jaeger","pricing"]}
 ```
 
-`pricing` est maintenant actif et enregistré dans Jaeger. L'appel vers `shipping` échoue encore avec `HttpRequestException` : le service PHP est déployé à la partie suivante.
+<sub>15</sub> `pricing` est maintenant actif et enregistré dans Jaeger. L'appel vers `shipping` échoue encore avec `HttpRequestException` : le service PHP est déployé à la partie suivante.
 
 ## 5. PHP
 
@@ -402,7 +402,7 @@ opentelemetry
 >
 > `pecl` provient du paquet `php-pear`, et la compilation de l'extension nécessite `php8.3-dev` et les outils de compilation (`build-essential`). L'extension `opentelemetry` de PHP se compile à l'installation.
 
-L'extension seule fournit les points d'accroche ; les paquets Composer déterminent ce qui est instrumenté. Depuis `clt-N`, installez l'application et ses dépendances sur `srv-N` via SSH :
+<sub>16</sub> L'extension seule fournit les points d'accroche ; les paquets Composer déterminent ce qui est instrumenté. Depuis `clt-N`, installez l'application et ses dépendances sur `srv-N` via SSH :
 
 ```bash
 ssh $SRV_HOST 'cd ~/lab06/shipping && composer install --no-interaction --no-progress 2>&1 | tail -3'
@@ -439,7 +439,7 @@ ssh $SRV_HOST 'tail -2 /tmp/shipping.log'
 >
 > En PHP, l'activation repose sur deux éléments indispensables : l'extension `opentelemetry` fournit les points d'accroche au niveau du moteur d'exécution, et la variable `OTEL_PHP_AUTOLOAD_ENABLED=true` déclenche l'enregistrement automatique du SDK à chaque requête entrante.
 
-Sur `clt-N`, testez la cascade complète des quatre services en appelant `checkout` sur `srv-N:8081`, puis vérifiez l'enregistrement de l'ensemble des services dans Jaeger sur `clt-N` :
+<sub>17</sub> Sur `clt-N`, testez la cascade complète des quatre services en appelant `checkout` sur `srv-N:8081`, puis vérifiez l'enregistrement de l'ensemble des services dans Jaeger sur `clt-N` :
 
 ```bash
 curl -s http://$SRV_HOST:8081/order
@@ -462,7 +462,7 @@ Sur `clt-N`, envoyez quelques requêtes vers `srv-N` puis ouvrez Jaeger dans le 
 
 ![Traces du service checkout dans Jaeger](img/lab06-jaeger-services.png)
 
-Depuis `clt-N`, interrogez l'API de Jaeger pour analyser les types de spans composant la trace :
+<sub>18</sub> Depuis `clt-N`, interrogez l'API de Jaeger pour analyser les types de spans composant la trace :
 
 ```bash
 for i in $(seq 5); do curl -s http://$SRV_HOST:8081/order > /dev/null; done
@@ -484,7 +484,7 @@ Les kinds se lisent ainsi : `2` désigne un span serveur, `3` un span client, et
 
 ![Waterfall d'une trace à quatre langages](img/lab06-jaeger-trace-4langages.png)
 
-Sur `clt-N`, comparez maintenant les attributs de ressource collectés par Jaeger pour chaque service :
+<sub>19</sub> Sur `clt-N`, comparez maintenant les attributs de ressource collectés par Jaeger pour chaque service :
 
 ```bash
 curl -s "http://localhost:16686/api/v3/traces?query.service_name=checkout&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
@@ -527,7 +527,7 @@ Trois différences sont notables :
 
 ## Cleanup
 
-Le cleanup remet les deux machines dans leur état initial.
+<sub>20</sub> Le cleanup remet les deux machines dans leur état initial.
 
 Depuis le terminal de `clt-N`, arrêtez les quatre services applicatifs sur `srv-N` via SSH et désinstallez les paquets ajoutés :
 
@@ -539,7 +539,7 @@ ssh $SRV_HOST 'pecl uninstall opentelemetry; rm -f /etc/php/8.3/cli/conf.d/20-op
 ssh $SRV_HOST 'apt-get purge -y openjdk-21-jdk-headless python3-venv php8.3-cli php8.3-curl php8.3-xml php8.3-mbstring composer unzip php-pear php8.3-dev build-essential'
 ```
 
-Les services étaient lancés en `nohup`, sans service systemd : `pkill` suffit. Les motifs sont écrits avec des crochets (par exemple `[j]ava.*checkout` ou `[i]nventory.py`) pour éviter que `pkill -f` ne cible le shell SSH qui exécute la commande.
+<sub>21</sub> Les services étaient lancés en `nohup`, sans service systemd : `pkill` suffit. Les motifs sont écrits avec des crochets (par exemple `[j]ava.*checkout` ou `[i]nventory.py`) pour éviter que `pkill -f` ne cible le shell SSH qui exécute la commande.
 
 Depuis `clt-N`, vérifiez par SSH que les processus applicatifs sont arrêtés sur `srv-N` :
 
@@ -551,7 +551,7 @@ ssh $SRV_HOST 'pgrep -af "[j]ava.*checkout|[i]nventory.py|[p]ricing.dll|[p]hp -S
 aucun service
 ```
 
-Sur `clt-N`, arrêtez les conteneurs du **collector** et de Jaeger puis supprimez le dossier de travail :
+<sub>22</sub> Sur `clt-N`, arrêtez les conteneurs du **collector** et de Jaeger puis supprimez le dossier de travail :
 
 ```bash
 cd ~/lab06 && docker compose down -v
@@ -570,7 +570,7 @@ ports libres
 
 ## Extra
 
-Cet exercice optionnel permet d'approfondir les options d'auto-instrumentation disponibles via les variables d'environnement.
+<sub>23</sub> Cet exercice optionnel permet d'approfondir les options d'auto-instrumentation disponibles via les variables d'environnement.
 
 - Désactivez une instrumentation précise par variable d'environnement, par exemple `OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=requests`, et observez la disparition du span client.
 - Excluez un endpoint du traçage avec `OTEL_PYTHON_FLASK_EXCLUDED_URLS=/health`.

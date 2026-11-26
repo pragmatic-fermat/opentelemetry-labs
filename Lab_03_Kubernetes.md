@@ -2,7 +2,7 @@
 
 # Objectifs
 
-À la fin du lab, vous saurez :
+<sub>1</sub> À la fin du lab, vous saurez :
 
 - déployer un **collector** en mode **gateway** puis en mode **agent** (DaemonSet) avec le chart Helm officiel, et adapter sa configuration par un fichier de valeurs ;
 - expliquer comment le chart fusionne votre configuration avec ses valeurs par défaut et ce que fait un preset ;
@@ -27,13 +27,13 @@
 
 Ce lab se déroule sur deux machines : `clt-N`, la machine cliente qui héberge un cluster Kubernetes local créé avec KinD (un nœud control-plane et trois workers), et `srv-N`, la machine serveur qui héberge les backends, Jaeger et VictoriaLogs.
 
-Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, et le dépôt des labs y est déjà cloné dans `/root/opentelemetry-labs`. Les commandes destinées à `srv-N` passent par SSH depuis `clt-N` : la clé de `root` y donne accès sans mot de passe.
+<sub>2</sub> Vous travaillez depuis le terminal web de `clt-N`, dans `/root`, et le dépôt des labs y est déjà cloné dans `/root/opentelemetry-labs`. Les commandes destinées à `srv-N` passent par SSH depuis `clt-N` : la clé de `root` y donne accès sans mot de passe.
 
 Le [lab 1](Lab_01_Socle.md) est conseillé : il présente les **receiver**, **processor** et **exporter** du **collector**, qui ne sont pas réexpliqués ici.
 
 ### Architecture et répartition des rôles
 
-Dans une architecture Kubernetes, OpenTelemetry recommande une répartition en deux niveaux complémentaires pour le **collector** :
+<sub>3</sub> Dans une architecture Kubernetes, OpenTelemetry recommande une répartition en deux niveaux complémentaires pour le **collector** :
 
 1. **Le mode agent (DaemonSet)** :
    Un pod de **collector** s'exécute sur chaque nœud du cluster Kubernetes. Déployé au plus près des charges de travail applicatives, l'**agent** intercepte les signaux locaux (sur `localhost` ou un Service Kubernetes à politique de trafic local). Son rôle essentiel consiste à enrichir les données avec les métadonnées de l'infrastructure (`k8s.pod.name`, `k8s.namespace.name`, `k8s.node.name` via le processor `k8s_attributes`), à protéger la mémoire des nœuds applicatifs, et à relayer le flux vers une passerelle centrale sans saturer les nœuds.
@@ -84,7 +84,7 @@ flowchart LR
 
 ### Distinction des termes employés
 
-Pour éviter toute ambiguïté dans la lecture de ce lab, plusieurs notions portant des noms voisins sont explicitement distinguées :
+<sub>4</sub> Pour éviter toute ambiguïté dans la lecture de ce lab, plusieurs notions portant des noms voisins sont explicitement distinguées :
 
 - **gateway OpenTelemetry** (ou **collector** en mode **gateway**) : le composant de télémétrie central, déployé sous forme de `Deployment` Kubernetes, qui reçoit les flux des agents et les réexpédie vers les backends de stockage.
 - **Gateway API** : la spécification réseau standard de Kubernetes (ressources `Gateway`, `GatewayClass`, `HTTPRoute`) qui gère l'entrée et le routage du trafic HTTP web dans le cluster, mise en œuvre ici par **Traefik**. La Gateway API ne transporte pas la télémétrie.
@@ -109,7 +109,7 @@ Versions utilisées dans ce lab :
 | Node.js (application de démonstration) | 22.23.5 |
 | telemetrygen | v0.165.0 |
 
-Les applications passent par la Gateway API du cluster, publiée sur le port `TCP/8080` de la machine `clt-N` :
+<sub>5</sub> Les applications passent par la Gateway API du cluster, publiée sur le port `TCP/8080` de la machine `clt-N` :
 
 - application A : `http://app-a.$INGRESS_HOST:8080` ;
 - application B : `http://app-b.$INGRESS_HOST:8080`.
@@ -119,7 +119,7 @@ Les interfaces des backends sont servies directement par `srv-N` :
 - Jaeger : `http://$SRV_HOST:16686` ;
 - VictoriaLogs : `http://$SRV_HOST:9428`.
 
-`INGRESS_HOST` est le nom qui pointe vers `clt-N` (`echo $INGRESS_HOST`), `SRV_HOST` celui de `srv-N` (`echo $SRV_HOST`).
+<sub>6</sub> `INGRESS_HOST` est le nom qui pointe vers `clt-N` (`echo $INGRESS_HOST`), `SRV_HOST` celui de `srv-N` (`echo $SRV_HOST`).
 
 ## 1. Préparer le cluster et les applications
 
@@ -203,7 +203,7 @@ flowchart TB
   class TRF cp
 ```
 
-Le cluster se compose de quatre nœuds : le nœud `cluster-control-plane` héberge le contrôleur d'entrée Traefik (Gateway API), tandis que les trois nœuds `cluster-worker` exécutent les pods des applications. Sur chaque nœud worker, un **agent OpenTelemetry** (DaemonSet) collecte et enrichit localement les traces émises par les conteneurs, et un pod Fluent Bit (DaemonSet) lit les fichiers de journaux sur le disque. Tous ces flux convergent au niveau supérieur vers la **gateway OpenTelemetry** (Deployment centralisé), qui prend en charge l'exportation vers les backends Jaeger et VictoriaLogs situés sur la machine `srv-N`.
+<sub>7</sub> Le cluster se compose de quatre nœuds : le nœud `cluster-control-plane` héberge le contrôleur d'entrée Traefik (Gateway API), tandis que les trois nœuds `cluster-worker` exécutent les pods des applications. Sur chaque nœud worker, un **agent OpenTelemetry** (DaemonSet) collecte et enrichit localement les traces émises par les conteneurs, et un pod Fluent Bit (DaemonSet) lit les fichiers de journaux sur le disque. Tous ces flux convergent au niveau supérieur vers la **gateway OpenTelemetry** (Deployment centralisé), qui prend en charge l'exportation vers les backends Jaeger et VictoriaLogs situés sur la machine `srv-N`.
 
 ### Créer le cluster
 
@@ -216,7 +216,7 @@ cd ~/lab03
 ls
 ```
 
-On obtient :
+<sub>8</sub> On obtient :
 
 ```text
 app-a.yaml  app-b.yaml  compose.yaml  helpers.sh  namespaces.yaml
@@ -247,7 +247,7 @@ nodes:
   - role: worker
 ```
 
-Chaque bloc de ce fichier a un rôle précis :
+<sub>9</sub> Chaque bloc de ce fichier a un rôle précis :
 
 - `kind: Cluster` et `apiVersion` : le format attendu par `kind`, qui reprend la convention de versionnage des manifestes Kubernetes ;
 - `nodes` : la liste des nœuds. Chaque ligne `- role: worker` ajoute un worker ; trois lignes donnent trois workers ;
@@ -264,7 +264,7 @@ cat ~/opentelemetry-labs/config/cluster/cluster-create.sh
 bash ~/opentelemetry-labs/config/cluster/cluster-create.sh
 ```
 
-Le script tient en trois étapes : `kind get clusters` liste ce qui tourne, `kind delete cluster --name <nom>` supprime chaque cluster trouvé, et `kind create cluster --config kind-config.yaml` crée le nouveau avec le fichier ci-dessus, lu dans le même dossier. Il supprime tous les clusters présents, et pas seulement celui nommé `cluster` : un cluster laissé sous un autre nom occuperait le port 8080 et ferait échouer la création.
+<sub>10</sub> Le script tient en trois étapes : `kind get clusters` liste ce qui tourne, `kind delete cluster --name <nom>` supprime chaque cluster trouvé, et `kind create cluster --config kind-config.yaml` crée le nouveau avec le fichier ci-dessus, lu dans le même dossier. Il supprime tous les clusters présents, et pas seulement celui nommé `cluster` : un cluster laissé sous un autre nom occuperait le port 8080 et ferait échouer la création.
 
 > [!WARNING]
 >
@@ -280,7 +280,7 @@ cluster-worker2         Ready    <none>          1m    v1.37.0
 cluster-worker3         Ready    <none>          1m    v1.37.0
 ```
 
-Pour supprimer le cluster à la main : `kind get clusters` pour voir ce qui tourne, puis `kind delete cluster --name cluster`.
+<sub>11</sub> Pour supprimer le cluster à la main : `kind get clusters` pour voir ce qui tourne, puis `kind delete cluster --name cluster`.
 
 > [!NOTE]
 >
@@ -290,7 +290,7 @@ Pour supprimer le cluster à la main : `kind get clusters` pour voir ce qui tour
 
 Le cluster n'expose rien par défaut. Pendant des années, on a installé un contrôleur d'Ingress, et l'API `Ingress` désignait le point d'entrée HTTP avec un seul objet, complété par des annotations propres à chaque produit. Cette API s'achève : l'Ingress NGINX historique n'est plus maintenu au-delà de mars 2026, sans correctif de sécurité ensuite.
 
-Son successeur est la **Gateway API**, un standard porté par le groupe de travail réseau de Kubernetes. Trois caractéristiques le distinguent de l'Ingress :
+<sub>12</sub> Son successeur est la **Gateway API**, un standard porté par le groupe de travail réseau de Kubernetes. Trois caractéristiques le distinguent de l'Ingress :
 
 - il est défini comme une famille de types communs (`GatewayClass`, `Gateway`, `HTTPRoute`, `GRPCRoute`, `TLSRoute`...) que plusieurs implémentations concurrentes prennent en charge, Traefik, Envoy Gateway, NGINX Gateway Fabric, Cilium et Istio notamment : une route écrite pour la Gateway API n'est pas liée à un produit ;
 - il sépare les rôles : l'exploitant déclare la `Gateway`, c'est-à-dire le point d'entrée et son port, et chaque équipe applicative déclare ses `HTTPRoute` dans son propre espace de noms ;
@@ -298,14 +298,14 @@ Son successeur est la **Gateway API**, un standard porté par le groupe de trava
 
 Dans ce lab, la Gateway API reçoit le trafic HTTP des deux applications. Elle ne transporte pas la télémétrie : le mot **gateway** employé ensuite, en gras, désigne un rôle d'OpenTelemetry, et [la partie 2](#2-les-backends-sur-srv-n-et-la-gateway) revient sur cette distinction.
 
-La Gateway API se compose de deux objets principaux :
+<sub>13</sub> La Gateway API se compose de deux objets principaux :
 
 - une ressource `Gateway`, qui déclare un point d'entrée : un port, un protocole, et quelles routes sont acceptées ;
 - une ressource `HTTPRoute`, qui décrit le routage : pour quel nom d'hôte, vers quel Service.
 
 L'API ne fait rien par elle-même : il faut une implémentation. Vous utilisez Traefik, qui sait tourner en DaemonSet et occuper directement le port 80 des nœuds, ce qui se combine bien avec le port publié par KinD.
 
-Installez d'abord les types de ressources de la Gateway API. Les implémentations ne les fournissent pas : sans elles, toute installation de `Gateway` échoue sur un type inconnu.
+<sub>14</sub> Installez d'abord les types de ressources de la Gateway API. Les implémentations ne les fournissent pas : sans elles, toute installation de `Gateway` échoue sur un type inconnu.
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.7.0/standard-install.yaml
@@ -314,7 +314,7 @@ kubectl get crd | grep -c gateway.networking.k8s.io
 
 On obtient `10` : le standard comprend les types `GatewayClass`, `Gateway`, `HTTPRoute`, `GRPCRoute`, `TCPRoute`, `TLSRoute`, `UDPRoute` et quelques autres.
 
-Installez ensuite Traefik, configuré par un fichier de valeurs :
+<sub>15</sub> Installez ensuite Traefik, configuré par un fichier de valeurs :
 
 ```bash
 helm repo add traefik https://traefik.github.io/charts
@@ -356,7 +356,7 @@ Chaque réglage a son rôle :
 - `namespacePolicy.from: All` : par défaut, une `Gateway` n'accepte que les routes de son propre espace de noms. Sans ce réglage, les routes de `application-a` et d'`application-b` seraient ignorées ;
 - `tolerations` : le nœud control-plane porte une interdiction (`taint`) qui écarte les pods ordinaires. Or c'est lui qui détient le port publié vers la machine : le pod Traefik doit donc y être toléré.
 
-Vérifiez le résultat :
+<sub>16</sub> Vérifiez le résultat :
 
 ```bash
 kubectl -n traefik get pods -o wide
@@ -373,7 +373,7 @@ traefik-khs6m   1/1     Running   0          19s   cluster-worker3
 traefik-rl52k   1/1     Running   0          19s   cluster-worker2
 ```
 
-Le chart a créé la `GatewayClass traefik` et la `Gateway traefik-gateway` :
+<sub>17</sub> Le chart a créé la `GatewayClass traefik` et la `Gateway traefik-gateway` :
 
 ```text
 NAME                                             CONTROLLER                      ACCEPTED   AGE
@@ -391,7 +391,7 @@ gateway.gateway.networking.k8s.io/traefik-gateway   traefik             True    
 
 Une `HTTPRoute` route les requêtes selon le nom d'hôte demandé : la route de l'application A ne répond que si la requête porte l'en-tête `Host: app-a.<INGRESS_HOST>`, celle de l'application B seulement pour `app-b.<INGRESS_HOST>`. Une même adresse IP sert ainsi plusieurs services, séparés par le nom.
 
-Comme le cluster tourne sur `clt-N`, `INGRESS_HOST` doit être un nom qui pointe vers cette machine depuis votre navigateur. Le plus simple est le service `sslip.io`, qui transforme une adresse IP en nom : `178-62-255-117.sslip.io` pointe vers `178.62.255.117`. La fonction d'aide le calcule à partir de l'adresse publique de la machine :
+<sub>18</sub> Comme le cluster tourne sur `clt-N`, `INGRESS_HOST` doit être un nom qui pointe vers cette machine depuis votre navigateur. Le plus simple est le service `sslip.io`, qui transforme une adresse IP en nom : `178-62-255-117.sslip.io` pointe vers `178.62.255.117`. La fonction d'aide le calcule à partir de l'adresse publique de la machine :
 
 ```bash
 source helpers.sh
@@ -404,13 +404,13 @@ On obtient deux noms de la forme :
 178-62-255-117.sslip.io srv-0.monlab.top
 ```
 
-Les fonctions `appA` et `appB` de `helpers.sh` appellent la `Gateway` par `http://localhost:8080` avec le bon en-tête `Host`, ce qui évite de dépendre de la résolution DNS de sslip.io. Les fonctions `jaeger` et `vlogs`, elles, interrogent les backends de `srv-N` sur `$SRV_HOST`. Rechargez ces fonctions avec `source ~/lab03/helpers.sh` dans chaque nouveau terminal.
+<sub>19</sub> Les fonctions `appA` et `appB` de `helpers.sh` appellent la `Gateway` par `http://localhost:8080` avec le bon en-tête `Host`, ce qui évite de dépendre de la résolution DNS de sslip.io. Les fonctions `jaeger` et `vlogs`, elles, interrogent les backends de `srv-N` sur `$SRV_HOST`. Rechargez ces fonctions avec `source ~/lab03/helpers.sh` dans chaque nouveau terminal.
 
 ### Déployer les deux applications
 
 Le dossier contient trois manifestes Kubernetes : `namespaces.yaml` (les espaces de noms `observability`, `application-a` et `application-b`), `app-a.yaml` et `app-b.yaml`.
 
-Les deux applications sont volontairement identiques : même image, même code, mêmes deux services `frontend` et `backend`. Seuls changent l'espace de noms et le nom d'hôte. C'est la situation d'une plateforme qui héberge plusieurs équipes, et c'est ce qui permettra de vérifier que le namespace voyage bien avec les données.
+<sub>20</sub> Les deux applications sont volontairement identiques : même image, même code, mêmes deux services `frontend` et `backend`. Seuls changent l'espace de noms et le nom d'hôte. C'est la situation d'une plateforme qui héberge plusieurs équipes, et c'est ce qui permettra de vérifier que le namespace voyage bien avec les données.
 
 Le schéma suivant illustre le routage du trafic HTTP à travers Traefik et les `HTTPRoute` vers les services de chaque application :
 
@@ -445,7 +445,7 @@ flowchart LR
   class SvcFB,PodFB,SvcBB,PodBB appb
 ```
 
-Chaque application est écrite en JavaScript et tient dans un ConfigMap : les pods l'exécutent avec l'image `node:22.23.5-slim`, sans aucune bibliothèque OpenTelemetry dans un premier temps. Chaque service écoute sur le port `8080` dans son pod, derrière un Service Kubernetes sur le port 80. Le frontend journalise chaque requête reçue (`console.log`) et appelle le backend sur les chemins qui commencent par `/api`.
+<sub>21</sub> Chaque application est écrite en JavaScript et tient dans un ConfigMap : les pods l'exécutent avec l'image `node:22.23.5-slim`, sans aucune bibliothèque OpenTelemetry dans un premier temps. Chaque service écoute sur le port `8080` dans son pod, derrière un Service Kubernetes sur le port 80. Le frontend journalise chaque requête reçue (`console.log`) et appelle le backend sur les chemins qui commencent par `/api`.
 
 Les deux manifestes applicatifs déclarent une `HTTPRoute` et contiennent le texte `INGRESS_HOST`, que `sed` remplace par votre nom avant l'envoi au cluster :
 
@@ -457,7 +457,7 @@ kubectl -n application-a rollout status deployment/frontend deployment/backend
 kubectl -n application-b rollout status deployment/frontend deployment/backend
 ```
 
-Regardez où sont les pods ; ils se répartissent sur les workers, pas sur le control-plane, et les deux applications cohabitent :
+<sub>22</sub> Regardez où sont les pods ; ils se répartissent sur les workers, pas sur le control-plane, et les deux applications cohabitent :
 
 ```bash
 kubectl -n application-a get pods -o wide
@@ -472,11 +472,11 @@ backend-6bc7bd9b8d-4ftph    1/1     Running   0          8s    10.244.2.3   clus
 frontend-7cd9b8f4d7-dwpp6   1/1     Running   0          8s    10.244.3.3   cluster-worker2
 ```
 
-Les mêmes noms de pods apparaissent dans `application-a` et dans `application-b`, avec des adresses IP différentes : deux objets Kubernetes distincts, dans deux espaces de noms distincts.
+<sub>23</sub> Les mêmes noms de pods apparaissent dans `application-a` et dans `application-b`, avec des adresses IP différentes : deux objets Kubernetes distincts, dans deux espaces de noms distincts.
 
 Contrôlez que les deux applications répondent, à travers la Gateway API.
 
-Depuis `clt-N`, vous pouvez utiliser les commandes suivantes :
+<sub>24</sub> Depuis `clt-N`, vous pouvez utiliser les commandes suivantes :
 
 ```bash
 curl -s -H "Host: app-a.$INGRESS_HOST" http://localhost:8080/api/orders
@@ -489,7 +489,7 @@ Les deux commandes affichent la même réponse JSON, une fois par application :
 {"from":"frontend","backend":{"from":"backend","path":"/api/orders"}}
 ```
 
-**Pour les participants :** vous pouvez également ouvrir votre navigateur et accéder directement aux applications depuis Internet en utilisant les URLs suivantes :
+<sub>25</sub> **Pour les participants :** vous pouvez également ouvrir votre navigateur et accéder directement aux applications depuis Internet en utilisant les URLs suivantes :
 
 - Application A : `http://app-a.$INGRESS_HOST:8080/`
 - Application B : `http://app-b.$INGRESS_HOST:8080/`
@@ -500,7 +500,7 @@ Les deux commandes affichent la même réponse JSON, une fois par application :
 
 (Le nom `$INGRESS_HOST` est calculé par `helpers.sh` et pointe vers `clt-N` via sslip.io.)
 
-Ce sont exactement ces deux `curl` que les fonctions `appA` et `appB` de `helpers.sh` exécutent ; la suite du lab les emploie pour abréger. Rien ne collecte encore cette activité : les backends arrivent [à la partie 2](#2-les-backends-sur-srv-n-et-la-gateway), et l'instrumentation [à la partie 5](#5-loperator-et-lauto-instrumentation).
+<sub>26</sub> Ce sont exactement ces deux `curl` que les fonctions `appA` et `appB` de `helpers.sh` exécutent ; la suite du lab les emploie pour abréger. Rien ne collecte encore cette activité : les backends arrivent [à la partie 2](#2-les-backends-sur-srv-n-et-la-gateway), et l'instrumentation [à la partie 5](#5-loperator-et-lauto-instrumentation).
 
 > [!NOTE]
 >
@@ -547,7 +547,7 @@ flowchart LR
 
 ### Démarrer les backends
 
-Le fichier `compose.yaml` du dossier décrit deux services : Jaeger, qui reçoit les traces en OTLP/HTTP sur `TCP/4318` et sert son interface sur `TCP/16686`, et VictoriaLogs, qui reçoit les logs sur `TCP/9428` et sert à la fois l'ingestion, la requête et son interface web. Affichez-le :
+<sub>27</sub> Le fichier `compose.yaml` du dossier décrit deux services : Jaeger, qui reçoit les traces en OTLP/HTTP sur `TCP/4318` et sert son interface sur `TCP/16686`, et VictoriaLogs, qui reçoit les logs sur `TCP/9428` et sert à la fois l'ingestion, la requête et son interface web. Affichez-le :
 
 ```bash
 cat compose.yaml
@@ -561,7 +561,7 @@ ssh root@$SRV_HOST 'cd ~/lab03 && docker compose up -d'
 ssh root@$SRV_HOST 'cd ~/lab03 && docker compose ps --format "{{.Service}} {{.State}}"'
 ```
 
-On obtient :
+<sub>28</sub> On obtient :
 
 ```text
 jaeger running
@@ -575,7 +575,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://$SRV_HOST:16686/
 curl -s -o /dev/null -w '%{http_code}\n' http://$SRV_HOST:9428/health
 ```
 
-On obtient `200` deux fois. Jaeger ne contient encore aucune trace :
+<sub>29</sub> On obtient `200` deux fois. Jaeger ne contient encore aucune trace :
 
 ```bash
 curl -s http://$SRV_HOST:16686/api/v3/services
@@ -595,7 +595,7 @@ Ouvrez maintenant Jaeger dans le navigateur, sur `http://$SRV_HOST:16686` : le s
 
 ### Créer la **gateway**
 
-Une **gateway** est un **collector** central, déployé comme un Deployment, qui reçoit les données de plusieurs sources et les envoie aux backends. Vous la déployez avec le chart Helm officiel, puis vous lui ferez recevoir les traces [à la partie 3](#3-le-collector-en-mode-agent) et les logs [à la partie 4](#4-les-logs-des-pods-avec-fluent-bit).
+<sub>30</sub> Une **gateway** est un **collector** central, déployé comme un Deployment, qui reçoit les données de plusieurs sources et les envoie aux backends. Vous la déployez avec le chart Helm officiel, puis vous lui ferez recevoir les traces [à la partie 3](#3-le-collector-en-mode-agent) et les logs [à la partie 4](#4-les-logs-des-pods-avec-fluent-bit).
 
 Ajoutez le dépôt de charts :
 
@@ -604,11 +604,11 @@ helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm
 helm repo update
 ```
 
-Le chart se configure par un fichier de valeurs. Le chart n'impose pas d'image par défaut : il faut indiquer la distribution `contrib` et le nom de son exécutable.
+<sub>31</sub> Le chart se configure par un fichier de valeurs. Le chart n'impose pas d'image par défaut : il faut indiquer la distribution `contrib` et le nom de son exécutable.
 
 La configuration du **collector** se place sous la clé `config:` de ce fichier. Le chart la fusionne avec sa configuration par défaut : les dictionnaires sont fusionnés, les listes sont remplacées.
 
-Créez le fichier complet. Il contient deux exporters et deux pipelines :
+<sub>32</sub> Créez le fichier complet. Il contient deux exporters et deux pipelines :
 
 - `otlp_http/jaeger`, vers `http://<srv-N>:4318`, pour les traces ;
 - `otlp_http/victorialogs`, vers `http://<srv-N>:9428/insert/opentelemetry/v1/logs`, pour les logs ;
@@ -649,7 +649,7 @@ config:
 EOF
 ```
 
-Avant d'installer, regardez ce que le chart génère à partir de vos valeurs :
+<sub>33</sub> Avant d'installer, regardez ce que le chart génère à partir de vos valeurs :
 
 ```bash
 helm template otel-gateway open-telemetry/opentelemetry-collector --version 0.179.1 \
@@ -658,7 +658,7 @@ helm template otel-gateway open-telemetry/opentelemetry-collector --version 0.17
 
 Repérez ce que vous n'avez pas écrit : l'extension `health_check`, les receivers par défaut (`zipkin`, `jaeger`...), et le pipeline `metrics`. C'est la fusion du chart avec ses propres valeurs. Les pipelines `traces` et `logs`, eux, viennent de votre fichier : vos listes remplacent celles du chart.
 
-Installez ensuite la **gateway** :
+<sub>34</sub> Installez ensuite la **gateway** :
 
 ```bash
 helm upgrade --install otel-gateway open-telemetry/opentelemetry-collector \
@@ -674,7 +674,7 @@ kubectl -n application-a run tg-gateway --restart=Never --rm -i \
   --otlp-insecure --rate 10 --traces 5 --service k8s-gateway
 ```
 
-Contrôlez le pod de la gateway et le nombre de traces reçues par Jaeger (sur `srv-N`) :
+<sub>35</sub> Contrôlez le pod de la gateway et le nombre de traces reçues par Jaeger (sur `srv-N`) :
 
 ```bash
 kubectl -n observability get pods -l app.kubernetes.io/instance=otel-gateway
@@ -695,7 +695,7 @@ jaeger "/api/v3/traces?query.service_name=k8s-gateway&query.startTimeMin=$(date 
 
 La première commande affiche un pod `otel-gateway-...` à l’état `Running`.
 
-La seconde doit afficher `5`.
+<sub>36</sub> La seconde doit afficher `5`.
 
 **Si vous obtenez l’erreur :**
 
@@ -703,7 +703,7 @@ La seconde doit afficher `5`.
 jq: error (at <stdin>:1): Cannot iterate over null (null)
 ```
 
-Cela signifie que Jaeger n’a encore reçu aucune trace correspondant à la requête.
+<sub>37</sub> Cela signifie que Jaeger n’a encore reçu aucune trace correspondant à la requête.
 
 **Solutions dans ce cas (à exécuter dans l’ordre) :**
 
@@ -719,7 +719,7 @@ Cela signifie que Jaeger n’a encore reçu aucune trace correspondant à la req
      | jq '[.result.resourceSpans[].scopeSpans[].spans[].traceId] | unique | length'
    ```
 
-La fonction `jaeger()` fait un simple `curl` vers `http://$SRV_HOST:16686$1`. Si la fenêtre temporelle est trop restrictive ou si le premier export est en cours, `jq` reçoit `null` et échoue.
+<sub>38</sub> La fonction `jaeger()` fait un simple `curl` vers `http://$SRV_HOST:16686$1`. Si la fenêtre temporelle est trop restrictive ou si le premier export est en cours, `jq` reçoit `null` et échoue.
 
 Les traces générées dans le cluster sont donc arrivées dans un backend extérieur, sans aucune publication de port sur le cluster : c'est la **gateway** qui sort.
 
@@ -729,7 +729,7 @@ Les traces générées dans le cluster sont donc arrivées dans un backend exté
 
 ## 3. Le **collector** en mode **agent**
 
-Le schéma suivant montre l’architecture mise en place dans cette partie :
+<sub>39</sub> Le schéma suivant montre l’architecture mise en place dans cette partie :
 
 ```mermaid
 ---
@@ -774,11 +774,11 @@ flowchart TB
 
 Un **agent** est un **collector** déployé comme un DaemonSet : un pod par nœud, proche des applications. Il enrichit les données avec les métadonnées Kubernetes (`k8s.*`), puis les transmet à la **gateway OpenTelemetry** (le **collector** central installé [à la partie 2](#2-les-backends-sur-srv-n-et-la-gateway)). Ce n'est pas la `Gateway` de la Gateway API de [la partie 1](#1-préparer-le-cluster-et-les-applications), qui route le trafic web : l'**agent** ne parle qu'OTLP, vers un autre **collector**.
 
-Le processor `k8s_attributes` interroge l'API Kubernetes pour retrouver, à partir de l'adresse IP du pod émetteur, son nom, son espace de noms, son déploiement et son nœud.
+<sub>40</sub> Le processor `k8s_attributes` interroge l'API Kubernetes pour retrouver, à partir de l'adresse IP du pod émetteur, son nom, son espace de noms, son déploiement et son nœud.
 
 Deux réglages du fichier de valeurs méritent une explication. Le preset `kubernetesAttributes` ajoute au chart le processor `k8s_attributes` et les droits RBAC dont il a besoin pour lire l'API Kubernetes. Le réglage `service.enabled` crée un Service, que le chart ne crée pas par défaut pour un DaemonSet : en mode **agent**, ce Service est configuré avec `internalTrafficPolicy: Local`, de sorte qu'une application atteint toujours l'**agent** de son propre nœud.
 
-L'**agent** ne collecte ici que les traces. Les logs des pods sont lus par Fluent Bit, [à la partie 4](#4-les-logs-des-pods-avec-fluent-bit), et partent directement à la **gateway**.
+<sub>41</sub> L'**agent** ne collecte ici que les traces. Les logs des pods sont lus par Fluent Bit, [à la partie 4](#4-les-logs-des-pods-avec-fluent-bit), et partent directement à la **gateway**.
 
 Listez vous-même `k8s_attributes` dans le pipeline : sans cela, le preset l'ajoute en première position, avant `memory_limiter`.
 
@@ -815,7 +815,7 @@ config:
 EOF
 ```
 
-Installez l'**agent** :
+<sub>42</sub> Installez l'**agent** :
 
 ```bash
 helm upgrade --install otel-agent open-telemetry/opentelemetry-collector \
@@ -825,7 +825,7 @@ kubectl -n observability get daemonset otel-agent-agent
 
 Le DaemonSet se nomme `otel-agent-agent` : le chart ajoute le suffixe `-agent` en mode daemonset, alors que le Service garde le nom `otel-agent`. Les colonnes `DESIRED` et `READY` sont égales.
 
-Regardez où sont ses pods : un par worker, aucun sur le control-plane, qui garde son interdiction.
+<sub>43</sub> Regardez où sont ses pods : un par worker, aucun sur le control-plane, qui garde son interdiction.
 
 ```bash
 kubectl -n observability get pods -l app.kubernetes.io/instance=otel-agent -o wide
@@ -849,7 +849,7 @@ NAME         ROLE                    AGE
 otel-agent   ClusterRole/otel-agent  20s
 ```
 
-Envoyez des traces de test à l'**agent**, cette fois, et non à la **gateway** :
+<sub>44</sub> Envoyez des traces de test à l'**agent**, cette fois, et non à la **gateway** :
 
 ```bash
 kubectl -n application-a run tg-agent --restart=Never --rm -i \
@@ -865,7 +865,7 @@ jaeger "/api/v3/traces?query.service_name=k8s-agent&query.startTimeMin=$(date -u
   | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key | startswith("k8s.")) | "\(.key)=\(.value.stringValue)"] | unique | .[]'
 ```
 
-La commande affiche notamment :
+<sub>45</sub> La commande affiche notamment :
 
 ```text
 k8s.namespace.name=application-a
@@ -877,11 +877,11 @@ Comparez avec les traces `k8s-gateway` envoyées directement à la **gateway** [
 
 ## 4. Les logs des pods avec Fluent Bit
 
-Les logs d'un pod ne sont pas dans le pod : le runtime les écrit dans un fichier, sur le disque de son nœud, sous `/var/log/containers/`. Une **gateway** centralisée ne peut pas les lire, puisqu'elle ne voit pas ce disque. Il faut donc un pod par nœud, avec un accès au dossier des nœuds : un DaemonSet.
+<sub>46</sub> Les logs d'un pod ne sont pas dans le pod : le runtime les écrit dans un fichier, sur le disque de son nœud, sous `/var/log/containers/`. Une **gateway** centralisée ne peut pas les lire, puisqu'elle ne voit pas ce disque. Il faut donc un pod par nœud, avec un accès au dossier des nœuds : un DaemonSet.
 
 Deux familles d'outils remplissent ce rôle. Le chart du **collector** propose un preset `logsCollection`, qui monte `/var/log/pods` dans l'**agent** et ajoute un receiver `file_log` capable de lire ces fichiers. Fluent Bit est l'autre réponse, et la plus répandue dans les clusters Kubernetes : c'est un agent de collecte de logs indépendant d'OpenTelemetry, qui parle OTLP depuis sa version 3. Vous retenez Fluent Bit ici, pour deux raisons : il est souvent déjà déployé, et il décharge l'**agent** du travail de lecture des fichiers. La suite du pipeline reste identique, un export OTLP vers la **gateway**.
 
-Le schéma suivant montre le chemin d'un log, du fichier du nœud à VictoriaLogs :
+<sub>47</sub> Le schéma suivant montre le chemin d'un log, du fichier du nœud à VictoriaLogs :
 
 ```mermaid
 ---
@@ -926,7 +926,7 @@ Trois points se lisent sur ce schéma :
 
 ### Installer Fluent Bit
 
-Le chart officiel de Fluent Bit lit déjà `/var/log/containers/*.log` et applique le filtre `kubernetes`, qui retrouve l'espace de noms, le pod, le conteneur et le nœud à partir du nom du fichier. Il reste à restreindre la collecte aux deux applications, à renommer ces champs au format des conventions OpenTelemetry (`k8s.*`) et à déclarer l'export OTLP.
+<sub>48</sub> Le chart officiel de Fluent Bit lit déjà `/var/log/containers/*.log` et applique le filtre `kubernetes`, qui retrouve l'espace de noms, le pod, le conteneur et le nœud à partir du nom du fichier. Il reste à restreindre la collecte aux deux applications, à renommer ces champs au format des conventions OpenTelemetry (`k8s.*`) et à déclarer l'export OTLP.
 
 Créez le fichier de valeurs :
 
@@ -985,7 +985,7 @@ config:
 EOF
 ```
 
-Les filtres s'enchaînent dans cet ordre :
+<sub>49</sub> Les filtres s'enchaînent dans cet ordre :
 
 - `kubernetes` ajoute un dictionnaire `kubernetes` au message, avec les métadonnées du conteneur ;
 - `nest` fait remonter les clés de ce dictionnaire à la racine du message, préfixées par `kubernetes.` : Fluent Bit ne sait renommer que des clés de premier niveau ;
@@ -993,7 +993,7 @@ Les filtres s'enchaînent dans cet ordre :
 
 L'input `tail` ne lit que les fichiers dont le nom contient `_application-`, c'est-à-dire les pods de `application-a` et d'`application-b`. Sans cette restriction, Fluent Bit collecterait aussi ses propres logs : chaque ligne qu'il écrit serait relue, renvoyée, puis relue encore, et les messages des applications se perdraient dans ce bruit.
 
-Dans l'output, `logs_body_key log` place la ligne applicative dans le corps de l'enregistrement OTLP, ce qui donne un message lisible dans VictoriaLogs, et `logs_body_key_attributes true` conserve les autres champs comme attributs.
+<sub>50</sub> Dans l'output, `logs_body_key log` place la ligne applicative dans le corps de l'enregistrement OTLP, ce qui donne un message lisible dans VictoriaLogs, et `logs_body_key_attributes true` conserve les autres champs comme attributs.
 
 Installez Fluent Bit :
 
@@ -1004,7 +1004,7 @@ kubectl -n observability get daemonset fluent-bit
 kubectl -n observability get pods -l app.kubernetes.io/name=fluent-bit -o wide
 ```
 
-Le DaemonSet a un pod par worker :
+<sub>51</sub> Le DaemonSet a un pod par worker :
 
 ```text
 NAME              READY   STATUS    RESTARTS   AGE   IP           NODE
@@ -1030,7 +1030,7 @@ for i in $(seq 10); do
 done
 ```
 
-Interrogez ensuite VictoriaLogs par son API, sans passer par l'interface, pour vérifier que les logs sont bien arrivés. Le champ `_msg` contient le message, et les attributs Kubernetes sont devenus des champs à part entière.
+<sub>52</sub> Interrogez ensuite VictoriaLogs par son API, sans passer par l'interface, pour vérifier que les logs sont bien arrivés. Le champ `_msg` contient le message, et les attributs Kubernetes sont devenus des champs à part entière.
 
 **Important :** la fonction `vlogs` attend uniquement la requête LogsQL. Il ne faut **pas** mettre le chemin `/select/logsql/query` dans l’argument.
 
@@ -1042,7 +1042,7 @@ vlogs 'k8s.namespace.name:*'
 vlogs '/select/logsql/query?query=k8s.namespace.name%3A*&limit=3'
 ```
 
-On obtient des lignes JSON, une par entrée de log :
+<sub>53</sub> On obtient des lignes JSON, une par entrée de log :
 
 ```json
 {"_msg":"GET /api/orders","_time":"2026-11-21T18:16:01Z","k8s.container.name":"frontend","k8s.namespace.name":"application-a","k8s.node.name":"cluster-worker","k8s.pod.name":"frontend-7cd9b8f4d7-dwpp6",...}
@@ -1055,13 +1055,13 @@ Trois champs méritent l'attention : `_msg` (le message applicatif), `_time` (l'
 >
 > Les autres métadonnées du filtre `kubernetes` (identifiant du conteneur, image, labels, adresse IP du pod) restent dans l'enregistrement, préfixées par `kubernetes.` : seules les quatre clés renommées par `modify` portent le format `k8s.*`. Ces champs apparaissent dans la liste de vmui et ne gênent pas les requêtes.
 
-Ouvrez maintenant l'interface dans le navigateur, sur `http://$SRV_HOST:9428`. Elle s'appelle `vmui` et sert à la fois à écrire les requêtes et à lire les résultats, avec trois modes d'affichage (`Group`, `Table`, `JSON`).
+<sub>54</sub> Ouvrez maintenant l'interface dans le navigateur, sur `http://$SRV_HOST:9428`. Elle s'appelle `vmui` et sert à la fois à écrire les requêtes et à lire les résultats, avec trois modes d'affichage (`Group`, `Table`, `JSON`).
 
 ![Interface vmui de VictoriaLogs, requête sur les deux namespaces d'application](img/lab03-vlogs-logsql.png)
 
 Le panneau **Stream fields** de gauche reste vide : Fluent Bit transmet ces métadonnées sous forme d'attributs de log au niveau du record, et non comme attributs de ressource, donc VictoriaLogs n'affiche aucun stream label prédéfini. La différence avec Loki est notable : dans Loki, chaque requête exige obligatoirement un sélecteur de labels en point d'entrée (`{job="...", namespace="..."}`). Avec VictoriaLogs, chaque champ d'un log record est directement indexé : on filtre n'importe quel attribut `k8s.*` par son nom dans la requête LogsQL, sans devoir renseigner un stream label au préalable.
 
-Dans le champ de requête, saisissez successivement les requêtes suivantes. Le langage s'appelle **LogsQL** ; il s'écrit comme une suite de filtres sur des champs, séparés par des espaces, et les valeurs contenant des caractères spéciaux vont entre guillemets.
+<sub>55</sub> Dans le champ de requête, saisissez successivement les requêtes suivantes. Le langage s'appelle **LogsQL** ; il s'écrit comme une suite de filtres sur des champs, séparés par des espaces, et les valeurs contenant des caractères spéciaux vont entre guillemets.
 
 Tous les logs de l'application A :
 
@@ -1069,7 +1069,7 @@ Tous les logs de l'application A :
 k8s.namespace.name:"application-a"
 ```
 
-Pour vérifier que le namespace distingue bien les deux applications, restreignez la requête aux deux namespaces d'application, puis demandez le décompte par namespace et par conteneur :
+<sub>56</sub> Pour vérifier que le namespace distingue bien les deux applications, restreignez la requête aux deux namespaces d'application, puis demandez le décompte par namespace et par conteneur :
 
 ```text
 k8s.namespace.name:in("application-a","application-b") | stats by (k8s.namespace.name, k8s.container.name) count() as lignes
@@ -1088,7 +1088,7 @@ Quatre lignes, une par couple application et conteneur, avec des volumes compara
 >
 > La fonction `in(...)` évite d'écrire deux requêtes ; `k8s.namespace.name:application-*` fonctionne aussi, avec un filtre par préfixe.
 
-Uniquement les logs du conteneur `frontend` de l'application A :
+<sub>57</sub> Uniquement les logs du conteneur `frontend` de l'application A :
 
 ```text
 k8s.namespace.name:"application-a" k8s.container.name:"frontend"
@@ -1100,7 +1100,7 @@ Les logs de l'application B qui contiennent le mot `orders` :
 k8s.namespace.name:"application-b" _msg:"orders"
 ```
 
-Les logs d'un seul pod, en filtrant sur son nom, tel qu'il apparaît dans la sortie de `kubectl get pods` :
+<sub>58</sub> Les logs d'un seul pod, en filtrant sur son nom, tel qu'il apparaît dans la sortie de `kubectl get pods` :
 
 ```text
 k8s.pod.name:"frontend-84d7c6f9b5-xl2mq"
@@ -1112,7 +1112,7 @@ Le nombre de lignes par conteneur et par application, trié du plus bavard au mo
 k8s.namespace.name:* | stats by (k8s.namespace.name, k8s.container.name) count() as lignes | sort by (lignes desc)
 ```
 
-Les erreurs des cinq dernières minutes, avec le filtre temporel :
+<sub>59</sub> Les erreurs des cinq dernières minutes, avec le filtre temporel :
 
 ```text
 _time:5m k8s.namespace.name:* severity_text:"ERROR"
@@ -1124,7 +1124,7 @@ Cette dernière requête ne renvoie rien, et c'est normal : Fluent Bit ne devine
 >
 > LogsQL et LogQL, le langage de Loki, se ressemblent par leurs filtres, mais ne cherchent pas au même endroit. En LogQL, on part d'un sélecteur de labels, comme `{service_name="shop"}`, puis on filtre le texte avec `|=` pour une chaîne et `|~` pour une expression régulière. En LogsQL, un mot seul ne cherche que dans le message : `orders` trouve les lignes dont `_msg` contient ce mot, mais ne fouille pas les attributs, et il faut les nommer pour les interroger, comme `k8s.pod.name:"..."`. LogQL est employé [au lab 7](Lab_07_Instrumentation_Manuelle.md), avec Loki et Grafana.
 
-Comparez enfin ce que vous voyez avec [la partie 3](#3-le-collector-en-mode-agent) : les traces portaient `k8s.pod.name`, les logs portent le même champ, avec la même valeur. C'est ce qui permet, dans un outil qui gère les deux signaux, de passer d'une ligne de log au pod qui l'a produite, puis à ses traces. [Le lab 7](Lab_07_Instrumentation_Manuelle.md) montre ce lien dans Grafana ; ici, vous l'observez à la main, ce qui rend le mécanisme plus visible.
+<sub>60</sub> Comparez enfin ce que vous voyez avec [la partie 3](#3-le-collector-en-mode-agent) : les traces portaient `k8s.pod.name`, les logs portent le même champ, avec la même valeur. C'est ce qui permet, dans un outil qui gère les deux signaux, de passer d'une ligne de log au pod qui l'a produite, puis à ses traces. [Le lab 7](Lab_07_Instrumentation_Manuelle.md) montre ce lien dans Grafana ; ici, vous l'observez à la main, ce qui rend le mécanisme plus visible.
 
 > [!NOTE]
 >
@@ -1134,7 +1134,7 @@ Comparez enfin ce que vous voyez avec [la partie 3](#3-le-collector-en-mode-agen
 
 L'OpenTelemetry **operator** injecte un **agent** d'instrumentation dans les pods qui portent une annotation, au moment de leur création, sans modifier l'image de l'application.
 
-Pour Node.js, il ajoute un **init container** qui copie la bibliothèque d'instrumentation dans un volume partagé du pod, et il définit les variables d'environnement qui l'activent.
+<sub>61</sub> Pour Node.js, il ajoute un **init container** qui copie la bibliothèque d'instrumentation dans un volume partagé du pod, et il définit les variables d'environnement qui l'activent.
 
 Le schéma suivant montre ce qui se passe au moment de la création d'un pod :
 
@@ -1174,7 +1174,7 @@ flowchart TB
   class J backend
 ```
 
-L'init container s'exécute avant l'application, écrit la bibliothèque dans le volume puis se termine. Le conteneur de l'application démarre ensuite avec `NODE_OPTIONS=--require /otel-auto-instrumentation-nodejs/autoinstrumentation.js` : Node charge la bibliothèque au démarrage, sans que l'image ni le code ne changent.
+<sub>62</sub> L'init container s'exécute avant l'application, écrit la bibliothèque dans le volume puis se termine. Le conteneur de l'application démarre ensuite avec `NODE_OPTIONS=--require /otel-auto-instrumentation-nodejs/autoinstrumentation.js` : Node charge la bibliothèque au démarrage, sans que l'image ni le code ne changent.
 
 Installez d'abord l'**operator**. Le chart propose par défaut d'utiliser cert-manager pour les certificats de son webhook, ce qui n'est pas installé ici : les deux options `admissionWebhooks` demandent au chart de générer lui-même un certificat. L'attente `--wait` rend la main lorsque les pods de l'**operator** sont prêts.
 
@@ -1186,7 +1186,7 @@ helm upgrade --install operator open-telemetry/opentelemetry-operator \
   --set manager.image.tag=0.162.0 --wait
 ```
 
-Une fois l'**operator** installé, contrôlez ce qu'il a ajouté au cluster. Un **operator** étend l'API Kubernetes par des types de ressources (`CustomResourceDefinition`, ou CRD) : ici `Instrumentation` et `OpenTelemetryCollector`.
+<sub>63</sub> Une fois l'**operator** installé, contrôlez ce qu'il a ajouté au cluster. Un **operator** étend l'API Kubernetes par des types de ressources (`CustomResourceDefinition`, ou CRD) : ici `Instrumentation` et `OpenTelemetryCollector`.
 
 ```bash
 kubectl get crd | grep opentelemetry.io
@@ -1201,7 +1201,7 @@ opentelemetrycollectors.opentelemetry.io   Namespaced   v1alpha1,v1beta1(storage
 targetallocators.opentelemetry.io          Namespaced   v1alpha1(storage)           2026-11-20T12:35:39Z
 ```
 
-Tant que l'**operator** n'est pas installé, ces types n'existent pas et `kubectl apply` d'une ressource `Instrumentation` échoue sur un type inconnu. C'est pourquoi l'installation précède la suite de cette partie.
+<sub>64</sub> Tant que l'**operator** n'est pas installé, ces types n'existent pas et `kubectl apply` d'une ressource `Instrumentation` échoue sur un type inconnu. C'est pourquoi l'installation précède la suite de cette partie.
 
 > [!NOTE]
 >
@@ -1218,7 +1218,7 @@ kubectl get endpoints -n opentelemetry-operator-system \
 
 Tant que la colonne `ENDPOINTS` est vide, le webhook n'est pas joignable. Comptez quelques secondes, dix au plus.
 
-La ressource `Instrumentation` décrit comment instrumenter : où envoyer les données, quels propagators utiliser, quel échantillonnage (sampling) appliquer et quelle image d'instrumentation injecter.
+<sub>65</sub> La ressource `Instrumentation` décrit comment instrumenter : où envoyer les données, quels propagators utiliser, quel échantillonnage (sampling) appliquer et quelle image d'instrumentation injecter.
 
 L'`Instrumentation` est un objet d'espace de noms : il en faut une par application. Créez la même dans `application-a` et dans `application-b`, avec `sed` plutôt qu'à la main. L'exporter vise l'**agent** en OTLP HTTP (`http://otel-agent.observability.svc.cluster.local:4318`), protocole par défaut du SDK Node.js :
 
@@ -1243,11 +1243,11 @@ spec:
 EOF
 ```
 
-L'argument du sampler est une proportion entre 0 et 1, écrite entre guillemets parce que c'est une chaîne : `"1"` signifie que toutes les traces sont conservées (100 %), `"0.1"` qu'une trace sur dix est échantillonnée. Avec `parentbased_traceidratio`, la décision prise à la racine d'une trace s'applique ensuite à tous ses spans, y compris ceux des services appelés.
+<sub>66</sub> L'argument du sampler est une proportion entre 0 et 1, écrite entre guillemets parce que c'est une chaîne : `"1"` signifie que toutes les traces sont conservées (100 %), `"0.1"` qu'une trace sur dix est échantillonnée. Avec `parentbased_traceidratio`, la décision prise à la racine d'une trace s'applique ensuite à tous ses spans, y compris ceux des services appelés.
 
 Appliquez-la, puis activez l'instrumentation des deux déploiements avec l'annotation `instrumentation.opentelemetry.io/inject-nodejs: "true"`.
 
-L'annotation doit se trouver sur le modèle de pod, et non sur le Deployment : `kubectl patch` la place au bon endroit et déclenche le remplacement des pods.
+<sub>67</sub> L'annotation doit se trouver sur le modèle de pod, et non sur le Deployment : `kubectl patch` la place au bon endroit et déclenche le remplacement des pods.
 
 ```bash
 kubectl apply -f instrumentation.yaml
@@ -1265,7 +1265,7 @@ done
 
 Chaque `Instrumentation` doit exister avant la création des pods de son espace de noms : l'**operator** ne modifie pas un pod déjà démarré.
 
-Générez du trafic :
+<sub>68</sub> Générez du trafic :
 
 ```bash
 for i in $(seq 10); do
@@ -1285,7 +1285,7 @@ for ns in application-a application-b; do
 done
 ```
 
-On obtient :
+<sub>69</sub> On obtient :
 
 ```text
 application-a : opentelemetry-auto-instrumentation-nodejs
@@ -1313,7 +1313,7 @@ OTEL_TRACES_SAMPLER_ARG=1
 OTEL_RESOURCE_ATTRIBUTES=k8s.container.name=frontend,k8s.deployment.name=frontend,k8s.namespace.name=application-a,k8s.node.name=$(OTEL_RESOURCE_ATTRIBUTES_NODE_NAME),k8s.pod.name=$(OTEL_RESOURCE_ATTRIBUTES_POD_NAME),...
 ```
 
-Les variables vides sont renseignées par Kubernetes au démarrage du conteneur, à partir des métadonnées du pod (`spec.nodeName` et le nom du pod), et les `$(...)` de `OTEL_RESOURCE_ATTRIBUTES` sont remplacés par ces valeurs : l'attribut `service.instance.id` devient, par exemple, `application-a.frontend-755c565478-h8dnl.frontend`.
+<sub>70</sub> Les variables vides sont renseignées par Kubernetes au démarrage du conteneur, à partir des métadonnées du pod (`spec.nodeName` et le nom du pod), et les `$(...)` de `OTEL_RESOURCE_ATTRIBUTES` sont remplacés par ces valeurs : l'attribut `service.instance.id` devient, par exemple, `application-a.frontend-755c565478-h8dnl.frontend`.
 
 Dans Jaeger, les services `frontend` et `backend` sont apparus. Mais attention : les deux applications portent les mêmes noms de service. Ce qui les distingue est le namespace, dans les attributs de ressource :
 
@@ -1323,7 +1323,7 @@ jaeger "/api/v3/traces?query.service_name=frontend&query.startTimeMin=$(date -u 
   | jq -r '[.result.resourceSpans[].resource.attributes[] | select(.key=="k8s.namespace.name") | .value.stringValue] | unique | .[]' | sort
 ```
 
-La première commande contient `frontend` et `backend`, la seconde affiche les deux namespaces :
+<sub>71</sub> La première commande contient `frontend` et `backend`, la seconde affiche les deux namespaces :
 
 ```text
 application-a
@@ -1332,7 +1332,7 @@ application-b
 
 C'est le résultat à retenir de ce lab : un même nom de service dans deux environnements doit rester discernable, et c'est le namespace qui le permet. Sans cet attribut, une trace de préproduction et une trace de production seraient impossibles à séparer dans le backend.
 
-Une même trace traverse donc les deux services. Ouvrez-la dans l'interface de Jaeger (`http://$SRV_HOST:16686`), service `frontend`, puis cliquez sur une trace : vous voyez le span serveur du frontend, le span client de son appel au backend, puis le span serveur du backend. Le lien entre les deux services repose sur le propagator `tracecontext`, qui transporte l'identifiant de trace et celui du span parent d'un service à l'autre.
+<sub>72</sub> Une même trace traverse donc les deux services. Ouvrez-la dans l'interface de Jaeger (`http://$SRV_HOST:16686`), service `frontend`, puis cliquez sur une trace : vous voyez le span serveur du frontend, le span client de son appel au backend, puis le span serveur du backend. Le lien entre les deux services repose sur le propagator `tracecontext`, qui transporte l'identifiant de trace et celui du span parent d'un service à l'autre.
 
 ![Détail d'une trace dans Jaeger : le span serveur du frontend, son span client vers le backend, puis le span serveur du backend](img/lab03-jaeger-trace-detail.png)
 
@@ -1360,7 +1360,7 @@ flowchart LR
   class Jaeger backend
 ```
 
-Regardez enfin les attributs de ressource de cette trace, tous préfixés par `k8s.` :
+<sub>73</sub> Regardez enfin les attributs de ressource de cette trace, tous préfixés par `k8s.` :
 
 ```bash
 jaeger "/api/v3/traces?query.service_name=frontend&query.startTimeMin=$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)&query.startTimeMax=$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
@@ -1379,11 +1379,11 @@ k8s.namespace.name=application-b
 k8s.node.name=cluster-worker
 ```
 
-Ces attributs viennent de deux sources complémentaires : l'**agent** les ajoute par le processor `k8s_attributes` pour les données qu'il reçoit, et l'**operator** les injecte dans `OTEL_RESOURCE_ATTRIBUTES` au moment de la création du pod, avec `k8s.container.name` et `k8s.deployment.name`. Le namespace, lui, apparaît dans les deux chemins, ce qui explique qu'il soit présent même sur un pod instrumenté avant l'**agent**.
+<sub>74</sub> Ces attributs viennent de deux sources complémentaires : l'**agent** les ajoute par le processor `k8s_attributes` pour les données qu'il reçoit, et l'**operator** les injecte dans `OTEL_RESOURCE_ATTRIBUTES` au moment de la création du pod, avec `k8s.container.name` et `k8s.deployment.name`. Le namespace, lui, apparaît dans les deux chemins, ce qui explique qu'il soit présent même sur un pod instrumenté avant l'**agent**.
 
 Le troisième signal, les métriques, n'est pas exporté dans ce lab : il n'y a pas de backend de métriques sur `srv-N`, et le pipeline `metrics` du chart reste sur l'exporter `debug`. L'attribut y serait identique, puisque les métriques du SDK portent la même ressource que les traces. Les métriques d'application ne sont pas traitées dans ce lab.
 
-Le résultat à retenir est donc celui-ci : `k8s.namespace.name` accompagne les logs et les traces, et il est posé de la même façon pour toutes les applications du cluster. C'est ce qui rend possible la question « cette ligne appartient-elle à l'application A ou à l'application B ? », alors que les deux portent les mêmes noms de service.
+<sub>75</sub> Le résultat à retenir est donc celui-ci : `k8s.namespace.name` accompagne les logs et les traces, et il est posé de la même façon pour toutes les applications du cluster. C'est ce qui rend possible la question « cette ligne appartient-elle à l'application A ou à l'application B ? », alors que les deux portent les mêmes noms de service.
 
 > [!NOTE]
 >
@@ -1399,7 +1399,7 @@ helm uninstall operator -n opentelemetry-operator-system
 kubectl delete namespace application-a application-b observability opentelemetry-operator-system
 ```
 
-Supprimez ensuite le cluster, qui rend la mémoire et libère le port `TCP/8080` de `clt-N` :
+<sub>76</sub> Supprimez ensuite le cluster, qui rend la mémoire et libère le port `TCP/8080` de `clt-N` :
 
 ```bash
 kind delete cluster --name cluster
@@ -1408,7 +1408,7 @@ kind get clusters
 
 La seconde commande n'affiche plus rien : plus aucun cluster ne tourne sur la machine.
 
-Arrêtez enfin les backends de `srv-N` et supprimez le volume de VictoriaLogs :
+<sub>77</sub> Arrêtez enfin les backends de `srv-N` et supprimez le volume de VictoriaLogs :
 
 ```bash
 ssh root@$SRV_HOST 'cd ~/lab03 && docker compose down -v && rm compose.yaml'
@@ -1423,7 +1423,7 @@ La seconde commande n'affiche aucun projet : plus aucun conteneur du lab ne tour
 
 ## Extra
 
-À vous de jouer, si le temps le permet. Chaque exercice est guidé pas à pas ; les commandes se suivent.
+<sub>78</sub> À vous de jouer, si le temps le permet. Chaque exercice est guidé pas à pas ; les commandes se suivent.
 
 ### 1. Ajouter un attribut de ressource à l'instrumentation
 
@@ -1434,7 +1434,7 @@ kubectl -n application-a patch instrumentation demo --type merge -p \
   '{"spec":{"resource":{"resourceAttributes":{"deployment.environment.name":"lab3"}}}}'
 ```
 
-Ces attributs sont posés à la création du pod : redémarrez les déploiements pour que les nouveaux pods en héritent.
+<sub>79</sub> Ces attributs sont posés à la création du pod : redémarrez les déploiements pour que les nouveaux pods en héritent.
 
 ```bash
 kubectl -n application-a rollout restart deployment/frontend deployment/backend
@@ -1448,7 +1448,7 @@ kubectl -n application-a get pods -l app=frontend \
   -o jsonpath='{range .items[*].spec.containers[0].env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")]}{.value}{"\n"}{end}'
 ```
 
-Elle commence maintenant par `deployment.environment.name=lab3,` suivi des attributs `k8s.*` ajoutés par l'**operator**. Générez du trafic et retrouvez l'attribut dans la ressource des traces, dans Jaeger :
+<sub>80</sub> Elle commence maintenant par `deployment.environment.name=lab3,` suivi des attributs `k8s.*` ajoutés par l'**operator**. Générez du trafic et retrouvez l'attribut dans la ressource des traces, dans Jaeger :
 
 ```bash
 for i in $(seq 10); do
@@ -1466,7 +1466,7 @@ lab3
 
 ### 2. Déployer un **collector** avec la ressource `OpenTelemetryCollector`
 
-L'**operator** sait aussi déployer un **collector** : au lieu d'écrire un fichier de valeurs Helm, on décrit un objet `OpenTelemetryCollector`, et l'**operator** crée le Deployment, le Service et la configuration.
+<sub>81</sub> L'**operator** sait aussi déployer un **collector** : au lieu d'écrire un fichier de valeurs Helm, on décrit un objet `OpenTelemetryCollector`, et l'**operator** crée le Deployment, le Service et la configuration.
 
 ```bash
 cat > otelcol-cr.yaml <<'EOF'
@@ -1509,7 +1509,7 @@ NAME         MODE         VERSION   READY   AGE   IMAGE                         
 otelcol-cr   deployment   0.162.0   1/1     20s   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s:0.162.0   managed
 ```
 
-Regardez ce que l'**operator** a créé : un Deployment, deux Services et un Service de supervision.
+<sub>82</sub> Regardez ce que l'**operator** a créé : un Deployment, deux Services et un Service de supervision.
 
 ```bash
 kubectl -n observability get pods,svc | grep otelcol-cr
@@ -1517,8 +1517,8 @@ kubectl -n observability get pods,svc | grep otelcol-cr
 
 L'image par défaut est la distribution `k8s`, plus légère que `contrib` ; pour utiliser une autre distribution, ajoutez `image:` dans `spec`.
 
-Les deux approches coexistent dans les installations réelles. Le chart Helm est la plus répandue, parce qu'il est la seule voie quand l'**operator** n'est pas installé, et parce que la documentation OpenTelemetry l'a longtemps montrée en premier ; il reste aussi le choix par défaut des plateformes qui livrent des charts à leurs équipes. La ressource `OpenTelemetryCollector` suppose l'**operator** en place, ce qui est fréquent dès qu'il sert à l'auto-instrumentation : elle décrit alors le **collector** comme n'importe quel autre objet Kubernetes.
+<sub>83</sub> Les deux approches coexistent dans les installations réelles. Le chart Helm est la plus répandue, parce qu'il est la seule voie quand l'**operator** n'est pas installé, et parce que la documentation OpenTelemetry l'a longtemps montrée en premier ; il reste aussi le choix par défaut des plateformes qui livrent des charts à leurs équipes. La ressource `OpenTelemetryCollector` suppose l'**operator** en place, ce qui est fréquent dès qu'il sert à l'auto-instrumentation : elle décrit alors le **collector** comme n'importe quel autre objet Kubernetes.
 
 En GitOps, avec Argo CD ou Flux, les deux fonctionnent : Argo CD sait rendre un chart Helm depuis un dépôt, et les deux outils appliquent une ressource `OpenTelemetryCollector` comme un Deployment. La ressource a l'avantage de supprimer une couche : l'objet versionné dans le dépôt Git est la ressource elle-même, sans fichier de valeurs ni rendu intermédiaire, et l'**operator** réconcilie les changements de la même façon pour tous les clusters. Le chart garde l'avantage de l'indépendance vis-à-vis de l'**operator**, et d'un rendu figé que l'on relit dans la revue, au même titre que les autres manifestes.
 
-**Rappel** : les deux exercices laissent des objets derrière eux, le `collector` `otelcol-cr` et l'`Instrumentation` modifiée. Reprenez le [Cleanup](#cleanup) en entier avant de quitter la machine.
+<sub>84</sub> **Rappel** : les deux exercices laissent des objets derrière eux, le `collector` `otelcol-cr` et l'`Instrumentation` modifiée. Reprenez le [Cleanup](#cleanup) en entier avant de quitter la machine.

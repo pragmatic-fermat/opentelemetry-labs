@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Numérote les paragraphes des fichiers Markdown des labs.
 
-Chaque paragraphe de corps reçoit un numéro discret en exposant, sous la forme
-``<sup>N</sup>``, ce qui permet de se repérer dans un texte long et de renvoyer
-à un paragraphe précis (« voir § 12 »).
+Chaque paragraphe de corps reçoit un numéro discret, en indice par défaut
+(``<sub>N</sub>``) ou en exposant avec ``--style sup`` (``<sup>N</sup>``), ce qui
+permet de se repérer dans un texte long et de renvoyer à un paragraphe précis
+(« voir § 12 »).
 
 Le script est idempotent : il retire d'abord les numéros existants, puis
 renumérote, ce qui permet de le relancer après chaque ajout ou retrait de
@@ -16,6 +17,7 @@ indenté, les lignes HTML et les images.
 Utilisation :
     tools/number-paragraphs.py Lab_04_Ansible_Jinja2.md
     tools/number-paragraphs.py --check Lab_04_Ansible_Jinja2.md
+    tools/number-paragraphs.py --style sup Lab_04_Ansible_Jinja2.md
     tools/number-paragraphs.py --anchors Lab_04_Ansible_Jinja2.md
 
 Codes de retour :
@@ -31,8 +33,8 @@ import re
 import sys
 from pathlib import Path
 
-# Numéro déjà présent en début de ligne, avec l'espace qui le suit.
-SUP_RE = re.compile(r"^<sup>\d+</sup>[ ]?")
+# Numéro déjà présent en début de ligne (exposant ou indice), avec l'espace qui le suit.
+MARKER_RE = re.compile(r"^(?:<sup>\d+</sup>|<sub>\d+</sub>)[ ]?")
 # Ancre déjà présente en début de ligne.
 ANCHOR_RE = re.compile(r"^<a name=\"p-[0-9]+\"></a>")
 
@@ -59,11 +61,11 @@ def is_prose_line(line: str) -> bool:
 def strip_markers(line: str) -> str:
     """Retire un numéro ou une ancre déjà présents."""
     line = ANCHOR_RE.sub("", line)
-    line = SUP_RE.sub("", line)
+    line = MARKER_RE.sub("", line)
     return line
 
 
-def number_text(text: str, anchors: bool = False) -> tuple[str, int]:
+def number_text(text: str, anchors: bool = False, style: str = "sub") -> tuple[str, int]:
     """Renumérote le texte et renvoie le résultat avec le nombre de paragraphes."""
     had_trailing_newline = text.endswith("\n")
     lines = [strip_markers(line) for line in text.splitlines()]
@@ -94,7 +96,7 @@ def number_text(text: str, anchors: bool = False) -> tuple[str, int]:
         previous_is_blank = index == 0 or not lines[index - 1].strip()
         if previous_is_blank and is_prose_line(line):
             count += 1
-            prefix = f"<sup>{count}</sup> "
+            prefix = f"<{style}>{count}</{style}> "
             if anchors:
                 prefix = f'<a name="p-{count}"></a>' + prefix
             out.append(prefix + line)
@@ -117,6 +119,12 @@ def main(argv: list[str]) -> int:
         help="ne modifie rien, renvoie 1 si un fichier doit être renuméroté",
     )
     parser.add_argument(
+        "--style",
+        choices=("sup", "sub"),
+        default="sub",
+        help="position du numéro : sub (indice, défaut) ou sup (exposant)",
+    )
+    parser.add_argument(
         "--anchors",
         action="store_true",
         help="ajoute aussi une ancre <a name=\"p-N\"></a> avant chaque numéro",
@@ -134,7 +142,7 @@ def main(argv: list[str]) -> int:
             print(f"{path}: {error}", file=sys.stderr)
             return 2
 
-        updated, count = number_text(original, anchors=args.anchors)
+        updated, count = number_text(original, anchors=args.anchors, style=args.style)
         total_paragraphs += count
 
         if updated == original:

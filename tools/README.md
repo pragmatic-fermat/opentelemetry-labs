@@ -2,9 +2,9 @@
 
 ## `number-paragraphs.py`
 
-Numérote les paragraphes de corps d'un fichier Markdown avec un exposant discret
-(`<sup>N</sup>`), pour permettre de se repérer dans un texte long et de renvoyer
-à un paragraphe précis.
+Numérote les paragraphes de corps d'un fichier Markdown avec un numéro discret,
+en indice par défaut (`<sub>N</sub>`), pour permettre de se repérer dans un texte
+long et de renvoyer à un paragraphe précis.
 
 ```bash
 # Renuméroter un ou plusieurs fichiers sur place
@@ -12,6 +12,9 @@ Numérote les paragraphes de corps d'un fichier Markdown avec un exposant discre
 
 # Vérifier, sans écrire : utile en intégration continue (code retour 1 si à jour non)
 ./tools/number-paragraphs.py --check Lab_04_Ansible_Jinja2.md
+
+# Passer les numéros en exposant au lieu de l'indice
+./tools/number-paragraphs.py --style sup Lab_04_Ansible_Jinja2.md
 
 # Ajouter en plus une ancre stable avant chaque numéro
 ./tools/number-paragraphs.py --anchors Lab_04_Ansible_Jinja2.md
